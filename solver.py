@@ -16,6 +16,11 @@ class Solver(object):
 
     def __init__(self, data_loader, args, config):
 
+        self.use_tensorboard = True
+        self.log_dir = "run"
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+
         # Step configuration
         self.args = args
         self.num_iters = self.args.num_iters
@@ -39,7 +44,7 @@ class Solver(object):
         self.model_type = self.config.model_type
         self.use_cuda = torch.cuda.is_available()
         self.device = torch.device(
-            'cuda:{}'.format(self.config.device_id) if self.use_cuda else 'cpu'
+            "cuda:{}".format(self.config.device_id) if self.use_cuda else "cpu"
         )
 
         # Directories.
@@ -49,13 +54,21 @@ class Solver(object):
 
         # Build the model.
         self.build_model()
+        if self.use_tensorboard:
+            self.build_tensorboard()
 
         # Logging
         self.min_loss_step = 0
-        self.min_loss = float('inf')
+        self.min_loss = float("inf")
+
+    def build_tensorboard(self):
+        """Build a tensorboard logger."""
+        from torch.utils.tensorboard import SummaryWriter
+
+        self.writer = SummaryWriter(self.log_dir)
 
     def build_model(self):
-        if self.model_type == 'G':
+        if self.model_type == "G":
             self.model = Generator(self.config)
         else:
             self.model = F_Converter(self.config)
@@ -70,7 +83,7 @@ class Solver(object):
             self.model.parameters(),
             self.lr,
             [self.beta1, self.beta2],
-            weight_decay=1e-6
+            weight_decay=1e-6,
         )
         self.Interp.to(self.device)
 
@@ -97,33 +110,33 @@ class Solver(object):
         )
         ckpt = torch.load(
             os.path.join(self.model_save_dir, ckpt_name),
-            map_location=lambda storage, loc: storage
+            map_location=lambda storage, loc: storage,
         )
         try:
-            self.model.load_state_dict(ckpt['model'])
+            self.model.load_state_dict(ckpt["model"])
         except:
             new_state_dict = OrderedDict()
-            for k, v in ckpt['model'].items():
+            for k, v in ckpt["model"].items():
                 new_state_dict[k[7:]] = v
             self.model.load_state_dict(new_state_dict)
-        self.lr = self.optimizer.param_groups[0]['lr']
+        self.lr = self.optimizer.param_groups[0]["lr"]
 
     def train(self):
         # Start training from scratch or resume training.
         start_iters = 0
         if self.resume_iters:
-            print('Resuming ...')
+            print("Resuming ...")
             start_iters = self.resume_iters
             self.num_iters += self.resume_iters
             self.restore_model(self.resume_iters)
-            self.print_optimizer(self.optimizer, 'optimizer')
+            self.print_optimizer(self.optimizer, "optimizer")
 
         # Learning rate cache for decaying.
         lr = self.lr
-        print('Current learning rates, lr: {}.'.format(lr))
+        print("Current learning rates, lr: {}.".format(lr))
 
         # Start training.
-        print('Start training...')
+        print("Start training...")
         start_time = time.time()
         self.model = self.model.train()
         for i in range(start_iters, self.num_iters):
@@ -132,7 +145,6 @@ class Solver(object):
             #                   1. Load input data                            #
             # =============================================================== #
 
-            print(f"loading data for epoch {i}")
             # Load data
             try:
                 (
@@ -142,7 +154,7 @@ class Solver(object):
                     content_input,
                     pitch_input,
                     timbre_input,
-                    len_crop
+                    len_crop,
                 ) = next(self.data_iter)
             except:
                 self.data_iter = iter(self.data_loader)
@@ -153,15 +165,14 @@ class Solver(object):
                     content_input,
                     pitch_input,
                     timbre_input,
-                    len_crop
+                    len_crop,
                 ) = next(self.data_iter)
 
             # =============================================================== #
             #                    2. Train the model                           #
             # =============================================================== #
 
-            print(f"training epoch {i}")
-            if self.model_type == 'G':
+            if self.model_type == "G":
 
                 # Move data to GPU if available
                 spmel_gt = spmel_gt.to(self.device)
@@ -173,23 +184,29 @@ class Solver(object):
 
                 # Prepare input data and apply random resampling
                 content_pitch_input = torch.cat(
-                    (content_input, pitch_input), dim=-1)  # [B, T, F+1]
+                    (content_input, pitch_input), dim=-1
+                )  # [B, T, F+1]
                 content_pitch_input_intrp = self.Interp(
-                    content_pitch_input, len_crop)  # [B, T, F+1]
+                    content_pitch_input, len_crop
+                )  # [B, T, F+1]
                 pitch_input_intrp = quantize_f0_torch(
-                    content_pitch_input_intrp[:, :, -1])[0]  # [B, T, 257]
+                    content_pitch_input_intrp[:, :, -1]
+                )[
+                    0
+                ]  # [B, T, 257]
                 content_pitch_input_intrp = torch.cat(
                     # [B, T, F+257]
                     (content_pitch_input_intrp[:, :, :-1], pitch_input_intrp),
-                    dim=-1
+                    dim=-1,
                 )
 
                 # Identity mapping loss
                 spmel_output = self.model(
-                    content_pitch_input_intrp, rhythm_input, timbre_input)
+                    content_pitch_input_intrp, rhythm_input, timbre_input
+                )
                 loss_id = F.mse_loss(spmel_output, spmel_gt)
 
-            elif self.model_type == 'F':
+            elif self.model_type == "F":
 
                 # Move data to GPU if available
                 rhythm_input = rhythm_input.to(self.device)
@@ -200,19 +217,24 @@ class Solver(object):
                 pitch_gt = quantize_f0_torch(pitch_input)[1].view(-1)
                 content_input = content_input.to(self.device)
                 content_pitch_input = torch.cat(
-                    (content_input, pitch_input), dim=-1)  # [B, T, F+1]
+                    (content_input, pitch_input), dim=-1
+                )  # [B, T, F+1]
                 content_pitch_input = self.Interp(
-                    content_pitch_input, len_crop)  # [B, T, F+1]
-                pitch_input_intrp = quantize_f0_torch(
-                    content_pitch_input[:, :, -1])[0]  # [B, T, 257]
+                    content_pitch_input, len_crop
+                )  # [B, T, F+1]
+                pitch_input_intrp = quantize_f0_torch(content_pitch_input[:, :, -1])[
+                    0
+                ]  # [B, T, 257]
                 pitch_input = torch.cat(
                     # [B, T, F+257]
-                    (content_pitch_input[:, :, :-1], pitch_input_intrp), dim=-1
+                    (content_pitch_input[:, :, :-1], pitch_input_intrp),
+                    dim=-1,
                 )
 
                 # Identity mapping loss
-                pitch_output = self.model(
-                    rhythm_input, pitch_input).view(-1, self.config.dim_f0)
+                pitch_output = self.model(rhythm_input, pitch_input).view(
+                    -1, self.config.dim_f0
+                )
                 loss_id = F.cross_entropy(pitch_output, pitch_gt)
 
             else:
@@ -237,9 +259,13 @@ class Solver(object):
                 et = time.time() - start_time
                 et = str(datetime.timedelta(seconds=et))[:-7]
                 log = "Elapsed [{}], Iteration [{}/{}]".format(
-                    et, i+1, self.num_iters)
+                    et, i + 1, self.num_iters
+                )
                 log += ", {}/train_loss_id: {:.8f}".format(
-                    self.model_type, train_loss_id)
+                    self.model_type, train_loss_id
+                )
+                if self.use_tensorboard:
+                    self.writer.add_scalar("Training Loss", train_loss_id, i + 1)
                 print(log)
 
             # Save model checkpoints
@@ -250,8 +276,11 @@ class Solver(object):
                     self.model_type,
                     i + 1,
                 )
-                torch.save({
-                    'model': self.model.state_dict(),
-                    'optimizer': self.optimizer.state_dict(),
-                }, os.path.join(self.model_save_dir, ckpt_name))
+                torch.save(
+                    {
+                        "model": self.model.state_dict(),
+                        "optimizer": self.optimizer.state_dict(),
+                    },
+                    os.path.join(self.model_save_dir, ckpt_name),
+                )
                 print(f"Saving model checkpoint into {self.model_save_dir}...")
