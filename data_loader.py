@@ -159,6 +159,14 @@ class Collator(object):
         timbre_input = torch.FloatTensor(np.stack(timbre_input, axis=0))
         len_crop = torch.LongTensor(np.stack(len_crop, axis=0))
 
+        # print(f"Collator: spk_id_org    {spk_id_org}")
+        # print(f"Collator: spmel_gt      {spmel_gt.shape}")
+        # print(f"Collator: rhythm_input  {rhythm_input.shape}")
+        # print(f"Collator: content_input {content_input.shape}")
+        # print(f"Collator: pitch_input   {pitch_input.shape}")
+        # print(f"Collator: timbre_input  {timbre_input.shape}")
+        # print(f"Collator: len_crop      {len_crop.shape}")
+
         return (
             spk_id_org,
             spmel_gt,
@@ -207,6 +215,9 @@ def get_loader(config):
         config.samplier,
         shuffle=config.shuffle
     )
+    # sampler = torch.utils.data.RandomSampler(
+    #     data_source=dataset
+    # )
 
     def worker_init_fn(x):
         return np.random.seed((torch.initial_seed()) % (2**32))
@@ -216,6 +227,7 @@ def get_loader(config):
         batch_size=config.batch_size,
         sampler=sampler,
         num_workers=config.num_workers,
+        prefetch_factor=config.num_workers,
         drop_last=False,
         pin_memory=True,
         worker_init_fn=worker_init_fn,

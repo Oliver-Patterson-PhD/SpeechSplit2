@@ -155,6 +155,13 @@ class Solver(object):
                     timbre_input,
                     len_crop
                 ) = next(self.data_iter)
+            print()
+            print(f"Solver: spmel_gt      {spmel_gt.shape}")
+            print(f"Solver: rhythm_input  {rhythm_input.shape}")
+            print(f"Solver: content_input {content_input.shape}")
+            print(f"Solver: pitch_input   {pitch_input.shape}")
+            print(f"Solver: timbre_input  {timbre_input.shape}")
+            print(f"Solver: len_crop      {len_crop}")
 
             # =============================================================== #
             #                    2. Train the model                           #

@@ -1,10 +1,7 @@
-
-
 {
     # Directories
     "data_dir": "data/train/",
     "feat_dir": "feat",
-    "src_dir": "src",
     "wav_dir": "wav_mono",
     "spmel_dir": "spmel",
     "f0_dir": "f0",
