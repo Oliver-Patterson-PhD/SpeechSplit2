@@ -21,7 +21,6 @@ def make_spect_f0(config):
     wav_dir = os.path.join(feat_dir, config.wav_dir)
     spmel_dir = os.path.join(feat_dir, config.spmel_dir)
     f0_dir = os.path.join(feat_dir, config.f0_dir)
-    # spk_meta = pickle.load(open('spk_meta.pkl', "rb"))
     spk_meta = getattr(__import__("meta_dicts"), config.dataset_name)
 
     dir_name, spk_dir_list, _ = next(os.walk(data_dir))
@@ -30,8 +29,7 @@ def make_spect_f0(config):
     for spk_dir in sorted(spk_dir_list):
         if spk_dir not in spk_meta:
             print(
-                f"Warning: {
-                  spk_dir} not in speaker metadata; skip generating features"
+                f"Warning: {spk_dir} not in speaker metadata; skip generating features"
             )
             continue
         print(f"Generating features for speaker {spk_dir}")
@@ -130,7 +128,6 @@ def make_metadata(config):
     # use wav directory simply because all inputs have the same filename
     wav_dir = os.path.join(feat_dir, config.wav_dir)
     dir_name, spk_dir_list, _ = next(os.walk(wav_dir))
-    # spk_meta = pickle.load(open('spk_meta.pkl', "rb"))
     spk_meta = getattr(__import__("meta_dicts"), config.dataset_name)
     dataset = []
 

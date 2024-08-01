@@ -2,8 +2,8 @@
     # Directories
     "base_feats": "/mnt/datasets/processed/spsp2",
     "vctk_dir": "/mnt/datasets/processed/VCTK-Corpus/wavs",
-    "uaspeech_dir": "/mnt/datasets/processed/UASpeech/noisereduce",
-    "dataset_name": "vctk",
+    "uaspeech_dir": "/mnt/datasets/processed/UASpeech/audio/noisereduce",
+    "dataset_name": "uaspeech",
     "wav_dir": "wav_mono",
     "spmel_dir": "spmel",
     "f0_dir": "f0",

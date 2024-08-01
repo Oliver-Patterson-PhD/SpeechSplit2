@@ -127,7 +127,7 @@ class Solver(object):
             #                   1. Load input data                            #
             # =============================================================== #
 
-            print(f"loading data for epoch {i}")
+            # print(f"loading data for epoch {i}")
             # Load data
             try:
                 (
@@ -155,7 +155,7 @@ class Solver(object):
             #                    2. Train the model                           #
             # =============================================================== #
 
-            print(f"training epoch {i}")
+            # print(f"training epoch {i}")
 
             # Move data to GPU if available
             spmel_gt = spmel_gt.to(self.device)
