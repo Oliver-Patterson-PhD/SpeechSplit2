@@ -1,36 +1,40 @@
 import os
 import pickle
+
 import numpy as np
 import soundfile as sf
 from numpy.random import RandomState
-from utils import (
-    filter_wav,
-    get_world_params,
-    average_f0s,
-    get_monotonic_wav,
-    get_spmel,
-    extract_f0
-)
+
+from utils import (average_f0s, extract_f0, filter_wav, get_monotonic_wav,
+                   get_spmel, get_world_params)
 
 
 def make_spect_f0(config):
     fs = 16000
-    data_dir = config.data_dir
-    feat_dir = config.feat_dir
+    if config.dataset_name == "vctk":
+        data_dir = config.vctk_dir
+    elif config.dataset_name == "uaspeech":
+        data_dir = config.uaspeech_dir
+    else:
+        raise ValueError
+    feat_dir = os.path.join(config.base_feats, config.dataset_name)
     wav_dir = os.path.join(feat_dir, config.wav_dir)
     spmel_dir = os.path.join(feat_dir, config.spmel_dir)
     f0_dir = os.path.join(feat_dir, config.f0_dir)
-    spk_meta = pickle.load(open('spk_meta.pkl', "rb"))
+    # spk_meta = pickle.load(open('spk_meta.pkl', "rb"))
+    spk_meta = getattr(__import__("meta_dicts"), config.dataset_name)
 
     dir_name, spk_dir_list, _ = next(os.walk(data_dir))
     state_count = 1
 
     for spk_dir in sorted(spk_dir_list):
         if spk_dir not in spk_meta:
-            print(f'Warning: {
-                  spk_dir} not in speaker metadata; skip generating features')
+            print(
+                f"Warning: {
+                  spk_dir} not in speaker metadata; skip generating features"
+            )
             continue
-        print(f'Generating features for speaker {spk_dir}')
+        print(f"Generating features for speaker {spk_dir}")
 
         for fea_dir in [wav_dir, spmel_dir, f0_dir]:
             if not os.path.exists(os.path.join(fea_dir, spk_dir)):
@@ -38,9 +42,9 @@ def make_spect_f0(config):
 
         _, _, file_list = next(os.walk(os.path.join(dir_name, spk_dir)))
 
-        if spk_meta[spk_dir][1] == 'M':
+        if spk_meta[spk_dir][1] == "M":
             lo, hi = 50, 250
-        elif spk_meta[spk_dir][1] == 'F':
+        elif spk_meta[spk_dir][1] == "F":
             lo, hi = 100, 600
         else:
             continue
@@ -62,7 +66,7 @@ def make_spect_f0(config):
             aps.append(ap)
 
         # smooth pitch to synthesize monotonic speech
-        f0s = average_f0s(f0s, mode='global')
+        f0s = average_f0s(f0s, mode="global")
 
         for idx, (filename, wav, f0, sp, ap) in enumerate(
             zip(file_list, wavs, f0s, sps, aps)
@@ -75,50 +79,59 @@ def make_spect_f0(config):
             # segment feature into trunks with the same length during training
             start_idx = 0
             trunk_len = 49151
-            while start_idx*trunk_len < len(wav_mono):
-                wav_mono_trunk = wav_mono[start_idx *
-                                          trunk_len:(start_idx+1) *
-                                          trunk_len]
+            while start_idx * trunk_len < len(wav_mono):
+                wav_mono_trunk = wav_mono[
+                    start_idx * trunk_len : (start_idx + 1) * trunk_len
+                ]
                 if len(wav_mono_trunk) < trunk_len:
                     wav_mono_trunk = np.pad(
-                        wav_mono_trunk, (0, trunk_len-len(wav_mono_trunk)))
-                np.save(os.path.join(
-                    wav_dir, spk_dir,
-                    os.path.splitext(filename)[0]+'_'+str(start_idx)
-                ),
-                    wav_mono_trunk.astype(np.float32), allow_pickle=False)
+                        wav_mono_trunk, (0, trunk_len - len(wav_mono_trunk))
+                    )
+                np.save(
+                    os.path.join(
+                        wav_dir,
+                        spk_dir,
+                        os.path.splitext(filename)[0] + "_" + str(start_idx),
+                    ),
+                    wav_mono_trunk.astype(np.float32),
+                    allow_pickle=False,
+                )
                 start_idx += 1
             feas = [spmel, f0_norm]
             fea_dirs = [spmel_dir, f0_dir]
             for fea, fea_dir in zip(feas, fea_dirs):
                 start_idx = 0
                 trunk_len = 192
-                while start_idx*trunk_len < len(fea):
-                    fea_trunk = fea[start_idx *
-                                    trunk_len:(start_idx+1) *
-                                    trunk_len]
+                while start_idx * trunk_len < len(fea):
+                    fea_trunk = fea[start_idx * trunk_len : (start_idx + 1) * trunk_len]
                     if len(fea_trunk) < trunk_len:
                         if fea_trunk.ndim == 2:
                             fea_trunk = np.pad(
-                                fea_trunk, (
-                                    (0, trunk_len-len(fea_trunk)),
-                                    (0, 0)))
+                                fea_trunk, ((0, trunk_len - len(fea_trunk)), (0, 0))
+                            )
                         else:
                             fea_trunk = np.pad(
-                                fea_trunk, ((0, trunk_len-len(fea_trunk)), ))
-                    np.save(os.path.join(
-                        fea_dir, spk_dir,
-                        os.path.splitext(filename)[0]+'_'+str(start_idx)
-                    ), fea_trunk.astype(np.float32), allow_pickle=False)
+                                fea_trunk, ((0, trunk_len - len(fea_trunk)),)
+                            )
+                    np.save(
+                        os.path.join(
+                            fea_dir,
+                            spk_dir,
+                            os.path.splitext(filename)[0] + "_" + str(start_idx),
+                        ),
+                        fea_trunk.astype(np.float32),
+                        allow_pickle=False,
+                    )
                     start_idx += 1
 
 
 def make_metadata(config):
-    feat_dir = config.feat_dir
+    feat_dir = os.path.join(config.base_feats, config.dataset_name)
     # use wav directory simply because all inputs have the same filename
     wav_dir = os.path.join(feat_dir, config.wav_dir)
     dir_name, spk_dir_list, _ = next(os.walk(wav_dir))
-    spk_meta = pickle.load(open('spk_meta.pkl', "rb"))
+    # spk_meta = pickle.load(open('spk_meta.pkl', "rb"))
+    spk_meta = getattr(__import__("meta_dicts"), config.dataset_name)
     dataset = []
 
     for spk_dir in sorted(spk_dir_list):
@@ -136,12 +149,16 @@ def make_metadata(config):
         for utterance in utterances:
             dataset.append((spk_dir, spk_emb, utterance))
 
-    with open(os.path.join(feat_dir, 'dataset.pkl'), 'wb') as handle:
+    with open(os.path.join(feat_dir, "dataset.pkl"), "wb") as handle:
         pickle.dump(dataset, handle)
 
 
 def preprocess_data(config):
-    print('Start preprocessing...')
-    make_spect_f0(config)
-    make_metadata(config)
-    print('Done')
+    feat_dir = os.path.join(config.base_feats, config.dataset_name)
+    if not os.path.exists(os.path.join(feat_dir, "dataset.pkl")):
+        print("Start preprocessing...")
+        make_spect_f0(config)
+        make_metadata(config)
+        print("Done")
+    else:
+        print(f"Dataset '{feat_dir}/dataset.pkl' exists, skipping preprocessing")

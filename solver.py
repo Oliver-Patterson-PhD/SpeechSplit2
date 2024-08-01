@@ -1,9 +1,6 @@
 from model import Generator_3 as Generator
-from model import Generator_6 as F_Converter
 from model import InterpLnr
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import os
 import time
 import datetime
@@ -22,6 +19,7 @@ class Solver(object):
         self.resume_iters = self.args.resume_iters
         self.log_step = self.args.log_step
         self.ckpt_save_step = self.args.ckpt_save_step
+        self.return_latents = config.return_latents
 
         # Hyperparameters
         self.config = config
@@ -55,14 +53,11 @@ class Solver(object):
         self.min_loss = float('inf')
 
     def build_model(self):
-        if self.model_type == 'G':
-            self.model = Generator(self.config)
-        else:
-            self.model = F_Converter(self.config)
+        self.model = Generator(self.config)
         self.print_network(self.model, self.model_type)
         gpu_count = torch.cuda.device_count()
         if gpu_count > 1:
-            self.model = nn.DataParallel(self.model)
+            self.model = torch.nn.DataParallel(self.model)
         self.model.to(self.device)
 
         self.Interp = InterpLnr(self.config)
@@ -101,7 +96,7 @@ class Solver(object):
         )
         try:
             self.model.load_state_dict(ckpt['model'])
-        except:
+        except RuntimeError:
             new_state_dict = OrderedDict()
             for k, v in ckpt['model'].items():
                 new_state_dict[k[7:]] = v
@@ -155,75 +150,55 @@ class Solver(object):
                     timbre_input,
                     len_crop
                 ) = next(self.data_iter)
-            print()
-            print(f"Solver: spmel_gt      {spmel_gt.shape}")
-            print(f"Solver: rhythm_input  {rhythm_input.shape}")
-            print(f"Solver: content_input {content_input.shape}")
-            print(f"Solver: pitch_input   {pitch_input.shape}")
-            print(f"Solver: timbre_input  {timbre_input.shape}")
-            print(f"Solver: len_crop      {len_crop}")
 
             # =============================================================== #
             #                    2. Train the model                           #
             # =============================================================== #
 
             print(f"training epoch {i}")
-            if self.model_type == 'G':
 
-                # Move data to GPU if available
-                spmel_gt = spmel_gt.to(self.device)
-                rhythm_input = rhythm_input.to(self.device)
-                content_input = content_input.to(self.device)
-                pitch_input = pitch_input.to(self.device)
-                timbre_input = timbre_input.to(self.device)
-                len_crop = len_crop.to(self.device)
+            # Move data to GPU if available
+            spmel_gt = spmel_gt.to(self.device)
+            rhythm_input = rhythm_input.to(self.device)
+            content_input = content_input.to(self.device)
+            pitch_input = pitch_input.to(self.device)
+            timbre_input = timbre_input.to(self.device)
+            len_crop = len_crop.to(self.device)
 
-                # Prepare input data and apply random resampling
-                content_pitch_input = torch.cat(
-                    (content_input, pitch_input), dim=-1)  # [B, T, F+1]
-                content_pitch_input_intrp = self.Interp(
-                    content_pitch_input, len_crop)  # [B, T, F+1]
-                pitch_input_intrp = quantize_f0_torch(
-                    content_pitch_input_intrp[:, :, -1])[0]  # [B, T, 257]
-                content_pitch_input_intrp = torch.cat(
-                    # [B, T, F+257]
-                    (content_pitch_input_intrp[:, :, :-1], pitch_input_intrp),
-                    dim=-1
+            # Prepare input data and apply random resampling
+            content_pitch_input = torch.cat(
+                (content_input, pitch_input), dim=-1)  # [B, T, F+1]
+            content_pitch_input_intrp = self.Interp(
+                content_pitch_input, len_crop)  # [B, T, F+1]
+            pitch_input_intrp = quantize_f0_torch(
+                content_pitch_input_intrp[:, :, -1])[0]  # [B, T, 257]
+            content_pitch_input_intrp = torch.cat(
+                # [B, T, F+257]
+                (content_pitch_input_intrp[:, :, :-1], pitch_input_intrp),
+                dim=-1
+            )
+
+            # Identity mapping loss
+            if self.return_latents:
+                (
+                    spmel_output,
+                    code_exp_1,
+                    code_exp_2,
+                    code_exp_3,
+                    code_exp_4,
+                ) = self.model(
+                    content_pitch_input_intrp,
+                    rhythm_input,
+                    timbre_input,
                 )
-
-                # Identity mapping loss
-                spmel_output = self.model(
-                    content_pitch_input_intrp, rhythm_input, timbre_input)
-                loss_id = F.mse_loss(spmel_output, spmel_gt)
-
-            elif self.model_type == 'F':
-
-                # Move data to GPU if available
-                rhythm_input = rhythm_input.to(self.device)
-                pitch_input = pitch_input.to(self.device)
-                len_crop = len_crop.to(self.device)
-
-                # Prepare input data and apply random resampling
-                pitch_gt = quantize_f0_torch(pitch_input)[1].view(-1)
-                content_input = content_input.to(self.device)
-                content_pitch_input = torch.cat(
-                    (content_input, pitch_input), dim=-1)  # [B, T, F+1]
-                content_pitch_input = self.Interp(
-                    content_pitch_input, len_crop)  # [B, T, F+1]
-                pitch_input_intrp = quantize_f0_torch(
-                    content_pitch_input[:, :, -1])[0]  # [B, T, 257]
-                pitch_input = torch.cat(
-                    # [B, T, F+257]
-                    (content_pitch_input[:, :, :-1], pitch_input_intrp), dim=-1
-                )
-
-                # Identity mapping loss
-                pitch_output = self.model(
-                    rhythm_input, pitch_input).view(-1, self.config.dim_f0)
-                loss_id = F.cross_entropy(pitch_output, pitch_gt)
-
             else:
-                raise ValueError
+                spmel_output = self.model(
+                    content_pitch_input_intrp,
+                    rhythm_input,
+                    timbre_input,
+                )
+            loss_id = torch.torch.nn.functional.mse_loss(
+                spmel_output, spmel_gt)
 
             # Backward and optimize.
             loss = loss_id
@@ -235,9 +210,9 @@ class Solver(object):
             # Logging.
             train_loss_id = loss_id.item()
 
-            # =================================================================================== #
-            #                           3. Logging and saving checkpoints                         #
-            # =================================================================================== #
+            # ================================================================#
+            #                           3. Logging and saving checkpoints     #
+            # ================================================================#
 
             # Print out training information.
             if (i + 1) % self.log_step == 0:

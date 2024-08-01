@@ -4,33 +4,48 @@ import torch.nn.functional as F
 
 
 class LinearNorm(torch.nn.Module):
-    def __init__(self, in_dim, out_dim, bias=True, w_init_gain='linear'):
+    def __init__(self, in_dim, out_dim, bias=True, w_init_gain="linear"):
         super(LinearNorm, self).__init__()
         self.linear_layer = torch.nn.Linear(in_dim, out_dim, bias=bias)
 
         torch.nn.init.xavier_uniform_(
-            self.linear_layer.weight,
-            gain=torch.nn.init.calculate_gain(w_init_gain))
+            self.linear_layer.weight, gain=torch.nn.init.calculate_gain(w_init_gain)
+        )
 
     def forward(self, x):
         return self.linear_layer(x)
 
 
 class ConvNorm(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1,
-                 padding=None, dilation=1, bias=True, w_init_gain='linear'):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size=1,
+        stride=1,
+        padding=None,
+        dilation=1,
+        bias=True,
+        w_init_gain="linear",
+    ):
         super(ConvNorm, self).__init__()
         if padding is None:
-            assert (kernel_size % 2 == 1)
+            assert kernel_size % 2 == 1
             padding = int(dilation * (kernel_size - 1) / 2)
 
-        self.conv = torch.nn.Conv1d(in_channels, out_channels,
-                                    kernel_size=kernel_size, stride=stride,
-                                    padding=padding, dilation=dilation,
-                                    bias=bias)
+        self.conv = torch.nn.Conv1d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            bias=bias,
+        )
 
         torch.nn.init.xavier_uniform_(
-            self.conv.weight, gain=torch.nn.init.calculate_gain(w_init_gain))
+            self.conv.weight, gain=torch.nn.init.calculate_gain(w_init_gain)
+        )
 
     def forward(self, signal):
         conv_signal = self.conv(signal)
@@ -38,8 +53,7 @@ class ConvNorm(torch.nn.Module):
 
 
 class Encoder_t(nn.Module):
-    """Rhythm Encoder
-    """
+    """Rhythm Encoder"""
 
     def __init__(self, config):
         super().__init__()
@@ -55,17 +69,23 @@ class Encoder_t(nn.Module):
         convolutions = []
         for i in range(1):
             conv_layer = nn.Sequential(
-                ConvNorm(self.dim_rhy if i == 0 else self.dim_enc_2,
-                         self.dim_enc_2,
-                         kernel_size=5, stride=1,
-                         padding=2,
-                         dilation=1, w_init_gain='relu'),
-                nn.GroupNorm(self.dim_enc_2//self.chs_grp, self.dim_enc_2))
+                ConvNorm(
+                    self.dim_rhy if i == 0 else self.dim_enc_2,
+                    self.dim_enc_2,
+                    kernel_size=5,
+                    stride=1,
+                    padding=2,
+                    dilation=1,
+                    w_init_gain="relu",
+                ),
+                nn.GroupNorm(self.dim_enc_2 // self.chs_grp, self.dim_enc_2),
+            )
             convolutions.append(conv_layer)
         self.convolutions = nn.ModuleList(convolutions)
 
-        self.lstm = nn.LSTM(self.dim_enc_2, self.dim_neck_2,
-                            1, batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(
+            self.dim_enc_2, self.dim_neck_2, 1, batch_first=True, bidirectional=True
+        )
 
     def forward(self, x, mask):
 
@@ -77,18 +97,22 @@ class Encoder_t(nn.Module):
         outputs, _ = self.lstm(x)
         if mask is not None:
             outputs = outputs * mask
-        out_forward = outputs[:, :, :self.dim_neck_2]
-        out_backward = outputs[:, :, self.dim_neck_2:]
+        out_forward = outputs[:, :, : self.dim_neck_2]
+        out_backward = outputs[:, :, self.dim_neck_2 :]
 
         codes = torch.cat(
-            (out_forward[:, self.freq_2-1::self.freq_2, :], out_backward[:, ::self.freq_2, :]), dim=-1)
+            (
+                out_forward[:, self.freq_2 - 1 :: self.freq_2, :],
+                out_backward[:, :: self.freq_2, :],
+            ),
+            dim=-1,
+        )
 
         return codes
 
 
 class Encoder_6(nn.Module):
-    """F0 encoder
-    """
+    """F0 encoder"""
 
     def __init__(self, config):
         super().__init__()
@@ -99,22 +123,28 @@ class Encoder_6(nn.Module):
         self.dim_enc_3 = config.dim_enc_3
         self.dim_emb = config.dim_spk_emb
         self.chs_grp = config.chs_grp
-        self.register_buffer('len_org', torch.tensor(config.max_len_pad))
+        self.register_buffer("len_org", torch.tensor(config.max_len_pad))
 
         convolutions = []
         for i in range(3):
             conv_layer = nn.Sequential(
-                ConvNorm(self.dim_pit if i == 0 else self.dim_enc_3,
-                         self.dim_enc_3,
-                         kernel_size=5, stride=1,
-                         padding=2,
-                         dilation=1, w_init_gain='relu'),
-                nn.GroupNorm(self.dim_enc_3//self.chs_grp, self.dim_enc_3))
+                ConvNorm(
+                    self.dim_pit if i == 0 else self.dim_enc_3,
+                    self.dim_enc_3,
+                    kernel_size=5,
+                    stride=1,
+                    padding=2,
+                    dilation=1,
+                    w_init_gain="relu",
+                ),
+                nn.GroupNorm(self.dim_enc_3 // self.chs_grp, self.dim_enc_3),
+            )
             convolutions.append(conv_layer)
         self.convolutions = nn.ModuleList(convolutions)
 
-        self.lstm = nn.LSTM(self.dim_enc_3, self.dim_neck_3,
-                            1, batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(
+            self.dim_enc_3, self.dim_neck_3, 1, batch_first=True, bidirectional=True
+        )
 
         self.interp = InterpLnr(config)
 
@@ -130,18 +160,22 @@ class Encoder_6(nn.Module):
 
         self.lstm.flatten_parameters()
         outputs, _ = self.lstm(x)
-        out_forward = outputs[:, :, :self.dim_neck_3]
-        out_backward = outputs[:, :, self.dim_neck_3:]
+        out_forward = outputs[:, :, : self.dim_neck_3]
+        out_backward = outputs[:, :, self.dim_neck_3 :]
 
-        codes = torch.cat((out_forward[:, self.freq_3-1::self.freq_3, :],
-                           out_backward[:, ::self.freq_3, :]), dim=-1)
+        codes = torch.cat(
+            (
+                out_forward[:, self.freq_3 - 1 :: self.freq_3, :],
+                out_backward[:, :: self.freq_3, :],
+            ),
+            dim=-1,
+        )
 
         return codes
 
 
 class Encoder_7(nn.Module):
-    """Sync Encoder module
-    """
+    """Sync Encoder module"""
 
     def __init__(self, config):
         super().__init__()
@@ -154,7 +188,7 @@ class Encoder_7(nn.Module):
         self.dim_con = config.dim_con
         self.dim_pit = config.dim_pit
         self.chs_grp = config.chs_grp
-        self.register_buffer('len_org', torch.tensor(config.max_len_pad))
+        self.register_buffer("len_org", torch.tensor(config.max_len_pad))
         self.dim_neck_3 = config.dim_neck_3
         self.dim_f0 = config.dim_f0
 
@@ -162,40 +196,52 @@ class Encoder_7(nn.Module):
         convolutions = []
         for i in range(3):
             conv_layer = nn.Sequential(
-                ConvNorm(self.dim_con if i == 0 else self.dim_enc,
-                         self.dim_enc,
-                         kernel_size=5, stride=1,
-                         padding=2,
-                         dilation=1, w_init_gain='relu'),
-                nn.GroupNorm(self.dim_enc//self.chs_grp, self.dim_enc))
+                ConvNorm(
+                    self.dim_con if i == 0 else self.dim_enc,
+                    self.dim_enc,
+                    kernel_size=5,
+                    stride=1,
+                    padding=2,
+                    dilation=1,
+                    w_init_gain="relu",
+                ),
+                nn.GroupNorm(self.dim_enc // self.chs_grp, self.dim_enc),
+            )
             convolutions.append(conv_layer)
         self.convolutions_1 = nn.ModuleList(convolutions)
 
-        self.lstm_1 = nn.LSTM(self.dim_enc, self.dim_neck,
-                              2, batch_first=True, bidirectional=True)
+        self.lstm_1 = nn.LSTM(
+            self.dim_enc, self.dim_neck, 2, batch_first=True, bidirectional=True
+        )
 
         # convolutions for f0
         convolutions = []
         for i in range(3):
             conv_layer = nn.Sequential(
-                ConvNorm(self.dim_pit if i == 0 else self.dim_enc_3,
-                         self.dim_enc_3,
-                         kernel_size=5, stride=1,
-                         padding=2,
-                         dilation=1, w_init_gain='relu'),
-                nn.GroupNorm(self.dim_enc_3//self.chs_grp, self.dim_enc_3))
+                ConvNorm(
+                    self.dim_pit if i == 0 else self.dim_enc_3,
+                    self.dim_enc_3,
+                    kernel_size=5,
+                    stride=1,
+                    padding=2,
+                    dilation=1,
+                    w_init_gain="relu",
+                ),
+                nn.GroupNorm(self.dim_enc_3 // self.chs_grp, self.dim_enc_3),
+            )
             convolutions.append(conv_layer)
         self.convolutions_2 = nn.ModuleList(convolutions)
 
-        self.lstm_2 = nn.LSTM(self.dim_enc_3, self.dim_neck_3,
-                              1, batch_first=True, bidirectional=True)
+        self.lstm_2 = nn.LSTM(
+            self.dim_enc_3, self.dim_neck_3, 1, batch_first=True, bidirectional=True
+        )
 
         self.interp = InterpLnr(config)
 
     def forward(self, x_f0, rr=True):
 
-        x = x_f0[:, :self.dim_con, :]
-        f0 = x_f0[:, self.dim_con:, :]
+        x = x_f0[:, : self.dim_con, :]
+        f0 = x_f0[:, self.dim_con :, :]
 
         for conv_1, conv_2 in zip(self.convolutions_1, self.convolutions_2):
             x = F.relu(conv_1(x))
@@ -204,12 +250,12 @@ class Encoder_7(nn.Module):
             if rr:
                 x_f0 = self.interp(x_f0, self.len_org.expand(x.size(0)))
             x_f0 = x_f0.transpose(1, 2)
-            x = x_f0[:, :self.dim_enc, :]
-            f0 = x_f0[:, self.dim_enc:, :]
+            x = x_f0[:, : self.dim_enc, :]
+            f0 = x_f0[:, self.dim_enc :, :]
 
         x_f0 = x_f0.transpose(1, 2)
-        x = x_f0[:, :, :self.dim_enc]
-        f0 = x_f0[:, :, self.dim_enc:]
+        x = x_f0[:, :, : self.dim_enc]
+        f0 = x_f0[:, :, self.dim_enc :]
 
         # code 1
         self.lstm_1.flatten_parameters()
@@ -217,31 +263,33 @@ class Encoder_7(nn.Module):
         x = self.lstm_1(x)[0]
         f0 = self.lstm_2(f0)[0]
 
-        x_forward = x[:, :, :self.dim_neck]
-        x_backward = x[:, :, self.dim_neck:]
+        x_forward = x[:, :, : self.dim_neck]
+        x_backward = x[:, :, self.dim_neck :]
 
-        f0_forward = f0[:, :, :self.dim_neck_3]
-        f0_backward = f0[:, :, self.dim_neck_3:]
+        f0_forward = f0[:, :, : self.dim_neck_3]
+        f0_backward = f0[:, :, self.dim_neck_3 :]
 
         codes_x = torch.cat(
             (
-                x_forward[:, self.freq-1::self.freq, :],
-                x_backward[:, ::self.freq, :]
-            ), dim=-1)
+                x_forward[:, self.freq - 1 :: self.freq, :],
+                x_backward[:, :: self.freq, :],
+            ),
+            dim=-1,
+        )
 
         codes_f0 = torch.cat(
             (
-                f0_forward[:, self.freq_3-1::self.freq_3, :],
-                f0_backward[:, ::self.freq_3, :]
-            ), dim=-1
+                f0_forward[:, self.freq_3 - 1 :: self.freq_3, :],
+                f0_backward[:, :: self.freq_3, :],
+            ),
+            dim=-1,
         )
 
         return codes_x, codes_f0
 
 
 class Decoder_3(nn.Module):
-    """Decoder module
-    """
+    """Decoder module"""
 
     def __init__(self, config):
         super().__init__()
@@ -251,8 +299,16 @@ class Decoder_3(nn.Module):
         self.dim_freq = config.dim_freq
         self.dim_neck_3 = config.dim_neck_3
 
-        self.lstm = nn.LSTM(self.dim_neck*2+self.dim_neck_2*2+self.dim_neck_3*2+self.dim_emb,
-                            512, 3, batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(
+            self.dim_neck * 2
+            + self.dim_neck_2 * 2
+            + self.dim_neck_3 * 2
+            + self.dim_emb,
+            512,
+            3,
+            batch_first=True,
+            bidirectional=True,
+        )
 
         self.linear_projection = LinearNorm(1024, self.dim_freq)
 
@@ -267,8 +323,7 @@ class Decoder_3(nn.Module):
 
 
 class Decoder_4(nn.Module):
-    """For F0 converter
-    """
+    """For F0 converter"""
 
     def __init__(self, config):
         super().__init__()
@@ -276,8 +331,13 @@ class Decoder_4(nn.Module):
         self.dim_f0 = config.dim_f0
         self.dim_neck_3 = config.dim_neck_3
 
-        self.lstm = nn.LSTM(self.dim_neck_2*2+self.dim_neck_3*2,
-                            256, 2, batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(
+            self.dim_neck_2 * 2 + self.dim_neck_3 * 2,
+            256,
+            2,
+            batch_first=True,
+            bidirectional=True,
+        )
 
         self.linear_projection = LinearNorm(512, self.dim_f0)
 
@@ -304,6 +364,7 @@ class Generator_3(nn.Module):
         self.freq = config.freq
         self.freq_2 = config.freq_2
         self.freq_3 = config.freq_3
+        self.return_latents = config.return_latents
 
     def forward(self, x_f0, x_org, c_trg, rr=True):
 
@@ -315,12 +376,23 @@ class Generator_3(nn.Module):
         x_2 = x_org.transpose(2, 1)
         codes_2 = self.encoder_2(x_2, None)
         code_exp_2 = codes_2.repeat_interleave(self.freq_2, dim=1)
-        encoder_outputs = torch.cat((code_exp_1, code_exp_2, code_exp_3,
-                                     c_trg.unsqueeze(1).expand(-1, x_1.size(-1), -1)), dim=-1)
+        code_exp_4 = c_trg.unsqueeze(1).expand(-1, x_1.size(-1), -1)
+        encoder_outputs = torch.cat(
+            (
+                code_exp_1,
+                code_exp_2,
+                code_exp_3,
+                code_exp_4,
+            ),
+            dim=-1,
+        )
 
         mel_outputs = self.decoder(encoder_outputs)
 
-        return mel_outputs
+        if self.return_latents is False:
+            return mel_outputs
+        else:
+            return mel_outputs, code_exp_1, code_exp_2, code_exp_3, code_exp_4
 
     def rhythm(self, x_org):
         x_2 = x_org.transpose(2, 1)
@@ -338,8 +410,10 @@ class Generator_3(nn.Module):
         return code_exp_1, code_exp_3
 
     def decode(self, code_exp_1, code_exp_2, code_exp_3, c_trg, T):
-        encoder_outputs = torch.cat((code_exp_1, code_exp_2, code_exp_3,
-                                     c_trg.unsqueeze(1).expand(-1, T, -1)), dim=-1)
+        encoder_outputs = torch.cat(
+            (code_exp_1, code_exp_2, code_exp_3, c_trg.unsqueeze(1).expand(-1, T, -1)),
+            dim=-1,
+        )
 
         mel_outputs = self.decoder(encoder_outputs)
 
@@ -347,8 +421,7 @@ class Generator_3(nn.Module):
 
 
 class Generator_6(nn.Module):
-    """F0 converter
-    """
+    """F0 converter"""
 
     def __init__(self, config):
         super().__init__()
@@ -396,7 +469,7 @@ class InterpLnr(nn.Module):
 
         for i, tensor in enumerate(sequences):
             length = tensor.size(0)
-            out_tensor[i, :length, :] = tensor[:self.max_len_pad]
+            out_tensor[i, :length, :] = tensor[: self.max_len_pad]
 
         return out_tensor
 
@@ -409,20 +482,24 @@ class InterpLnr(nn.Module):
         batch_size = x.size(0)
 
         # indices of each sub segment
-        indices = torch.arange(self.max_len_seg*2, device=device)\
-            .unsqueeze(0).expand(batch_size*self.max_num_seg, -1)
+        indices = (
+            torch.arange(self.max_len_seg * 2, device=device)
+            .unsqueeze(0)
+            .expand(batch_size * self.max_num_seg, -1)
+        )
         # scales of each sub segment
-        scales = torch.rand(batch_size*self.max_num_seg,
-                            device=device) + 0.5
+        scales = torch.rand(batch_size * self.max_num_seg, device=device) + 0.5
 
         idx_scaled = indices / scales.unsqueeze(-1)
         idx_scaled_fl = torch.floor(idx_scaled)
         lambda_ = idx_scaled - idx_scaled_fl
 
-        len_seg = torch.randint(low=self.min_len_seg,
-                                high=self.max_len_seg,
-                                size=(batch_size*self.max_num_seg, 1),
-                                device=device)
+        len_seg = torch.randint(
+            low=self.min_len_seg,
+            high=self.max_len_seg,
+            size=(batch_size * self.max_num_seg, 1),
+            device=device,
+        )
 
         # end point of each segment
         idx_mask = idx_scaled_fl < (len_seg - 1)
@@ -440,8 +517,9 @@ class InterpLnr(nn.Module):
 
         counts = idx_mask_final.sum(dim=-1).view(batch_size, -1).sum(dim=-1)
 
-        index_1 = torch.repeat_interleave(torch.arange(batch_size,
-                                                       device=device), counts)
+        index_1 = torch.repeat_interleave(
+            torch.arange(batch_size, device=device), counts
+        )
 
         index_2_fl = idx_scaled_org[idx_mask_final].long()
         index_2_cl = index_2_fl + 1
@@ -450,7 +528,7 @@ class InterpLnr(nn.Module):
         y_cl = x[index_1, index_2_cl, :]
         lambda_f = lambda_[idx_mask_final].unsqueeze(-1)
 
-        y = (1-lambda_f)*y_fl + lambda_f*y_cl
+        y = (1 - lambda_f) * y_fl + lambda_f * y_cl
 
         sequences = torch.split(y, counts.tolist(), dim=0)
 
@@ -464,8 +542,12 @@ class D_VECTOR(nn.Module):
 
     def __init__(self, num_layers=3, dim_input=40, dim_cell=256, dim_emb=64):
         super(D_VECTOR, self).__init__()
-        self.lstm = nn.LSTM(input_size=dim_input, hidden_size=dim_cell,
-                            num_layers=num_layers, batch_first=True)
+        self.lstm = nn.LSTM(
+            input_size=dim_input,
+            hidden_size=dim_cell,
+            num_layers=num_layers,
+            batch_first=True,
+        )
         self.embedding = nn.Linear(dim_cell, dim_emb)
 
     def forward(self, x):

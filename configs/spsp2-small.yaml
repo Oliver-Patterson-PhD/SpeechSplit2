@@ -1,7 +1,9 @@
 {
     # Directories
-    "data_dir": "data/train/",
-    "feat_dir": "feat",
+    "base_feats": "/mnt/datasets/processed/spsp2",
+    "vctk_dir": "/mnt/datasets/processed/VCTK-Corpus/wavs",
+    "uaspeech_dir": "/mnt/datasets/processed/UASpeech/noisereduce",
+    "dataset_name": "vctk",
     "wav_dir": "wav_mono",
     "spmel_dir": "spmel",
     "f0_dir": "f0",
@@ -39,12 +41,13 @@
     "max_len_pad": 192,
     "dropout": 0.2,
     "train": True,
+    "return_latents": True,
 
     # Training configuration
     "lr": 0.0001,
     "beta1": 0.9,
     "beta2": 0.999,
-    "experiment": "spsp2",
+    "experiment": "LatentSwap-spsp2",
     "bottleneck": "small",
     "model_type": "G",
     "device_id": 0

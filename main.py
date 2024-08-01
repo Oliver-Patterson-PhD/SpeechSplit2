@@ -1,12 +1,13 @@
-import os
-import yaml
 import argparse
+import os
+
 import torch
+import yaml
 from torch.backends import cudnn
 
-from solver import Solver
 from data_loader import get_loader
 from data_preprocessing import preprocess_data
+from solver import Solver
 from utils import Dict2Class
 
 
@@ -21,35 +22,49 @@ def main(config, args):
         device_id = torch.cuda.current_device()
         gpu_properties = torch.cuda.get_device_properties(device_id)
         print(
-            ("Using GPU %d (%s) of compute capability "
-             + "%d.%d with %.1fGb total memory.")
+            (
+                "Using GPU %d (%s) of compute capability "
+                + "%d.%d with %.1fGb total memory."
+            )
             % (
                 device_id,
                 gpu_properties.name,
                 gpu_properties.major,
                 gpu_properties.minor,
                 gpu_properties.total_memory / 1e9,
-            ))
+            )
+        )
 
         solver.train()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_iters', type=int, default=800000)
-    parser.add_argument('--resume_iters', type=int, default=0)
-    parser.add_argument('--log_step', type=int, default=100)
-    parser.add_argument('--ckpt_save_step', type=int, default=20000)
-    parser.add_argument('--stage', type=int, default=1, help='0: preprocessing; 1: training')
-    parser.add_argument('--config_name', type=str, default='spsp2-large')
-    parser.add_argument('--model_type', type=str, default='G', help='G: generator; F: f0 converter')
+    parser.add_argument("--trace", action="store_true")
+    parser.add_argument("--num_iters", type=int, default=800000)
+    parser.add_argument("--resume_iters", type=int, default=0)
+    parser.add_argument("--log_step", type=int, default=100)
+    parser.add_argument("--ckpt_save_step", type=int, default=20000)
+    parser.add_argument(
+        "--stage", type=int, default=1, help="0: preprocessing; 1: training"
+    )
+    parser.add_argument("--config_name", type=str, default="spsp2-large")
+    parser.add_argument(
+        "--model_type", type=str, default="G", help="G: generator; F: f0 converter"
+    )
     args = parser.parse_args()
 
+    if args.trace:
+        import heartrate
+
+        heartrate.trace(browser=True)
+
     config = yaml.safe_load(
-        open(os.path.join('configs', f'{args.config_name}.yaml'), 'r'))
+        open(os.path.join("configs", f"{args.config_name}.yaml"), "r")
+    )
     config = Dict2Class(config)
-    if args.model_type == 'F':
-        config.model_type = 'F'
+    if args.model_type == "F":
+        config.model_type = "F"
         # concatenate spectrogram and quantized pitch contour as the f0 converter input
         config.dim_pit = config.dim_con + config.dim_pit
 

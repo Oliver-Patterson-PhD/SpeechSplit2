@@ -1,14 +1,14 @@
 import os
-import torch
 import pickle
-import numpy as np
 
+import numpy as np
+import torch
 from torch.utils import data
 from torch.utils.data.sampler import Sampler
 
-from utils import vtlp, get_spmel, get_spenv
+from utils import get_spenv, get_spmel, vtlp
 
-torch.multiprocessing.set_sharing_strategy('file_system')
+torch.multiprocessing.set_sharing_strategy("file_system")
 
 
 class Utterances(data.Dataset):
@@ -16,15 +16,16 @@ class Utterances(data.Dataset):
 
     def __init__(self, config):
         """Initialize and preprocess the Utterances dataset."""
-        self.feat_dir = config.feat_dir
+        self.feat_dir = os.path.join(config.base_feats, config.dataset_name)
         self.wav_dir = os.path.join(self.feat_dir, config.wav_dir)
         self.spmel_dir = os.path.join(self.feat_dir, config.spmel_dir)
         self.f0_dir = os.path.join(self.feat_dir, config.f0_dir)
         self.experiment = config.experiment
         self.model_type = config.model_type
-        print('Loading data...')
+        self.dataset_name = config.dataset_name
+        print("Loading data...")
 
-        metaname = os.path.join(self.feat_dir, 'dataset.pkl')
+        metaname = os.path.join(self.feat_dir, "dataset.pkl")
         metadata = pickle.load(open(metaname, "rb"))
 
         dataset = [None] * len(metadata)
@@ -34,7 +35,7 @@ class Utterances(data.Dataset):
 
     def load_data(self, metadata, dataset):
         for k, sbmt in enumerate(metadata):
-            uttrs = len(sbmt)*[None]
+            uttrs = len(sbmt) * [None]
             # load speaker id and embedding
             uttrs[0] = sbmt[0]
             uttrs[1] = sbmt[1]
@@ -43,16 +44,21 @@ class Utterances(data.Dataset):
             spmel = np.load(os.path.join(self.spmel_dir, sbmt[2]))
             f0 = np.load(os.path.join(self.f0_dir, sbmt[2]))
             uttrs[2] = (wav_mono, spmel, f0)
+            if self.dataset_name == "uaspeech":
+                uttrs[3] = sbmt[2]
             dataset[k] = uttrs
 
     def __getitem__(self, index):
         list_uttrs = self.dataset[index]
         spk_id_org = list_uttrs[0]
         emb_org = list_uttrs[1]
+        if self.dataset_name == "uaspeech":
+            dysarthric = list_uttrs[3]
+        else:
+            dysarthric = None
         wav_mono, spmel, f0 = list_uttrs[2]
-        if self.model_type == 'G':
-            alpha = np.random.uniform(low=0.9, high=1.1)
-            wav_mono = vtlp(wav_mono, 16000, alpha)
+        alpha = np.random.uniform(low=0.9, high=1.1)
+        wav_mono = vtlp(wav_mono, 16000, alpha)
         spenv = get_spenv(wav_mono)
         spmel_mono = get_spmel(wav_mono)
         rhythm_input = spenv
@@ -61,13 +67,14 @@ class Utterances(data.Dataset):
         timbre_input = emb_org
 
         return (
+            dysarthric,
             wav_mono,
             spk_id_org,
             spmel,
             rhythm_input,
             content_input,
             pitch_input,
-            timbre_input
+            timbre_input,
         )
 
     def __len__(self):
@@ -87,23 +94,21 @@ class Collator(object):
 
             (
                 _,
+                _,
                 spk_id_org,
                 spmel_gt,
                 rhythm_input,
                 content_input,
                 pitch_input,
-                timbre_input
+                timbre_input,
             ) = token
-            len_crop = np.random.randint(
-                self.min_len_seq,
-                self.max_len_seq+1
-            )
-            left = np.random.randint(0, len(spmel_gt)-len_crop)
+            len_crop = np.random.randint(self.min_len_seq, self.max_len_seq + 1)
+            left = np.random.randint(0, len(spmel_gt) - len_crop)
 
-            spmel_gt = spmel_gt[left:left+len_crop, :]  # [Lc, F]
-            rhythm_input = rhythm_input[left:left+len_crop, :]  # [Lc, F]
-            content_input = content_input[left:left+len_crop, :]  # [Lc, F]
-            pitch_input = pitch_input[left:left+len_crop]  # [Lc, ]
+            spmel_gt = spmel_gt[left : left + len_crop, :]  # [Lc, F]
+            rhythm_input = rhythm_input[left : left + len_crop, :]  # [Lc, F]
+            content_input = content_input[left : left + len_crop, :]  # [Lc, F]
+            pitch_input = pitch_input[left : left + len_crop]  # [Lc, ]
 
             spmel_gt = np.clip(spmel_gt, 0, 1)
             rhythm_input = np.clip(rhythm_input, 0, 1)
@@ -111,35 +116,37 @@ class Collator(object):
 
             spmel_gt = np.pad(
                 spmel_gt,
-                ((0, self.max_len_pad-spmel_gt.shape[0]), (0, 0)),
-                'constant'
+                ((0, self.max_len_pad - spmel_gt.shape[0]), (0, 0)),
+                "constant",
             )
             rhythm_input = np.pad(
                 rhythm_input,
-                ((0, self.max_len_pad-rhythm_input.shape[0]), (0, 0)),
-                'constant'
+                ((0, self.max_len_pad - rhythm_input.shape[0]), (0, 0)),
+                "constant",
             )
             content_input = np.pad(
                 content_input,
-                ((0, self.max_len_pad-content_input.shape[0]), (0, 0)),
-                'constant'
+                ((0, self.max_len_pad - content_input.shape[0]), (0, 0)),
+                "constant",
             )
             pitch_input = np.pad(
                 pitch_input[:, np.newaxis],
-                ((0, self.max_len_pad-pitch_input.shape[0]), (0, 0)),
-                'constant',
-                constant_values=-1e10
+                ((0, self.max_len_pad - pitch_input.shape[0]), (0, 0)),
+                "constant",
+                constant_values=-1e10,
             )
 
-            new_batch.append((
-                spk_id_org,
-                spmel_gt,
-                rhythm_input,
-                content_input,
-                pitch_input,
-                timbre_input,
-                len_crop
-            ))
+            new_batch.append(
+                (
+                    spk_id_org,
+                    spmel_gt,
+                    rhythm_input,
+                    content_input,
+                    pitch_input,
+                    timbre_input,
+                    len_crop,
+                )
+            )
 
         batch = new_batch
         (
@@ -149,7 +156,7 @@ class Collator(object):
             content_input,
             pitch_input,
             timbre_input,
-            len_crop
+            len_crop,
         ) = zip(*batch)
         spk_id_org = list(spk_id_org)
         spmel_gt = torch.FloatTensor(np.stack(spmel_gt, axis=0))
@@ -159,14 +166,6 @@ class Collator(object):
         timbre_input = torch.FloatTensor(np.stack(timbre_input, axis=0))
         len_crop = torch.LongTensor(np.stack(len_crop, axis=0))
 
-        # print(f"Collator: spk_id_org    {spk_id_org}")
-        # print(f"Collator: spmel_gt      {spmel_gt.shape}")
-        # print(f"Collator: rhythm_input  {rhythm_input.shape}")
-        # print(f"Collator: content_input {content_input.shape}")
-        # print(f"Collator: pitch_input   {pitch_input.shape}")
-        # print(f"Collator: timbre_input  {timbre_input.shape}")
-        # print(f"Collator: len_crop      {len_crop.shape}")
-
         return (
             spk_id_org,
             spmel_gt,
@@ -174,13 +173,12 @@ class Collator(object):
             content_input,
             pitch_input,
             timbre_input,
-            len_crop
+            len_crop,
         )
 
 
 class MultiSampler(Sampler):
-    """Samples elements more than once in a single pass through the data.
-    """
+    """Samples elements more than once in a single pass through the data."""
 
     def __init__(self, num_samples, n_repeats, shuffle=False):
         self.num_samples = num_samples
@@ -189,8 +187,7 @@ class MultiSampler(Sampler):
 
     def gen_sample_array(self):
         self.sample_idx_array = torch.arange(
-            self.num_samples,
-            dtype=torch.int64
+            self.num_samples, dtype=torch.int64
         ).repeat(self.n_repeats)
         if self.shuffle:
             self.sample_idx_array = self.sample_idx_array[
@@ -210,14 +207,7 @@ def get_loader(config):
 
     dataset = Utterances(config)
     collator = Collator(config)
-    sampler = MultiSampler(
-        len(dataset),
-        config.samplier,
-        shuffle=config.shuffle
-    )
-    # sampler = torch.utils.data.RandomSampler(
-    #     data_source=dataset
-    # )
+    sampler = MultiSampler(len(dataset), config.samplier, shuffle=config.shuffle)
 
     def worker_init_fn(x):
         return np.random.seed((torch.initial_seed()) % (2**32))
@@ -231,6 +221,6 @@ def get_loader(config):
         drop_last=False,
         pin_memory=True,
         worker_init_fn=worker_init_fn,
-        collate_fn=collator
+        collate_fn=collator,
     )
     return data_loader
