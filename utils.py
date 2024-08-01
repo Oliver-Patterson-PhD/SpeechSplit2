@@ -1,15 +1,34 @@
 import json
+from typing import List, Tuple
 
-import librosa
-import numpy
-import pysptk
 import pyworld
 import scipy
 import torch
+import torchaudio
+from pysptk.sptk import rapt
 
-mel_basis = librosa.filters.mel(sr=16000, n_fft=1024, fmin=90, fmax=7600, n_mels=80).T
+n_fft = 1024
+hop_length = 256
+dim_freq = 80
+f_min = 90
+f_max = 7600
 
-min_level = numpy.exp(-100 / 20 * numpy.log(10))
+torch_stft = torchaudio.transforms.Spectrogram(
+    n_fft=n_fft,
+    win_length=n_fft,
+    hop_length=hop_length,
+    window_fn=torch.hann_window,
+    power=1,
+)
+torch_melbasis = torchaudio.transforms.MelScale(
+    n_mels=dim_freq,
+    sample_rate=16000,
+    n_stft=n_fft // 2 + 1,
+    f_min=f_min,
+    f_max=f_max,
+)
+min_level = torch.exp(-100 / 20 * torch.log(torch.tensor(10)))
+vtlp_window = torch.hann_window(2048)
 
 
 class Dict2Class(object):
@@ -38,57 +57,23 @@ def butter_lowpass(cutoff, fs, order=5):
     return b, a
 
 
-def stride_wav(x, fft_length=1024, hop_length=256):
-    x = numpy.pad(x, int(fft_length // 2), mode="reflect")
-    noverlap = fft_length - hop_length
-    shape = x.shape[:-1] + ((x.shape[-1] - noverlap) // hop_length, fft_length)
-    strides = x.strides[:-1] + (hop_length * x.strides[-1], x.strides[-1])
-    result = numpy.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
-    return result
-
-
-def pySTFT(x, fft_length=1024, hop_length=256):
-    result = stride_wav(x, fft_length=fft_length, hop_length=hop_length)
-    fft_window = scipy.signal.get_window("hann", fft_length, fftbins=True)
-    result = numpy.fft.rfft(fft_window * result, n=fft_length).T
-    return numpy.abs(result)
-
-
-def speaker_normalization(f0, index_nonzero, mean_f0, std_f0):
-    # f0 is logf0
-    # index_nonzero = f0 != 0
-    f0 = f0.astype(float).copy()
+def speaker_normalization(
+    f0: torch.Tensor,
+    index_nonzero: torch.Tensor,
+    mean_f0: float,
+    std_f0: float,
+) -> torch.Tensor:
+    f0.dtype
     std_f0 += 1e-6
     f0[index_nonzero] = (f0[index_nonzero] - mean_f0) / std_f0 / 4.0
-    f0[index_nonzero] = numpy.clip(f0[index_nonzero], -1, 1)
+    f0[index_nonzero] = torch.clip(f0[index_nonzero], -1, 1)
     f0[index_nonzero] = (f0[index_nonzero] + 1) / 2.0
     return f0
 
 
-def inverse_quantize_f0_numpy(x, num_bins=257):
-    assert x.ndim == 2
-    assert x.shape[1] == num_bins
-    y = numpy.argmax(x, axis=1).astype(float)
-    y /= num_bins - 1
-    return y
-
-
-def quantize_f0_numpy(x, num_bins=256):
-    # x is logf0
-    assert x.ndim == 1
-    x = x.astype(float).copy()
-    uv = x <= 0
-    x[uv] = 0.0
-    assert (x >= 0).all() and (x <= 1).all()
-    x = numpy.round(x * (num_bins - 1))
-    x = x + 1
-    x[uv] = 0.0
-    enc = numpy.zeros((len(x), num_bins + 1), dtype=numpy.float32)
-    enc[numpy.arange(len(x)), x.astype(numpy.int32)] = 1.0
-    return enc, x.astype(numpy.int64)
-
-
-def quantize_f0_torch(x, num_bins=256):
+def quantize_f0_torch(
+    x: torch.Tensor, num_bins: int = 256
+) -> Tuple[torch.Tensor, torch.Tensor]:
     # x is logf0
     B = x.size(0)
     x = x.view(-1).clone()
@@ -103,120 +88,195 @@ def quantize_f0_torch(x, num_bins=256):
     return enc.view(B, -1, num_bins + 1), x.view(B, -1).long()
 
 
-def filter_wav(x, prng):
-    b, a = butter_highpass(30, 16000, order=5)
-    y = scipy.signal.filtfilt(b, a, x)
-    wav = y * 0.96 + (prng.rand(y.shape[0]) - 0.5) * 1e-06
+def filter_wav(x: torch.Tensor) -> torch.Tensor:
+    bn, an = butter_highpass(30, 16000, order=5)
+    a = torch.tensor(an, device=x.device, dtype=x.dtype)
+    b = torch.tensor(bn, device=x.device, dtype=x.dtype)
+    y = torchaudio.functional.filtfilt(x, a, b)
+    wav = y * 0.96 + (torch.rand(y.shape[0]) - 0.5) * 1e-06
     return wav
 
 
-def get_spmel(wav):
-    D = pySTFT(wav).T
-    D_mel = numpy.dot(D, mel_basis)
-    D_db = 20 * numpy.log10(numpy.maximum(min_level, D_mel)) - 16
-    S = (D_db + 100) / 100
-    return S
+def get_spmel(wav: torch.Tensor) -> torch.Tensor:
+    return torch_melbasis(torch_stft(wav))
 
 
-def get_spenv(wav, cutoff=3):
-    D = pySTFT(wav).T
-    ceps = numpy.fft.irfft(numpy.log(D + 1e-6), axis=-1).real  # [T, F]
-    F = ceps.shape[1]
-    lifter = numpy.zeros(F)
+def get_spenv(
+    wav: torch.Tensor,
+    cutoff: int = 3,
+) -> torch.Tensor:
+    ceps = torch.fft.irfft(
+        torch.log(torch_stft(wav).T + 1e-6),
+        axis=-1,
+    ).real.to(dtype=torch.double)
+    lifter = torch.zeros(
+        ceps.shape[1],
+        dtype=torch.double,
+    )
     lifter[:cutoff] = 1
     lifter[cutoff] = 0.5
-    lifter = numpy.diag(lifter)
-    env = numpy.matmul(ceps, lifter)
-    env = numpy.abs(numpy.exp(numpy.fft.rfft(env, axis=-1)))
-    env = 20 * numpy.log10(numpy.maximum(min_level, env)) - 16
-    env = (env + 100) / 100
-    env = zero_one_norm(env)
-    env = scipy.signal.resample(env, 80, axis=-1)
-    return env
+    env = zero_one_norm(
+        (
+            20
+            * torch.log10(
+                torch.maximum(
+                    min_level,
+                    torch.abs(
+                        torch.exp(
+                            torch.fft.rfft(
+                                torch.matmul(
+                                    ceps,
+                                    torch.diag(lifter),
+                                ),
+                                axis=-1,
+                            )
+                        )
+                    ),
+                )
+            )
+            - 16
+            + 100
+        )
+        / 100
+    )
+    return torchaudio.functional.resample(
+        env,
+        orig_freq=env.size(dim=-1),
+        new_freq=dim_freq,
+    )
 
 
-def extract_f0(wav, fs, lo, hi):
-    f0_rapt = pysptk.sptk.rapt(
-        wav.astype(numpy.float32) * 32768, fs, 256, min=lo, max=hi, otype=2
+def extract_f0(
+    wav: torch.Tensor,
+    fs: int,
+    lo: int,
+    hi: int,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    f0_rapt = torch.tensor(
+        rapt(
+            wav.cpu().numpy() * 32768,
+            fs,
+            256,
+            min=lo,
+            max=hi,
+            otype=2,
+        ),
+        device=wav.device,
     )
     index_nonzero = f0_rapt != -1e10
-    if len(index_nonzero) == 0:
+    nonzero_rapt = f0_rapt[index_nonzero]
+    if len(index_nonzero) == 0 or len(nonzero_rapt) == 0:
         mean_f0 = std_f0 = -1e10
     else:
-        mean_f0, std_f0 = (
-            numpy.mean(f0_rapt[index_nonzero]),
-            numpy.std(f0_rapt[index_nonzero]),
-        )
-    f0_norm = speaker_normalization(f0_rapt, index_nonzero, mean_f0, std_f0)
+        mean_f0 = nonzero_rapt.mean().item()
+        std_f0 = nonzero_rapt.std().item()
+    f0_norm = speaker_normalization(
+        f0_rapt,
+        index_nonzero,
+        mean_f0,
+        std_f0,
+    )
     return f0_rapt, f0_norm
 
 
-def zero_one_norm(S):
-    S_norm = S - numpy.min(S)
-    S_norm /= numpy.max(S_norm)
-    return S_norm
+def zero_one_norm(
+    s: torch.Tensor,
+) -> torch.Tensor:
+    s_norm = s - torch.min(s)
+    s_norm /= torch.max(s_norm)
+    return s_norm
 
 
-def get_world_params(x, fs=16000):
-    _f0, t = pyworld.dio(x, fs)  # raw pitch extractor
-    f0 = pyworld.stonemask(x, _f0, t, fs)  # pitch refinement
-    sp = pyworld.cheaptrick(x, f0, t, fs)  # extract smoothed spectrogram
-    ap = pyworld.d4c(x, f0, t, fs)  # extract aperiodicity
-    return f0, sp, ap
+def get_world_params(
+    x: torch.Tensor,
+    fs: int,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    xn = x.squeeze().double().cpu().numpy()
+    estimated_f0, temporal_pos = pyworld.dio(xn, fs)
+    refined_f0 = pyworld.stonemask(
+        xn,
+        estimated_f0,
+        temporal_pos,
+        fs,
+    )
+    spectral_envelope = pyworld.cheaptrick(
+        xn,
+        refined_f0,
+        temporal_pos,
+        fs,
+    )
+    aperiodicity = pyworld.d4c(
+        xn,
+        refined_f0,
+        temporal_pos,
+        fs,
+    )
+    return (
+        torch.tensor(refined_f0, device=x.device),
+        torch.tensor(spectral_envelope, device=x.device),
+        torch.tensor(aperiodicity, device=x.device),
+    )
 
 
-def average_f0s(f0s, mode="global"):
-    # average f0s using global mean
-    if mode == "global":
-        f0_voiced = []  # f0 in voiced frames
-        for f0 in f0s:
-            v = f0 > 0
-            f0_voiced = numpy.concatenate((f0_voiced, f0[v]))
-        f0_avg = numpy.mean(f0_voiced)
-        for i in range(len(f0s)):
-            f0 = f0s[i]
-            v = f0 > 0
-            uv = f0 <= 0
-            if any(v):
-                f0 = numpy.ones_like(f0) * f0_avg
-                f0[uv] = 0
-            else:
-                f0 = numpy.zeros_like(f0)
-            f0s[i] = f0
-    # average f0s using local mean
-    elif mode == "local":
-        for i in range(len(f0s)):
-            f0 = f0s[i]
-            v = f0 > 0
-            uv = f0 <= 0
-            if any(v):
-                f0_avg = numpy.mean(f0[v])
-                f0 = numpy.ones_like(f0) * f0_avg
-                f0[uv] = 0
-            else:
-                f0 = numpy.zeros_like(f0)
-            f0s[i] = f0
-    else:
-        raise ValueError
+def average_f0s(
+    f0s: List[torch.Tensor],
+) -> List[torch.Tensor]:
+    f0_voiced: torch.Tensor = torch.tensor([])
+    for i, f0 in enumerate(f0s):
+        v = f0 > 0
+        f0_voiced = torch.cat((f0_voiced.to(f0.device), f0[v]))
+    f0_avg = torch.mean(f0_voiced)
+
+    def mapfn(
+        f0: torch.Tensor,
+    ) -> torch.Tensor:
+        v = f0 > 0
+        uv = f0 <= 0
+        if any(v):
+            f0 = torch.ones_like(f0) * f0_avg
+            f0[uv] = 0
+        else:
+            f0 = torch.zeros_like(f0)
+        return f0
+
+    f0s = [mapfn(f0) for f0 in f0s]
     return f0s
 
 
-def get_monotonic_wav(x, f0, sp, ap, fs=16000):
-    # synthesize an utterance using the parameters
-    y = pyworld.synthesize(f0, sp, ap, fs)
+def get_monotonic_wav(
+    x: torch.Tensor,
+    f0: torch.Tensor,
+    sp: torch.Tensor,
+    ap: torch.Tensor,
+    fs: int,
+) -> torch.Tensor:
+    y = torch.tensor(
+        pyworld.synthesize(
+            f0.cpu().numpy(),
+            sp.cpu().numpy(),
+            ap.cpu().numpy(),
+            fs,
+        ),
+        device=x.device,
+    )
     if len(y) < len(x):
-        y = numpy.pad(y, (0, len(x) - len(y)))
+        y = torch.nn.functional.pad(y, (0, len(x) - len(y)))
     assert len(y) >= len(x)
     return y[: len(x)]
 
 
-def tensor2onehot(x):
+def tensor2onehot(x: torch.Tensor) -> torch.Tensor:
     indices = torch.argmax(x, dim=-1)
     return torch.nn.functional.one_hot(indices, x.size(-1))
 
 
-def warp_freq(n_fft, fs, fhi=4800, alpha=0.9):
-    bins = numpy.linspace(0, 1, n_fft)
+def warp_freq(
+    n_fft: int,
+    fs: int,
+    fhi: int = 4800,
+    alpha: float = 0.9,
+) -> torch.Tensor:
+    bins = torch.linspace(0, 1, n_fft)
     f_warps = []
     scale = fhi * min(alpha, 1)
     f_boundary = scale / alpha
@@ -230,26 +290,56 @@ def warp_freq(n_fft, fs, fhi=4800, alpha=0.9):
                 (fs_half - scale) / (fs_half - scale / alpha) * (fs_half - f_ori)
             )
         f_warps.append(f_warp)
-    return numpy.array(f_warps)
+    return torch.Tensor(f_warps)
 
 
-def vtlp(x, fs, alpha):
-    S = librosa.stft(x).T
-    T, K = S.shape
-    dtype = S.dtype
-    f_warps = warp_freq(K, fs, alpha=alpha)
-    f_warps *= (K - 1) / max(f_warps)
-    new_S = numpy.zeros([T, K], dtype=dtype)
-    for k in range(K):
+def vtlp(
+    x: torch.Tensor,
+    fs: int,
+    alpha,
+) -> torch.Tensor:
+    if alpha is None:
+        alpha = 0.2 * torch.rand(1).item() + 0.9
+    vtlp_stft = torch.stft(
+        x,
+        n_fft=2048,
+        window=vtlp_window,
+        return_complex=True,
+    ).T
+    dtype = vtlp_stft.dtype
+    shape_t, shape_k = vtlp_stft.shape
+    f_warps = warp_freq(
+        shape_k,
+        fs,
+        alpha=alpha,
+    )
+    f_warps *= (shape_k - 1) / max(f_warps)
+    new_S = torch.zeros([shape_t, shape_k], dtype=dtype)
+    for k in range(shape_k):
         # first and last freq
-        if k == 0 or k == K - 1:
-            new_S[:, k] += S[:, k]
+        if k == 0 or k == shape_k - 1:
+            new_S[:, k] += vtlp_stft[:, k]
         else:
-            warp_up = f_warps[k] - numpy.floor(f_warps[k])
+            warp_up = f_warps[k] - torch.floor(f_warps[k])
             warp_down = 1 - warp_up
-            pos = int(numpy.floor(f_warps[k]))
-            new_S[:, pos] += warp_down * S[:, k]
-            new_S[:, pos + 1] += warp_up * S[:, k]
-    y = librosa.istft(new_S.T)
-    y = librosa.util.fix_length(data=y, size=len(x))
+            pos = int(torch.floor(f_warps[k]))
+            new_S[:, pos] += warp_down * vtlp_stft[:, k]
+            new_S[:, pos + 1] += warp_up * vtlp_stft[:, k]
+    y = torch.istft(
+        new_S.T,
+        n_fft=2048,
+        window=vtlp_window,
+    )
+    if len(x) <= len(y):
+        y = y[: len(x)]
+    else:
+        y = torch.nn.functional.pad(y, (0, len(x) - len(y)), mode="constant", value=0)
     return y
+
+
+def clip(x: torch.Tensor, min: float, max: float) -> torch.Tensor:
+    idx_over = x > max
+    idx_under = x < min
+    x[idx_over] = max
+    x[idx_under] = min
+    return x
