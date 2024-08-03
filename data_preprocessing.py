@@ -1,36 +1,58 @@
 import os
 import pickle
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 import torch
 import torchaudio
+
+from util.config import Config
+from util.logging import Logger
 from utils import (average_f0s, extract_f0, filter_wav, get_monotonic_wav,
                    get_spmel, get_world_params)
 
+logger = Logger()
+
 
 def process_file(
-    idx, filename, wav, f0, sp, ap, fs, lo, hi, wav_dir, f0_dir, spk_dir, spmel_dir
+    idx,
+    filename,
+    wav,
+    f0,
+    sp,
+    ap,
+    fs,
+    lo,
+    hi,
+    wav_dir,
+    f0_dir,
+    spk_dir,
+    spmel_dir,
 ):
     wav_mono = get_monotonic_wav(wav, f0, sp, ap, fs)
     spmel = get_spmel(wav)
     f0_rapt, f0_norm = extract_f0(wav, fs, lo, hi)
-    assert len(spmel) == len(f0_rapt)
+    assert len(spmel) == (
+        len(f0_rapt),
+        f"\nspmel: {len(spmel)}\nf0_rapt: {len(f0_rapt)}",
+    )
 
-    # segment feature into trunks with the same length during training
     start_idx = 0
     trunk_len = 49151
     while start_idx * trunk_len < len(wav_mono):
-        wav_mono_trunk = wav_mono[start_idx * trunk_len : (start_idx + 1) * trunk_len]
+        this_trunk = start_idx * trunk_len
+        next_trunk = (start_idx + 1) * trunk_len
+        wav_mono_trunk = wav_mono[this_trunk:next_trunk]
         if len(wav_mono_trunk) < trunk_len:
             wav_mono_trunk = torch.nn.functional.pad(
                 wav_mono_trunk, (0, trunk_len - len(wav_mono_trunk))
             )
         torch.save(
             wav_mono_trunk.float(),
-            os.path.join(
+            "{}/{}/{}_{}.pt".format(
                 wav_dir,
                 spk_dir,
-                os.path.splitext(filename)[0] + "_" + str(start_idx),
+                os.path.splitext(filename)[0],
+                start_idx,
             ),
         )
         start_idx += 1
@@ -40,11 +62,14 @@ def process_file(
         start_idx = 0
         trunk_len = 192
         while start_idx * trunk_len < len(fea):
-            fea_trunk = fea[start_idx * trunk_len : (start_idx + 1) * trunk_len]
+            this_trunk = start_idx * trunk_len
+            next_trunk = (start_idx + 1) * trunk_len
+            fea_trunk = fea[this_trunk:next_trunk]
             if len(fea_trunk) < trunk_len:
                 if fea_trunk.ndim == 2:
                     fea_trunk = torch.nn.functional.pad(
-                        fea_trunk, (0, trunk_len - len(fea_trunk), 0, 0)
+                        fea_trunk,
+                        (0, trunk_len - len(fea_trunk), 0, 0),
                     )
                 else:
                     fea_trunk = torch.nn.functional.pad(
@@ -56,38 +81,27 @@ def process_file(
                     )
             torch.save(
                 fea_trunk.float(),
-                os.path.join(
+                "{}/{}/{}_{}.pt".format(
                     fea_dir,
                     spk_dir,
-                    os.path.splitext(filename)[0] + "_" + str(start_idx),
+                    os.path.splitext(filename)[0],
+                    start_idx,
                 ),
             )
             start_idx += 1
 
 
-def make_spect_f0(config) -> None:
+def make_spect_f0(config: Config) -> None:
     fs = 16000
-    if config.dataset_name == "vctk":
-        data_dir = config.vctk_dir
-    elif config.dataset_name == "uaspeech":
-        data_dir = config.uaspeech_dir
-    else:
-        raise ValueError
-    feat_dir = os.path.join(config.base_feats, config.dataset_name)
-    wav_dir = os.path.join(feat_dir, config.wav_dir)
-    spmel_dir = os.path.join(feat_dir, config.spmel_dir)
-    f0_dir = os.path.join(feat_dir, config.f0_dir)
-    spk_meta = getattr(__import__("meta_dicts"), config.dataset_name)
-
-    dir_name, spk_dir_list, _ = next(os.walk(data_dir))
-
+    spk_meta = getattr(__import__("meta_dicts"), config.options.dataset_name)
+    dir_name, spk_dir_list, _ = next(os.walk(config.paths.raw_wavs))
     for spk_dir in sorted(spk_dir_list):
         if spk_dir not in spk_meta:
-            print(f"skip generating features for {spk_dir}")
+            logger.debug(f"skip generating features for {spk_dir}")
             continue
-        print(f"Generating features for speaker {spk_dir}")
+        logger.debug(f"Generating features for speaker {spk_dir}")
 
-        for fea_dir in [wav_dir, spmel_dir, f0_dir]:
+        for fea_dir in [config.paths.monowavs, config.paths.spmels, config.paths.freqs]:
             if not os.path.exists(os.path.join(fea_dir, spk_dir)):
                 os.makedirs(os.path.join(fea_dir, spk_dir))
 
@@ -107,7 +121,8 @@ def make_spect_f0(config) -> None:
 
         def getraw(fname):
             x = torchaudio.load(
-                os.path.join(dir_name, spk_dir, fname), channels_first=True
+                f"{dir_name}/{spk_dir}/{fname}",
+                channels_first=True,
             )[0].squeeze()
             if x.shape[0] % 256 == 0:
                 x = torch.cat((x, torch.tensor([1e-06], device=x.device)), axis=0)
@@ -135,10 +150,10 @@ def make_spect_f0(config) -> None:
                 fs,
                 lo,
                 hi,
-                wav_dir,
-                f0_dir,
+                config.paths.monowavs,
+                config.paths.freqs,
                 spk_dir,
-                spmel_dir,
+                config.paths.spmels,
             )
             for idx, (filename, wav, f0, sp, ap) in enumerate(
                 zip(file_list, wavs, f0s, sps, aps)
@@ -146,37 +161,83 @@ def make_spect_f0(config) -> None:
         ]
 
 
-def make_metadata(config):
-    feat_dir = os.path.join(config.base_feats, config.dataset_name)
+def process_item(
+    spk_dir: str,
+    spk_meta: Dict[str, Any],
+    config: Config,
+    dir_name: str,
+) -> List[Tuple[str, torch.Tensor, str]]:
+    spk_id, _ = spk_meta[spk_dir] if spk_dir in spk_meta else None
+    # may use generalized speaker embedding for zero-shot conversion
+    spk_emb = torch.zeros(
+        (config.model.dim_spk_emb,),
+        dtype=torch.float32,
+    )
+    spk_emb[int(spk_id)] = 1.0
+    _, _, file_list = next(
+        os.walk(
+            os.path.join(
+                dir_name,
+                spk_dir,
+            )
+        )
+    )
+    file_list = sorted(file_list)
+    utterances = [os.path.join(spk_dir, filename) for filename in file_list]
+    return [
+        (
+            spk_dir,
+            spk_emb,
+            utterance,
+        )
+        for utterance in utterances
+    ]
+
+
+def make_metadata(config: Config):
     # use wav directory simply because all inputs have the same filename
-    wav_dir = os.path.join(feat_dir, config.wav_dir)
-    dir_name, spk_dir_list, _ = next(os.walk(wav_dir))
-    spk_meta = getattr(__import__("meta_dicts"), config.dataset_name)
+    dir_name, spk_dir_list, _ = next(os.walk(config.paths.monowavs))
+    spk_meta = getattr(
+        __import__("meta_dicts"),
+        config.options.dataset_name,
+    )
     dataset = []
 
-    for spk_dir in sorted(spk_dir_list):
-        spk_id, _ = spk_meta[spk_dir]
+    [
+        dataset.extend(
+            process_item(
+                spk_dir,
+                spk_meta,
+                config,
+                dir_name,
+            )
+        )  # type: ignore [func-returns-value]
+        for spk_dir in sorted(spk_dir_list)
+        if spk_dir in spk_meta
+    ]
 
-        # may use generalized speaker embedding for zero-shot conversion
-        spk_emb = torch.zeros((config.dim_spk_emb,), dtype=torch.float32)
-        spk_emb[int(spk_id)] = 1.0
-
-        _, _, file_list = next(os.walk(os.path.join(dir_name, spk_dir)))
-        file_list = sorted(file_list)
-        utterances = [os.path.join(spk_dir, filename) for filename in file_list]
-        for utterance in utterances:
-            dataset.append((spk_dir, spk_emb, utterance))
-
-    with open(os.path.join(feat_dir, "dataset.pkl"), "wb") as handle:
+    with open(
+        os.path.join(
+            config.paths.features,
+            "dataset.pkl",
+        ),
+        "wb",
+    ) as handle:
         pickle.dump(dataset, handle)
 
 
-def preprocess_data(config):
-    feat_dir = os.path.join(config.base_feats, config.dataset_name)
-    if not os.path.exists(os.path.join(feat_dir, "dataset.pkl")):
-        print("Start preprocessing...")
+def preprocess_data(config: Config):
+    if not os.path.exists(
+        os.path.join(
+            config.paths.features,
+            "dataset.pkl",
+        )
+    ):
+        logger.debug("Start preprocessing...")
         make_spect_f0(config)
         make_metadata(config)
-        print("Done")
+        logger.debug("Done")
     else:
-        print(f"Dataset '{feat_dir}/dataset.pkl' exists, skipping preprocessing")
+        logger.debug(
+            f"Dataset '{config.paths.features}/dataset.pkl' exists, skipping preprocessing"
+        )

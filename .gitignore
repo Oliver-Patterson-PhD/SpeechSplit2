@@ -1,5 +1,7 @@
 # Byte-compiled / optimized / DLL files
 /models/
+/artefacts/
+/tensorboard/
 __pycache__/
 *.py[cod]
 *$py.class

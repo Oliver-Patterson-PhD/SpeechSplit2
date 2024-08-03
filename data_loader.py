@@ -2,9 +2,12 @@ import os
 import pickle
 
 import torch
+
+from util.logging import Logger
 from utils import clip, get_spenv, get_spmel, vtlp
 
 torch.multiprocessing.set_sharing_strategy("file_system")
+logger = Logger()
 
 
 class Utterances(torch.utils.data.Dataset):
@@ -12,14 +15,14 @@ class Utterances(torch.utils.data.Dataset):
 
     def __init__(self, config):
         """Initialize and preprocess the Utterances dataset."""
-        self.feat_dir = os.path.join(config.base_feats, config.dataset_name)
-        self.wav_dir = os.path.join(self.feat_dir, config.wav_dir)
-        self.spmel_dir = os.path.join(self.feat_dir, config.spmel_dir)
-        self.f0_dir = os.path.join(self.feat_dir, config.f0_dir)
-        self.experiment = config.experiment
-        self.model_type = config.model_type
-        self.dataset_name = config.dataset_name
-        print("Loading data...")
+        self.feat_dir = config.paths.features
+        self.wav_dir = config.paths.monowavs
+        self.spmel_dir = config.paths.spmels
+        self.f0_dir = config.paths.freqs
+        self.experiment = config.options.experiment
+        self.dataset_name = config.options.dataset_name
+        self.model_type = "G"
+        logger.debug("Loading data...")
 
         metaname = os.path.join(self.feat_dir, "dataset.pkl")
         metadata = pickle.load(open(metaname, "rb"))
@@ -36,9 +39,18 @@ class Utterances(torch.utils.data.Dataset):
             uttrs[0] = sbmt[0]
             uttrs[1] = sbmt[1]
             # load features
-            wav_mono = torch.load(os.path.join(self.wav_dir, sbmt[2]))
-            spmel = torch.load(os.path.join(self.spmel_dir, sbmt[2]))
-            f0 = torch.load(os.path.join(self.f0_dir, sbmt[2]))
+            wav_mono = torch.load(
+                os.path.join(self.wav_dir, sbmt[2]),
+                weights_only=True,
+            )
+            spmel = torch.load(
+                os.path.join(self.spmel_dir, sbmt[2]),
+                weights_only=True,
+            )
+            f0 = torch.load(
+                os.path.join(self.f0_dir, sbmt[2]),
+                weights_only=True,
+            )
             uttrs[2] = (wav_mono, spmel, f0)
             if self.dataset_name == "uaspeech":
                 uttrs[3] = sbmt[2]
@@ -80,9 +92,9 @@ class Utterances(torch.utils.data.Dataset):
 
 class Collator(object):
     def __init__(self, config):
-        self.min_len_seq = config.min_len_seq
-        self.max_len_seq = config.max_len_seq
-        self.max_len_pad = config.max_len_pad
+        self.min_len_seq = config.model.min_len_seq
+        self.max_len_seq = config.model.max_len_seq
+        self.max_len_pad = config.model.max_len_pad
 
     def __call__(self, batch):
         new_batch = []
@@ -98,8 +110,10 @@ class Collator(object):
                 pitch_input,
                 timbre_input,
             ) = token
-            len_crop = torch.randint(self.min_len_seq, self.max_len_seq + 1)
-            left = torch.randint(0, len(spmel_gt) - len_crop)
+            len_crop = torch.randint(
+                low=self.min_len_seq, high=self.max_len_seq + 1, size=(1,)
+            )
+            left = torch.randint(low=0, high=abs(len(spmel_gt) - len_crop), size=(1,))
 
             spmel_gt = spmel_gt[left : left + len_crop, :]  # [Lc, F]
             rhythm_input = rhythm_input[left : left + len_crop, :]  # [Lc, F]

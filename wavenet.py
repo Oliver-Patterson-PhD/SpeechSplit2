@@ -187,7 +187,10 @@ class Synthesizer(object):
         self.device = device
 
     def load_ckpt(self, ckpt_path):
-        ckpt = torch.load(ckpt_path)
+        ckpt = torch.load(
+            ckpt_path,
+            weights_only=True,
+        )
         self.model = self.model.to(self.device)
         self.model.load_state_dict(ckpt["state_dict"])
 

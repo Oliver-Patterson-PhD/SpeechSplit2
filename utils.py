@@ -98,7 +98,7 @@ def filter_wav(x: torch.Tensor) -> torch.Tensor:
 
 
 def get_spmel(wav: torch.Tensor) -> torch.Tensor:
-    return torch_melbasis(torch_stft(wav))
+    return torch_melbasis(torch_stft(wav)).T
 
 
 def get_spenv(
