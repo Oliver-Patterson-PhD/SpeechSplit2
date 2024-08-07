@@ -76,6 +76,7 @@ class ConfigOptions:
     trace: bool = False
     train: bool = True
     device_id: int = 0
+    regenerate_data: bool = False
 
 
 class ConfigTraining:

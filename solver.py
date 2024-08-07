@@ -4,10 +4,10 @@ import time
 from collections import OrderedDict
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
-
 from model import Generator_3 as Generator
 from model import InterpLnr
+from torch.utils.tensorboard import SummaryWriter
+from util.compute import Compute
 from util.logging import Logger
 from utils import quantize_f0_torch
 
@@ -69,9 +69,13 @@ class Solver(object):
         self.logger.debug(self.model_type)
         self.logger.debug("The number of parameters: {}".format(num_params))
         # Set GPU
-        gpu_count = torch.cuda.device_count()
-        if gpu_count > 1:
-            self.model = torch.nn.DataParallel(self.model)
+        compute = Compute()
+        compute.print_compute()
+        compute.set_gpu()
+        self.device = compute.device()
+        # gpu_count = torch.cuda.device_count()
+        # if gpu_count > 1:
+        #     self.model = torch.nn.DataParallel(self.model)
         self.model.to(self.device)
 
         self.Interp = InterpLnr(self.config)
@@ -231,16 +235,6 @@ class Solver(object):
                         self.model_type,
                         train_loss_id,
                     )
-                )
-                self.writer.add_images(
-                    tag=f"{self.writer_pref}/spmel/generated",
-                    img_tensor=spmel_output,
-                    dataformats="NWH",
-                )
-                self.writer.add_images(
-                    tag=f"{self.writer_pref}/spmel/truth",
-                    img_tensor=spmel_gt,
-                    dataformats="NWH",
                 )
 
             # Save model checkpoints

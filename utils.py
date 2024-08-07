@@ -6,6 +6,7 @@ import scipy
 import torch
 import torchaudio
 from pysptk.sptk import rapt
+from util.logging import Logger
 
 n_fft = 1024
 hop_length = 256
@@ -79,6 +80,9 @@ def quantize_f0_torch(
     x = x.view(-1).clone()
     uv = x <= 0
     x[uv] = 0
+    Logger().debug(f"x max: {x.max()}")
+    Logger().debug(f"x min: {x.min()}")
+    Logger().debug(f"x mean: {x.mean()}")
     assert (x >= 0).all() and (x <= 1).all()
     x = torch.round(x * (num_bins - 1))
     x = x + 1
@@ -337,9 +341,17 @@ def vtlp(
     return y
 
 
-def clip(x: torch.Tensor, min: float, max: float) -> torch.Tensor:
+def clip(x: torch.Tensor, min: float, max: float, log: bool = False) -> torch.Tensor:
+    if log:
+        Logger().debug(f"x.shape: {x.shape}")
     idx_over = x > max
     idx_under = x < min
     x[idx_over] = max
     x[idx_under] = min
+    if log:
+        Logger().debug(f"min: {min}")
+        Logger().debug(f"max: {max}")
+        Logger().debug(f"x.shape: {x.shape}")
+        Logger().debug(f"idx_over.shape: {idx_over.shape}")
+        Logger().debug(f"idx_under.shape: {idx_under.shape}")
     return x

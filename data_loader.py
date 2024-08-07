@@ -2,7 +2,6 @@ import os
 import pickle
 
 import torch
-
 from util.logging import Logger
 from utils import clip, get_spenv, get_spmel, vtlp
 
@@ -73,6 +72,14 @@ class Utterances(torch.utils.data.Dataset):
         content_input = spmel_mono
         pitch_input = f0
         timbre_input = emb_org
+        # print(f"Collator: dysarthric    {dysarthric}")
+        # print(f"Collator: wav_mono      {wav_mono.shape}")
+        # print(f"Collator: spk_id_org    {spk_id_org}")
+        # print(f"Collator: spmel         {spmel.shape}")
+        # print(f"Collator: rhythm_input  {rhythm_input.shape}")
+        # print(f"Collator: content_input {content_input.shape}")
+        # print(f"Collator: pitch_input   {pitch_input.shape}")
+        # print(f"Collator: timbre_input  {timbre_input.shape}")
 
         return (
             dysarthric,
@@ -113,8 +120,7 @@ class Collator(object):
             len_crop = torch.randint(
                 low=self.min_len_seq, high=self.max_len_seq + 1, size=(1,)
             )
-            left = torch.randint(low=0, high=abs(len(spmel_gt) - len_crop), size=(1,))
-
+            left = torch.randint(low=0, high=len(spmel_gt) - len_crop, size=(1,))
             spmel_gt = spmel_gt[left : left + len_crop, :]  # [Lc, F]
             rhythm_input = rhythm_input[left : left + len_crop, :]  # [Lc, F]
             content_input = content_input[left : left + len_crop, :]  # [Lc, F]
@@ -126,22 +132,22 @@ class Collator(object):
 
             spmel_gt = torch.nn.functional.pad(
                 spmel_gt,
-                ((0, self.max_len_pad - spmel_gt.shape[0], 0, 0)),
+                ((0, 0, 0, self.max_len_pad - spmel_gt.shape[0])),
                 "constant",
             )
             rhythm_input = torch.nn.functional.pad(
                 rhythm_input,
-                ((0, self.max_len_pad - rhythm_input.shape[0], 0, 0)),
+                ((0, 0, 0, self.max_len_pad - rhythm_input.shape[0])),
                 "constant",
             )
             content_input = torch.nn.functional.pad(
                 content_input,
-                ((0, self.max_len_pad - content_input.shape[0], 0, 0)),
+                ((0, 0, 0, self.max_len_pad - content_input.shape[0])),
                 "constant",
             )
             pitch_input = torch.nn.functional.pad(
                 pitch_input[:, None],
-                ((0, self.max_len_pad - pitch_input.shape[0], 0, 0)),
+                ((0, 0, 0, self.max_len_pad - pitch_input.shape[0])),
                 "constant",
                 value=-1e10,
             )
@@ -169,12 +175,12 @@ class Collator(object):
             len_crop,
         ) = zip(*batch)
         spk_id_org = list(spk_id_org)
-        spmel_gt = torch.FloatTensor(torch.stack(spmel_gt, axis=0))
-        rhythm_input = torch.FloatTensor(torch.stack(rhythm_input, axis=0))
-        content_input = torch.FloatTensor(torch.stack(content_input, axis=0))
-        pitch_input = torch.FloatTensor(torch.stack(pitch_input, axis=0))
-        timbre_input = torch.FloatTensor(torch.stack(timbre_input, axis=0))
-        len_crop = torch.LongTensor(torch.stack(len_crop, axis=0))
+        spmel_gt = torch.stack(spmel_gt, axis=0).float()
+        rhythm_input = torch.stack(rhythm_input, axis=0).float()
+        content_input = torch.stack(content_input, axis=0).float()
+        pitch_input = torch.stack(pitch_input, axis=0).float()
+        timbre_input = torch.stack(timbre_input, axis=0).float()
+        len_crop = torch.stack(len_crop, axis=0).double()
 
         return (
             spk_id_org,

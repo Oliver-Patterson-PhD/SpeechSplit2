@@ -14,6 +14,7 @@ device_id = 0
 return_latents = true
 trace = false
 train = true
+regenerate_data = false
 
 [log]
 level = "DEBUG"
