@@ -32,7 +32,6 @@ def main(config, args):
             gpu_properties.total_memory / 1e9,
         )
     )
-
     solver.train()
 
 
@@ -54,5 +53,4 @@ if __name__ == "__main__":
 
     config = yaml.safe_load(open(os.path.join("configs", f"{args.config_name}.yaml"), "r"))
     config = Dict2Class(config)
-
     main(config, args)

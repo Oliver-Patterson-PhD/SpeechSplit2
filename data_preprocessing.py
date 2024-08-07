@@ -4,9 +4,8 @@ import pickle
 import numpy as np
 import soundfile as sf
 from numpy.random import RandomState
-
 from utils import (average_f0s, extract_f0, filter_wav, get_monotonic_wav,
-                   get_spmel, get_world_params)
+                   get_spmel, get_world_params,)
 
 
 def make_spect_f0(config):

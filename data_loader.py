@@ -218,6 +218,9 @@ def get_loader(config):
         sampler=sampler,
         num_workers=config.num_workers,
         prefetch_factor=config.num_workers,
+        pin_memory_device=(
+            f"cuda:{config.device_id}" if torch.cuda.is_available() else "cpu"
+        ),
         drop_last=False,
         pin_memory=True,
         worker_init_fn=worker_init_fn,
