@@ -1,4 +1,3 @@
-import json
 from typing import List, Tuple
 
 import pyworld
@@ -32,29 +31,29 @@ min_level = torch.exp(-100 / 20 * torch.log(torch.tensor(10)))
 vtlp_window = torch.hann_window(2048)
 
 
-class Dict2Class(object):
-    def __init__(self, my_dict):
-        for key in my_dict:
-            setattr(self, key, my_dict[key])
-
-
-def dict2json(d, file_w):
-    j = json.dumps(d, indent=4)
-    with open(file_w, "w") as w_f:
-        w_f.write(j)
+def has_nans(
+    x: torch.Tensor,
+) -> str:
+    return "Has NaNs" if x.isnan().any().item() else "No NaNs"
 
 
 def butter_highpass(cutoff, fs, order=5):
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff / nyq
-    b, a = scipy.signal.butter(order, normal_cutoff, btype="high", analog=False)
+    b, a = scipy.signal.butter(
+        order,
+        (cutoff / (0.5 * fs)),
+        btype="high",
+        analog=False,
+    )
     return b, a
 
 
 def butter_lowpass(cutoff, fs, order=5):
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff / nyq
-    b, a = scipy.signal.butter(order, normal_cutoff, btype="low", analog=False)
+    b, a = scipy.signal.butter(
+        order,
+        (cutoff / (0.5 * fs)),
+        btype="low",
+        analog=False,
+    )
     return b, a
 
 
@@ -80,9 +79,6 @@ def quantize_f0_torch(
     x = x.view(-1).clone()
     uv = x <= 0
     x[uv] = 0
-    Logger().debug(f"x max: {x.max()}")
-    Logger().debug(f"x min: {x.min()}")
-    Logger().debug(f"x mean: {x.mean()}")
     assert (x >= 0).all() and (x <= 1).all()
     x = torch.round(x * (num_bins - 1))
     x = x + 1
@@ -93,11 +89,13 @@ def quantize_f0_torch(
 
 
 def filter_wav(x: torch.Tensor) -> torch.Tensor:
-    bn, an = butter_highpass(30, 16000, order=5)
-    a = torch.tensor(an, device=x.device, dtype=x.dtype)
-    b = torch.tensor(bn, device=x.device, dtype=x.dtype)
-    y = torchaudio.functional.filtfilt(x, a, b)
-    wav = y * 0.96 + (torch.rand(y.shape[0]) - 0.5) * 1e-06
+    # bn, an = butter_highpass(30, 16000, order=5)
+    # a = torch.tensor(an, device=x.device, dtype=x.dtype)
+    # b = torch.tensor(bn, device=x.device, dtype=x.dtype)
+    # y = torchaudio.functional.filtfilt(x, a, b)
+    # y = torch.tensor(scipy.signal.filtfilt(bn, an, x.numpy().copy()))
+    # wav = y * 0.96 + (torch.rand(y.shape[0]) - 0.5) * 1e-06
+    wav = torchaudio.functional.highpass_biquad(x, 16000, 30)
     return wav
 
 
@@ -192,33 +190,18 @@ def zero_one_norm(
 
 
 def get_world_params(
-    x: torch.Tensor,
+    x_torch: torch.Tensor,
     fs: int,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    xn = x.squeeze().double().cpu().numpy()
-    estimated_f0, temporal_pos = pyworld.dio(xn, fs)
-    refined_f0 = pyworld.stonemask(
-        xn,
-        estimated_f0,
-        temporal_pos,
-        fs,
-    )
-    spectral_envelope = pyworld.cheaptrick(
-        xn,
-        refined_f0,
-        temporal_pos,
-        fs,
-    )
-    aperiodicity = pyworld.d4c(
-        xn,
-        refined_f0,
-        temporal_pos,
-        fs,
-    )
+    x = x_torch.squeeze().double().cpu().numpy()
+    _f0, t = pyworld.dio(x, fs)
+    f0 = pyworld.stonemask(x, _f0, t, fs)
+    sp = pyworld.cheaptrick(x, f0, t, fs)
+    ap = pyworld.d4c(x, f0, t, fs)
     return (
-        torch.tensor(refined_f0, device=x.device),
-        torch.tensor(spectral_envelope, device=x.device),
-        torch.tensor(aperiodicity, device=x.device),
+        torch.tensor(f0, device=x_torch.device),
+        torch.tensor(sp, device=x_torch.device),
+        torch.tensor(ap, device=x_torch.device),
     )
 
 

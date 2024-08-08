@@ -168,7 +168,7 @@ class Config(metaclass=Singleton):
         if not hasattr(self.paths, "dataset_vctk"):
             self.paths.dataset_vctk = f"{self.paths.proc_data}/VCTK-Corpus"
         if not hasattr(self.paths, "raw_uaspeech"):
-            self.paths.raw_uaspeech = f"{self.paths.raw_data}/UASpeech"
+            self.paths.raw_uaspeech = f"{self.paths.raw_data}/UASpeech/audio/noisereduce"
         if not hasattr(self.paths, "dataset_uaspeech"):
             self.paths.dataset_uaspeech = (
                 f"{self.paths.proc_data}/UASpeech/audio/noisereduce"

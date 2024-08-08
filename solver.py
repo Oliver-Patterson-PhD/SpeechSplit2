@@ -9,7 +9,7 @@ from model import InterpLnr
 from torch.utils.tensorboard import SummaryWriter
 from util.compute import Compute
 from util.logging import Logger
-from utils import quantize_f0_torch
+from utils import has_nans, quantize_f0_torch
 
 
 class Solver(object):
@@ -65,9 +65,9 @@ class Solver(object):
         num_params = 0
         for p in self.model.parameters():
             num_params += p.numel()
-        self.logger.debug(self.model)
-        self.logger.debug(self.model_type)
-        self.logger.debug("The number of parameters: {}".format(num_params))
+        self.logger.info(self.model)
+        self.logger.info(self.model_type)
+        self.logger.info("The number of parameters: {}".format(num_params))
         # Set GPU
         compute = Compute()
         compute.print_compute()
@@ -88,7 +88,7 @@ class Solver(object):
         self.Interp.to(self.device)
 
     def restore_model(self, resume_iters):
-        self.logger.debug(f"Loading the trained models from step {resume_iters}...")
+        self.logger.info(f"Loading the trained models from step {resume_iters}...")
         ckpt_name = "{}-{}-{}-{}.ckpt".format(
             self.experiment,
             self.bottleneck,
@@ -113,19 +113,19 @@ class Solver(object):
         # Start training from scratch or resume training.
         start_iters = 0
         if self.resume_iters:
-            self.logger.debug("Resuming ...")
+            self.logger.info("Resuming ...")
             start_iters = self.resume_iters
             self.num_iters += self.resume_iters
             self.restore_model(self.resume_iters)
-            self.logger.debug(self.optimizer)
-            self.logger.debug("optimizer")
+            self.logger.info(self.optimizer)
+            self.logger.info("optimizer")
 
         # Learning rate cache for decaying.
         lr = self.lr
-        self.logger.debug("Current learning rates, lr: {}.".format(lr))
+        self.logger.info("Current learning rates, lr: {}.".format(lr))
 
         # Start training.
-        self.logger.debug("Start training...")
+        self.logger.info("Start training...")
         start_time = time.time()
         self.model = self.model.train()
         for i in range(start_iters, self.num_iters):
@@ -179,7 +179,7 @@ class Solver(object):
             pitch_input_intrp = quantize_f0_torch(content_pitch_input_intrp[:, :, -1])[
                 0
             ]  # [B, T, 257]
-            content_pitch_input_intrp = torch.cat(
+            content_pitch_input_intrp_2 = torch.cat(
                 # [B, T, F+257]
                 (content_pitch_input_intrp[:, :, :-1], pitch_input_intrp),
                 dim=-1,
@@ -194,20 +194,48 @@ class Solver(object):
                     code_exp_3,
                     code_exp_4,
                 ) = self.model(
-                    content_pitch_input_intrp,
+                    content_pitch_input_intrp_2,
                     rhythm_input,
                     timbre_input,
                 )
             else:
                 spmel_output = self.model(
-                    content_pitch_input_intrp,
+                    content_pitch_input_intrp_2,
                     rhythm_input,
                     timbre_input,
                 )
+
+            self.logger.trace(f"spmel_gt                    {has_nans(spmel_gt)}")
+            self.logger.trace(f"rhythm_input                {has_nans(rhythm_input)}")
+            self.logger.trace(f"content_input               {has_nans(content_input)}")
+            self.logger.trace(f"pitch_input                 {has_nans(pitch_input)}")
+            self.logger.trace(f"timbre_input                {has_nans(timbre_input)}")
+            self.logger.trace(f"len_crop                    {has_nans(len_crop)}")
+
+            self.logger.trace(
+                f"content_pitch_input         {has_nans(content_pitch_input)}"
+            )
+            self.logger.trace(
+                f"content_pitch_input_intrp   {has_nans(content_pitch_input_intrp)}"
+            )
+            self.logger.trace(
+                f"pitch_input_intrp           {has_nans(pitch_input_intrp)}"
+            )
+            self.logger.trace(
+                f"content_pitch_input_intrp_2 {has_nans(content_pitch_input_intrp_2)}"
+            )
+
+            self.logger.trace(f"spmel_output:               {has_nans(spmel_output)}")
+            self.logger.trace(f"code_exp_1                  {has_nans(code_exp_1)}")
+            self.logger.trace(f"code_exp_2                  {has_nans(code_exp_2)}")
+            self.logger.trace(f"code_exp_3                  {has_nans(code_exp_3)}")
+            self.logger.trace(f"code_exp_4                  {has_nans(code_exp_4)}")
+
             loss_id = torch.torch.nn.functional.mse_loss(spmel_output, spmel_gt)
 
             # Backward and optimize.
             loss = loss_id
+            self.logger.debug(f"loss: {loss}")
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -215,6 +243,7 @@ class Solver(object):
 
             # Logging.
             train_loss_id = loss_id.item()
+            self.logger.debug(f"train_loss_id: {train_loss_id}")
             self.writer.add_scalar(
                 f"{self.experiment}/{self.model_type}/train_loss_id", loss, i
             )
@@ -227,7 +256,7 @@ class Solver(object):
             if (i + 1) % self.log_step == 0:
                 et = time.time() - start_time
                 et = str(datetime.timedelta(seconds=et))[:-7]
-                self.logger.debug(
+                self.logger.info(
                     "Elapsed [{}], Iteration [{}/{}], {}/train_loss_id: {:.8f}".format(
                         et,
                         i + 1,
@@ -252,7 +281,7 @@ class Solver(object):
                     },
                     os.path.join(self.model_save_dir, ckpt_name),
                 )
-                self.logger.debug(
+                self.logger.info(
                     f"Saving model checkpoint into {self.model_save_dir}..."
                 )
                 self.writer.flush()

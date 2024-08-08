@@ -21,7 +21,7 @@ class Utterances(torch.utils.data.Dataset):
         self.experiment = config.options.experiment
         self.dataset_name = config.options.dataset_name
         self.model_type = "G"
-        logger.debug("Loading data...")
+        logger.info("Loading data...")
 
         metaname = os.path.join(self.feat_dir, "dataset.pkl")
         metadata = pickle.load(open(metaname, "rb"))
