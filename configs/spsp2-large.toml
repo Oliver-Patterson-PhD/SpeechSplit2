@@ -9,7 +9,7 @@ raw_data = "/mnt/datasets/raw"
 [options]
 bottleneck = "large"
 experiment = "LatentSwap-spsp2"
-dataset_name = "uaspeech"
+dataset_name = "vctk"
 device_id = 0
 return_latents = true
 trace = false
