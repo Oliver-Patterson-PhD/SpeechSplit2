@@ -1,29 +1,27 @@
 import os
 import pickle
 
-import numpy as np
 import torch
-from torch.utils import data
-from torch.utils.data.sampler import Sampler
-
-from utils import get_spenv, get_spmel, vtlp
+from util.logging import Logger
+from utils import clip, get_spenv, get_spmel, vtlp
 
 torch.multiprocessing.set_sharing_strategy("file_system")
+logger = Logger()
 
 
-class Utterances(data.Dataset):
+class Utterances(torch.utils.data.Dataset):
     """Dataset class for the Utterances dataset."""
 
     def __init__(self, config):
         """Initialize and preprocess the Utterances dataset."""
-        self.feat_dir = os.path.join(config.base_feats, config.dataset_name)
-        self.wav_dir = os.path.join(self.feat_dir, config.wav_dir)
-        self.spmel_dir = os.path.join(self.feat_dir, config.spmel_dir)
-        self.f0_dir = os.path.join(self.feat_dir, config.f0_dir)
-        self.experiment = config.experiment
-        self.model_type = config.model_type
-        self.dataset_name = config.dataset_name
-        print("Loading data...")
+        self.feat_dir = config.paths.features
+        self.wav_dir = config.paths.monowavs
+        self.spmel_dir = config.paths.spmels
+        self.f0_dir = config.paths.freqs
+        self.experiment = config.options.experiment
+        self.dataset_name = config.options.dataset_name
+        self.model_type = "G"
+        logger.info("Loading data...")
 
         metaname = os.path.join(self.feat_dir, "dataset.pkl")
         metadata = pickle.load(open(metaname, "rb"))
@@ -40,9 +38,18 @@ class Utterances(data.Dataset):
             uttrs[0] = sbmt[0]
             uttrs[1] = sbmt[1]
             # load features
-            wav_mono = np.load(os.path.join(self.wav_dir, sbmt[2]))
-            spmel = np.load(os.path.join(self.spmel_dir, sbmt[2]))
-            f0 = np.load(os.path.join(self.f0_dir, sbmt[2]))
+            wav_mono = torch.load(
+                os.path.join(self.wav_dir, sbmt[2]),
+                weights_only=True,
+            )
+            spmel = torch.load(
+                os.path.join(self.spmel_dir, sbmt[2]),
+                weights_only=True,
+            )
+            f0 = torch.load(
+                os.path.join(self.f0_dir, sbmt[2]),
+                weights_only=True,
+            )
             uttrs[2] = (wav_mono, spmel, f0)
             if self.dataset_name == "uaspeech":
                 uttrs[3] = sbmt[2]
@@ -57,7 +64,7 @@ class Utterances(data.Dataset):
         else:
             dysarthric = None
         wav_mono, spmel, f0 = list_uttrs[2]
-        alpha = np.random.uniform(low=0.9, high=1.1)
+        alpha = 0.2 * torch.rand(1).item() + 0.9
         wav_mono = vtlp(wav_mono, 16000, alpha)
         spenv = get_spenv(wav_mono)
         spmel_mono = get_spmel(wav_mono)
@@ -65,6 +72,14 @@ class Utterances(data.Dataset):
         content_input = spmel_mono
         pitch_input = f0
         timbre_input = emb_org
+        # print(f"Collator: dysarthric    {dysarthric}")
+        # print(f"Collator: wav_mono      {wav_mono.shape}")
+        # print(f"Collator: spk_id_org    {spk_id_org}")
+        # print(f"Collator: spmel         {spmel.shape}")
+        # print(f"Collator: rhythm_input  {rhythm_input.shape}")
+        # print(f"Collator: content_input {content_input.shape}")
+        # print(f"Collator: pitch_input   {pitch_input.shape}")
+        # print(f"Collator: timbre_input  {timbre_input.shape}")
 
         return (
             dysarthric,
@@ -84,9 +99,9 @@ class Utterances(data.Dataset):
 
 class Collator(object):
     def __init__(self, config):
-        self.min_len_seq = config.min_len_seq
-        self.max_len_seq = config.max_len_seq
-        self.max_len_pad = config.max_len_pad
+        self.min_len_seq = config.model.min_len_seq
+        self.max_len_seq = config.model.max_len_seq
+        self.max_len_pad = config.model.max_len_pad
 
     def __call__(self, batch):
         new_batch = []
@@ -102,38 +117,39 @@ class Collator(object):
                 pitch_input,
                 timbre_input,
             ) = token
-            len_crop = np.random.randint(self.min_len_seq, self.max_len_seq + 1)
-            left = np.random.randint(0, len(spmel_gt) - len_crop)
-
+            len_crop = torch.randint(
+                low=self.min_len_seq, high=self.max_len_seq + 1, size=(1,)
+            )
+            left = torch.randint(low=0, high=len(spmel_gt) - len_crop, size=(1,))
             spmel_gt = spmel_gt[left : left + len_crop, :]  # [Lc, F]
             rhythm_input = rhythm_input[left : left + len_crop, :]  # [Lc, F]
             content_input = content_input[left : left + len_crop, :]  # [Lc, F]
             pitch_input = pitch_input[left : left + len_crop]  # [Lc, ]
 
-            spmel_gt = np.clip(spmel_gt, 0, 1)
-            rhythm_input = np.clip(rhythm_input, 0, 1)
-            content_input = np.clip(content_input, 0, 1)
+            spmel_gt = clip(spmel_gt, 0, 1)
+            rhythm_input = clip(rhythm_input, 0, 1)
+            content_input = clip(content_input, 0, 1)
 
-            spmel_gt = np.pad(
+            spmel_gt = torch.nn.functional.pad(
                 spmel_gt,
-                ((0, self.max_len_pad - spmel_gt.shape[0]), (0, 0)),
+                ((0, 0, 0, self.max_len_pad - spmel_gt.shape[0])),
                 "constant",
             )
-            rhythm_input = np.pad(
+            rhythm_input = torch.nn.functional.pad(
                 rhythm_input,
-                ((0, self.max_len_pad - rhythm_input.shape[0]), (0, 0)),
+                ((0, 0, 0, self.max_len_pad - rhythm_input.shape[0])),
                 "constant",
             )
-            content_input = np.pad(
+            content_input = torch.nn.functional.pad(
                 content_input,
-                ((0, self.max_len_pad - content_input.shape[0]), (0, 0)),
+                ((0, 0, 0, self.max_len_pad - content_input.shape[0])),
                 "constant",
             )
-            pitch_input = np.pad(
-                pitch_input[:, np.newaxis],
-                ((0, self.max_len_pad - pitch_input.shape[0]), (0, 0)),
+            pitch_input = torch.nn.functional.pad(
+                pitch_input[:, None],
+                ((0, 0, 0, self.max_len_pad - pitch_input.shape[0])),
                 "constant",
-                constant_values=-1e10,
+                value=-1e10,
             )
 
             new_batch.append(
@@ -159,12 +175,12 @@ class Collator(object):
             len_crop,
         ) = zip(*batch)
         spk_id_org = list(spk_id_org)
-        spmel_gt = torch.FloatTensor(np.stack(spmel_gt, axis=0))
-        rhythm_input = torch.FloatTensor(np.stack(rhythm_input, axis=0))
-        content_input = torch.FloatTensor(np.stack(content_input, axis=0))
-        pitch_input = torch.FloatTensor(np.stack(pitch_input, axis=0))
-        timbre_input = torch.FloatTensor(np.stack(timbre_input, axis=0))
-        len_crop = torch.LongTensor(np.stack(len_crop, axis=0))
+        spmel_gt = torch.stack(spmel_gt, axis=0).float()
+        rhythm_input = torch.stack(rhythm_input, axis=0).float()
+        content_input = torch.stack(content_input, axis=0).float()
+        pitch_input = torch.stack(pitch_input, axis=0).float()
+        timbre_input = torch.stack(timbre_input, axis=0).float()
+        len_crop = torch.stack(len_crop, axis=0).double()
 
         return (
             spk_id_org,
@@ -177,7 +193,7 @@ class Collator(object):
         )
 
 
-class MultiSampler(Sampler):
+class MultiSampler(torch.utils.data.sampler.Sampler):
     """Samples elements more than once in a single pass through the data."""
 
     def __init__(self, num_samples, n_repeats, shuffle=False):
@@ -210,9 +226,9 @@ def get_loader(config):
     sampler = MultiSampler(len(dataset), config.samplier, shuffle=config.shuffle)
 
     def worker_init_fn(x):
-        return np.random.seed((torch.initial_seed()) % (2**32))
+        return torch.random.manual_seed((torch.initial_seed()) % (2**32))
 
-    data_loader = data.DataLoader(
+    data_loader = torch.utils.data.DataLoader(
         dataset=dataset,
         batch_size=config.batch_size,
         sampler=sampler,

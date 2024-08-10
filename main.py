@@ -1,14 +1,12 @@
 import argparse
-import os
 
 import torch
-import yaml
-from torch.backends import cudnn
-
 from data_loader import get_loader
 from data_preprocessing import preprocess_data
 from solver import Solver
-from utils import Dict2Class
+from torch.backends import cudnn
+from util.config import Config
+from util.logging import Logger
 
 
 def main(config, args):
@@ -19,11 +17,8 @@ def main(config, args):
     solver = Solver(data_loader, args, config)
     device_id = torch.cuda.current_device()
     gpu_properties = torch.cuda.get_device_properties(device_id)
-    print(
-        (
-            "Using GPU %d (%s) of compute capability "
-            + "%d.%d with %.1fGb total memory."
-        )
+    Logger().info(
+        ("Using GPU %d (%s) of compute capability " + "%d.%d with %.1fGb total memory.")
         % (
             device_id,
             gpu_properties.name,
@@ -42,15 +37,16 @@ if __name__ == "__main__":
     parser.add_argument("--num_iters", type=int, default=800000)
     parser.add_argument("--resume_iters", type=int, default=0)
     parser.add_argument("--log_step", type=int, default=10)
-    parser.add_argument("--ckpt_save_step", type=int, default=10)
+    parser.add_argument("--ckpt_save_step", type=int, default=1000)
     parser.add_argument("--config_name", type=str, default="spsp2-large")
     # fmt: on
     args = parser.parse_args()
 
-    if args.trace:
-        import heartrate
-        heartrate.trace(files=heartrate.files.all)
+    logger = Logger()
+    config = Config(f"configs/{args.config_name}.toml")
 
-    config = yaml.safe_load(open(os.path.join("configs", f"{args.config_name}.yaml"), "r"))
-    config = Dict2Class(config)
+    if args.trace or config.options.trace:
+        hr = __import__("heartrate")
+        hr.trace(files=hr.files.all)
+
     main(config, args)

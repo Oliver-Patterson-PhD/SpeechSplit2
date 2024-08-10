@@ -1,6 +1,6 @@
 {
     # Directories
-    "base_feats": "/mnt/datasets/processed/spsp2",
+    "base_feats": "/mnt/datasets/processed/spsp2-torch",
     "vctk_dir": "/mnt/datasets/processed/VCTK-Corpus/wavs",
     "uaspeech_dir": "/mnt/datasets/processed/UASpeech/audio/noisereduce",
     "dataset_name": "uaspeech",

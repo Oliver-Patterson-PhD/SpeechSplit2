@@ -4,7 +4,6 @@ from os.path import dirname
 from sys import _getframe, stderr, stdout
 from time import gmtime, strftime
 from typing import Collection, Iterable, Iterator, Optional, TextIO
-
 from util.patterns import Singleton
 
 

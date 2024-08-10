@@ -58,13 +58,13 @@ class Encoder_t(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.dim_neck_2 = config.dim_neck_2
-        self.freq_2 = config.freq_2
-        self.dim_rhy = config.dim_rhy
-        self.dim_enc_2 = config.dim_enc_2
-        self.dim_emb = config.dim_spk_emb
-        self.chs_grp = config.chs_grp
-        self.dropout = config.dropout
+        self.dim_neck_2 = config.model.dim_neck_2
+        self.freq_2 = config.model.freq_2
+        self.dim_rhy = config.model.dim_rhy
+        self.dim_enc_2 = config.model.dim_enc_2
+        self.dim_emb = config.model.dim_spk_emb
+        self.chs_grp = config.model.chs_grp
+        self.dropout = config.model.dropout
 
         convolutions = []
         for i in range(1):
@@ -117,13 +117,13 @@ class Encoder_6(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.dim_neck_3 = config.dim_neck_3
-        self.freq_3 = config.freq_3
-        self.dim_pit = config.dim_pit
-        self.dim_enc_3 = config.dim_enc_3
-        self.dim_emb = config.dim_spk_emb
-        self.chs_grp = config.chs_grp
-        self.register_buffer("len_org", torch.tensor(config.max_len_pad))
+        self.dim_neck_3 = config.model.dim_neck_3
+        self.freq_3 = config.model.freq_3
+        self.dim_pit = config.model.dim_pit
+        self.dim_enc_3 = config.model.dim_enc_3
+        self.dim_emb = config.model.dim_spk_emb
+        self.chs_grp = config.model.chs_grp
+        self.register_buffer("len_org", torch.tensor(config.model.max_len_pad))
 
         convolutions = []
         for i in range(3):
@@ -180,17 +180,17 @@ class Encoder_7(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.dim_neck = config.dim_neck
-        self.freq = config.freq
-        self.freq_3 = config.freq_3
-        self.dim_enc = config.dim_enc
-        self.dim_enc_3 = config.dim_enc_3
-        self.dim_con = config.dim_con
-        self.dim_pit = config.dim_pit
-        self.chs_grp = config.chs_grp
-        self.register_buffer("len_org", torch.tensor(config.max_len_pad))
-        self.dim_neck_3 = config.dim_neck_3
-        self.dim_f0 = config.dim_f0
+        self.dim_neck = config.model.dim_neck_1
+        self.freq = config.model.freq_1
+        self.freq_3 = config.model.freq_3
+        self.dim_enc = config.model.dim_enc
+        self.dim_enc_3 = config.model.dim_enc_3
+        self.dim_con = config.model.dim_con
+        self.dim_pit = config.model.dim_pit
+        self.chs_grp = config.model.chs_grp
+        self.register_buffer("len_org", torch.tensor(config.model.max_len_pad))
+        self.dim_neck_3 = config.model.dim_neck_3
+        self.dim_f0 = config.model.dim_f0
 
         # convolutions for code 1
         convolutions = []
@@ -293,11 +293,11 @@ class Decoder_3(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.dim_neck = config.dim_neck
-        self.dim_neck_2 = config.dim_neck_2
-        self.dim_emb = config.dim_spk_emb
-        self.dim_freq = config.dim_freq
-        self.dim_neck_3 = config.dim_neck_3
+        self.dim_neck = config.model.dim_neck_1
+        self.dim_neck_2 = config.model.dim_neck_2
+        self.dim_emb = config.model.dim_spk_emb
+        self.dim_freq = config.model.dim_freq
+        self.dim_neck_3 = config.model.dim_neck_3
 
         self.lstm = nn.LSTM(
             self.dim_neck * 2
@@ -327,9 +327,9 @@ class Decoder_4(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.dim_neck_2 = config.dim_neck_2
-        self.dim_f0 = config.dim_f0
-        self.dim_neck_3 = config.dim_neck_3
+        self.dim_neck_2 = config.model.dim_neck_2
+        self.dim_f0 = config.model.dim_f0
+        self.dim_neck_3 = config.model.dim_neck_3
 
         self.lstm = nn.LSTM(
             self.dim_neck_2 * 2 + self.dim_neck_3 * 2,
@@ -361,10 +361,10 @@ class Generator_3(nn.Module):
         self.encoder_2 = Encoder_t(config)
         self.decoder = Decoder_3(config)
 
-        self.freq = config.freq
-        self.freq_2 = config.freq_2
-        self.freq_3 = config.freq_3
-        self.return_latents = config.return_latents
+        self.freq = config.model.freq_1
+        self.freq_2 = config.model.freq_2
+        self.freq_3 = config.model.freq_3
+        self.return_latents = config.options.return_latents
 
     def forward(self, x_f0, x_org, c_trg, rr=True):
 
@@ -429,8 +429,8 @@ class Generator_6(nn.Module):
         self.encoder_2 = Encoder_t(config)
         self.encoder_3 = Encoder_6(config)
         self.decoder = Decoder_4(config)
-        self.freq_2 = config.freq_2
-        self.freq_3 = config.freq_3
+        self.freq_2 = config.model.freq_2
+        self.freq_3 = config.model.freq_3
 
     def forward(self, x_org, f0_trg, rr=True):
 
@@ -453,14 +453,14 @@ class InterpLnr(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.max_len_seq = config.max_len_seq
-        self.max_len_pad = config.max_len_pad
+        self.max_len_seq = config.model.max_len_seq
+        self.max_len_pad = config.model.max_len_pad
 
-        self.min_len_seg = config.min_len_seg
-        self.max_len_seg = config.max_len_seg
+        self.min_len_seg = config.model.min_len_seg
+        self.max_len_seg = config.model.max_len_seg
 
         self.max_num_seg = self.max_len_seq // self.min_len_seg + 1
-        self.training = config.train
+        self.training = config.options.train
 
     def pad_sequences(self, sequences):
         channel_dim = sequences[0].size()[-1]
