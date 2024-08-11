@@ -5,7 +5,6 @@ import scipy
 import torch
 import torchaudio
 from pysptk.sptk import rapt
-from util.logging import Logger
 
 n_fft = 1024
 hop_length = 256
@@ -75,22 +74,12 @@ def quantize_f0_torch(
     x: torch.Tensor, num_bins: int = 256
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     # x is logf0
-    Logger().trace(f"original x:         {x.shape}")
-    Logger().trace(f"original x.max:     {x.max()}")
-    Logger().trace(f"original x.min:     {x.min()}")
-    Logger().trace(f"original x.mean:    {x.mean()}")
-    Logger().trace(f"original x.median:  {x.median()}")
     B = x.size(0)
     x = x.view(-1).clone()
     uv = x <= 0
     x[uv] = 0
     av = x >= 1
     x[av] = 1
-    Logger().trace(f"x:         {x.shape}")
-    Logger().trace(f"x.max:     {x.max()}")
-    Logger().trace(f"x.min:     {x.min()}")
-    Logger().trace(f"x.mean:    {x.mean()}")
-    Logger().trace(f"x.median:  {x.median()}")
     assert (x >= 0).all() and (x <= 1).all()
     x = torch.round(x * (num_bins - 1))
     x = x + 1
@@ -336,17 +325,9 @@ def vtlp(
     return y
 
 
-def clip(x: torch.Tensor, min: float, max: float, log: bool = False) -> torch.Tensor:
-    if log:
-        Logger().debug(f"x.shape: {x.shape}")
+def clip(x: torch.Tensor, min: float, max: float) -> torch.Tensor:
     idx_over = x > max
     idx_under = x < min
     x[idx_over] = max
     x[idx_under] = min
-    if log:
-        Logger().debug(f"min: {min}")
-        Logger().debug(f"max: {max}")
-        Logger().debug(f"x.shape: {x.shape}")
-        Logger().debug(f"idx_over.shape: {idx_over.shape}")
-        Logger().debug(f"idx_under.shape: {idx_under.shape}")
     return x

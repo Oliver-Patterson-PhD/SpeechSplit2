@@ -75,8 +75,12 @@ class ConfigOptions:
     return_latents: bool = False
     trace: bool = False
     train: bool = True
-    device_id: int = 0
     regenerate_data: bool = False
+    device_id: int = 0
+    num_iters: int = 800000
+    resume_iters: int = 0
+    log_step: int = 100
+    ckpt_save_step: int = 1000
 
 
 class ConfigTraining:

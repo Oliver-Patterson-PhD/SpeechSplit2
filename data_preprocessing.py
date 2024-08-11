@@ -7,9 +7,7 @@ import torchaudio
 from util.config import Config
 from util.logging import Logger
 from utils import (average_f0s, extract_f0, filter_wav, get_monotonic_wav,
-                   get_spmel, get_world_params, has_nans)
-
-logger = Logger()
+                   get_spmel, get_world_params)
 
 
 def process_file(
@@ -94,13 +92,14 @@ def world_list(
     dir_name: str,
     spk_dir: str,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    raw_wav: torch.Tensor = torchaudio.load(
+    raw_wav: torch.Tensor
+    raw_wav, _ = torchaudio.load(
         f"{dir_name}/{spk_dir}/{fname}",
         channels_first=True,
     )[0].squeeze()
     if raw_wav.shape[0] % 256 == 0:
         raw_wav = torch.cat(
-            (raw_wav, torch.tensor([1e-06], device=raw_wav.device)), axis=0
+            (raw_wav, torch.tensor([[1e-06]], device=raw_wav.device)), dim=0
         )
     wav = filter_wav(raw_wav)
     f0, sp, ap = get_world_params(wav, 16000)
@@ -127,7 +126,7 @@ def make_sf_item(
     dir_name: str,
     fs: int,
 ) -> None:
-    logger.info(f"Generating features for speaker {spk_dir}")
+    Logger().info(f"Generating features for speaker {spk_dir}")
     for fea_dir in [config.paths.monowavs, config.paths.spmels, config.paths.freqs]:
         if not os.path.exists(os.path.join(fea_dir, spk_dir)):
             os.makedirs(os.path.join(fea_dir, spk_dir))
@@ -191,7 +190,10 @@ def process_item(
     config: Config,
     dir_name: str,
 ) -> List[Tuple[str, torch.Tensor, str]]:
-    spk_id, _ = spk_meta[spk_dir] if spk_dir in spk_meta else None
+    try:
+        spk_id, _ = spk_meta[spk_dir] if spk_dir in spk_meta else (None, None)
+    except ValueError:
+        assert False, f"spk_id: {spk_id}\n" f"spk_meta.keys: {spk_meta.keys()}\n"
     # may use generalized speaker embedding for zero-shot conversion
     spk_emb = torch.zeros(
         (config.model.dim_spk_emb,),
@@ -259,11 +261,11 @@ def preprocess_data(config: Config):
             )
         )
     ) or config.options.regenerate_data:
-        logger.info("Start preprocessing...")
+        Logger().info("Start preprocessing...")
         make_spect_f0(config)
         make_metadata(config)
-        logger.info("Done")
+        Logger().info("Done")
     else:
-        logger.info(
+        Logger().info(
             f"Dataset '{config.paths.features}/dataset.pkl' exists, skipping preprocessing"
         )

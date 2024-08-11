@@ -35,10 +35,6 @@ if __name__ == "__main__":
     # fmt: off
     parser = argparse.ArgumentParser()
     parser.add_argument("--trace", action="store_true")
-    parser.add_argument("--num_iters", type=int, default=800000)
-    parser.add_argument("--resume_iters", type=int, default=0)
-    parser.add_argument("--log_step", type=int, default=10)
-    parser.add_argument("--ckpt_save_step", type=int, default=1000)
     parser.add_argument("--config_name", type=str, default="spsp2-large")
     # fmt: on
     args = parser.parse_args()

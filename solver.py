@@ -19,11 +19,10 @@ class Solver(object):
         self.logger = Logger()
 
         # Step configuration
-        self.args = args
-        self.num_iters = self.args.num_iters
-        self.resume_iters = self.args.resume_iters
-        self.log_step = self.args.log_step
-        self.ckpt_save_step = self.args.ckpt_save_step
+        self.num_iters = config.options.num_iters
+        self.resume_iters = config.options.resume_iters
+        self.log_step = config.options.log_step
+        self.ckpt_save_step = config.options.ckpt_save_step
         self.return_latents = config.options.return_latents
 
         # Hyperparameters

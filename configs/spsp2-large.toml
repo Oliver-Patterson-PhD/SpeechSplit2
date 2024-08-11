@@ -4,12 +4,12 @@ models = "models"
 proc_data = "/mnt/datasets/processed/SpeechSplit2"
 raw_data = "/mnt/datasets/raw"
 # Smaller Testing Dataset
-# dataset_uaspeech = "/mnt/datasets/processed/SmolSpeech"
+dataset_uaspeech = "/mnt/datasets/processed/SmolSpeech"
 
 [options]
 bottleneck = "large"
 experiment = "LatentSwap-spsp2"
-dataset_name = "vctk"
+dataset_name = "uaspeech"
 device_id = 0
 return_latents = true
 trace = false
