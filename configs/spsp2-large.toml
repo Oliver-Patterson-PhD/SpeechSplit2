@@ -4,7 +4,8 @@ models = "models"
 proc_data = "/mnt/datasets/processed/SpeechSplit2"
 raw_data = "/mnt/datasets/raw"
 # Smaller Testing Dataset
-dataset_uaspeech = "/mnt/datasets/processed/SmolSpeech"
+raw_uaspeech = "/mnt/datasets/processed/SmolSpeech"
+dataset_uaspeech = "/mnt/datasets/processed/SpeechSplit2/SmolSpeech"
 
 [options]
 bottleneck = "large"
@@ -15,6 +16,7 @@ return_latents = true
 trace = false
 train = true
 regenerate_data = false
+log_step = 1
 
 [log]
 level = "DEBUG"

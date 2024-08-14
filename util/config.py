@@ -70,7 +70,7 @@ class ConfigLogging:
 
 class ConfigOptions:
     bottleneck: str = "large"
-    experiment: Optional[str] = None
+    experiment: str
     dataset_name: str
     return_latents: bool = False
     trace: bool = False
@@ -109,7 +109,10 @@ class Config(metaclass=Singleton):
 
     ## Initialise configuration object
     # Reads the config toml file and creates a single object with the values
-    def __init__(self, config_file: str) -> None:
+    def __init__(
+        self,
+        config_file: str,
+    ) -> None:
         self.start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         self.original_config = config_file
         self.load_config(config_file)
@@ -117,14 +120,26 @@ class Config(metaclass=Singleton):
     ## Load config file and update values
     #  Duplicate values will be overwritten, existing config options that not
     #  specified in the loaded files are not removed.
-    def load_config(self, config_file: str) -> None:
+    def load_config(
+        self,
+        config_file: str,
+    ) -> None:
         if not path.exists(config_file):
             Logger().fatal(f"Could not find file: {config_file}")
-        for key, subdict in loadtoml(open(config_file, "rb")).items():
-            self.__map_categories(key, subdict)
+        for key, subdict in loadtoml(
+            open(config_file, "rb"),
+        ).items():
+            self.__map_categories(
+                key,
+                subdict,
+            )
         self.__fill_nulls()
 
-    def __map_categories(self, key: str, subdict: Dict[str, Any]) -> None:
+    def __map_categories(
+        self,
+        key: str,
+        subdict: Dict[str, Any],
+    ) -> None:
         match key.lower():
             case "log":
                 if "level" in subdict:
@@ -158,11 +173,15 @@ class Config(metaclass=Singleton):
                 if not subdict.keys() >= {"dataset_name"}:
                     Logger().fatal("Could not find options.dataset_name in config")
                 self.options.__dict__.update(subdict)
+                if not subdict.keys() >= {"experiment"}:
+                    self.options.experiment = self.current_time
             case _:
                 self.__dict__.update(subdict)
         return
 
-    def __fill_nulls(self) -> None:
+    def __fill_nulls(
+        self,
+    ) -> None:
         if not hasattr(self.paths, "raw_timit"):
             self.paths.raw_timit = f"{self.paths.raw_data}/TIMIT"
         if not hasattr(self.paths, "dataset_timit"):
@@ -172,7 +191,9 @@ class Config(metaclass=Singleton):
         if not hasattr(self.paths, "dataset_vctk"):
             self.paths.dataset_vctk = f"{self.paths.proc_data}/VCTK-Corpus"
         if not hasattr(self.paths, "raw_uaspeech"):
-            self.paths.raw_uaspeech = f"{self.paths.raw_data}/UASpeech/audio/noisereduce"
+            self.paths.raw_uaspeech = (
+                f"{self.paths.raw_data}/UASpeech/audio/noisereduce"
+            )
         if not hasattr(self.paths, "dataset_uaspeech"):
             self.paths.dataset_uaspeech = (
                 f"{self.paths.proc_data}/UASpeech/audio/noisereduce"

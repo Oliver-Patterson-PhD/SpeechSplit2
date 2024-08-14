@@ -9,9 +9,11 @@ from util.config import Config
 from util.logging import Logger
 
 
-def main(config, args):
+def main(config: Config, args: argparse.Namespace):
     # For fast training.
     cudnn.benchmark = True
+    torch.multiprocessing.set_sharing_strategy("file_system")
+    torch.multiprocessing.set_start_method("spawn")
     preprocess_data(config)
     data_loader = get_loader(config)
     solver = Solver(data_loader, args, config)

@@ -144,7 +144,7 @@ class Solver(object):
                     timbre_input,
                     len_crop,
                 ) = next(self.data_iter)
-            except Exception:
+            except StopIteration:
                 self.data_iter = iter(self.data_loader)
                 (
                     _,
@@ -234,7 +234,7 @@ class Solver(object):
 
             # Backward and optimize.
             loss = loss_id
-            self.logger.debug(f"loss: {loss}")
+            # self.logger.debug(f"loss: {loss}")
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -242,7 +242,7 @@ class Solver(object):
 
             # Logging.
             train_loss_id = loss_id.item()
-            self.logger.debug(f"train_loss_id: {train_loss_id}")
+            # self.logger.debug(f"train_loss_id: {train_loss_id}")
             self.writer.add_scalar(
                 f"{self.experiment}/{self.model_type}/train_loss_id", loss, i
             )

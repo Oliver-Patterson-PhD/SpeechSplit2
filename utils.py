@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import pyworld
 import scipy
@@ -129,7 +129,7 @@ def get_spenv(
                             torch.fft.rfft(
                                 torch.matmul(
                                     ceps,
-                                    torch.diag(lifter),
+                                    torch.diag(lifter).to(ceps.device),
                                 ),
                                 axis=-1,
                             )
@@ -284,7 +284,7 @@ def warp_freq(
 def vtlp(
     x: torch.Tensor,
     fs: int,
-    alpha,
+    alpha: Optional[float],
 ) -> torch.Tensor:
     if alpha is None:
         alpha = 0.2 * torch.rand(1).item() + 0.9
@@ -302,7 +302,11 @@ def vtlp(
         alpha=alpha,
     )
     f_warps *= (shape_k - 1) / max(f_warps)
-    new_S = torch.zeros([shape_t, shape_k], dtype=dtype)
+    new_S = torch.zeros(
+        [shape_t, shape_k],
+        dtype=dtype,
+        device=vtlp_stft.device,
+    )
     for k in range(shape_k):
         # first and last freq
         if k == 0 or k == shape_k - 1:

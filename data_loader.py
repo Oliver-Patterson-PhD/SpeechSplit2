@@ -1,18 +1,34 @@
 import os
-import pickle
+from typing import List, Tuple
 
 import torch
+from data_preprocessing import DataPreProcessType
+from util.config import Config
 from util.logging import Logger
 from utils import clip, get_spenv, get_spmel, vtlp
 
-torch.multiprocessing.set_sharing_strategy("file_system")
 logger = Logger()
+DataLoadItemType = Tuple[str, str, Tuple[torch.Tensor, torch.Tensor, torch.Tensor], str]
+DataLoadType = List[DataLoadItemType]
 
 
 class Utterances(torch.utils.data.Dataset):
     """Dataset class for the Utterances dataset."""
 
-    def __init__(self, config):
+    dataset: list
+    dataset_name: str
+    experiment: str
+    f0_dir: str
+    feat_dir: str
+    model_type: str
+    num_tokens: int
+    spmel_dir: str
+    wav_dir: str
+
+    def __init__(
+        self,
+        config: Config,
+    ) -> None:
         """Initialize and preprocess the Utterances dataset."""
         self.feat_dir = config.paths.features
         self.wav_dir = config.paths.monowavs
@@ -23,20 +39,21 @@ class Utterances(torch.utils.data.Dataset):
         self.model_type = "G"
         logger.info("Loading data...")
 
-        metaname = os.path.join(self.feat_dir, "dataset.pkl")
-        metadata = pickle.load(open(metaname, "rb"))
+        metadata: DataPreProcessType = torch.load(
+            os.path.join(self.feat_dir, "dataset.pkl"),
+            weights_only=True,
+        )
 
-        dataset = [None] * len(metadata)
-        self.load_data(metadata, dataset)
-        self.dataset = list(dataset)
+        self.dataset = self.load_data(metadata)
         self.num_tokens = len(self.dataset)
 
-    def load_data(self, metadata, dataset):
-        for k, sbmt in enumerate(metadata):
-            uttrs = len(sbmt) * [None]
+    def load_data(
+        self,
+        metadata,
+    ) -> DataLoadType:
+        dataset: DataLoadType = []
+        for sbmt in metadata:
             # load speaker id and embedding
-            uttrs[0] = sbmt[0]
-            uttrs[1] = sbmt[1]
             # load features
             wav_mono = torch.load(
                 os.path.join(self.wav_dir, sbmt[2]),
@@ -50,12 +67,20 @@ class Utterances(torch.utils.data.Dataset):
                 os.path.join(self.f0_dir, sbmt[2]),
                 weights_only=True,
             )
-            uttrs[2] = (wav_mono, spmel, f0)
-            if self.dataset_name == "uaspeech":
-                uttrs[3] = sbmt[2]
-            dataset[k] = uttrs
+            dataset.append(
+                (
+                    sbmt[0],
+                    sbmt[1],
+                    (wav_mono, spmel, f0),
+                    sbmt[2],
+                )
+            )
+        return dataset
 
-    def __getitem__(self, index):
+    def __getitem__(
+        self,
+        index: int,
+    ):
         list_uttrs = self.dataset[index]
         spk_id_org = list_uttrs[0]
         emb_org = list_uttrs[1]
@@ -92,13 +117,18 @@ class Utterances(torch.utils.data.Dataset):
             timbre_input,
         )
 
-    def __len__(self):
+    def __len__(
+        self,
+    ):
         """Return the number of spkrs."""
         return self.num_tokens
 
 
 class Collator(object):
-    def __init__(self, config):
+    def __init__(
+        self,
+        config: Config,
+    ):
         self.min_len_seq = config.model.min_len_seq
         self.max_len_seq = config.model.max_len_seq
         self.max_len_pad = config.model.max_len_pad
@@ -184,30 +214,35 @@ class Collator(object):
 
         return (
             spk_id_org,
-            spmel_gt,
-            rhythm_input,
-            content_input,
-            pitch_input,
-            timbre_input,
-            len_crop,
+            spmel_gt.to("cpu"),
+            rhythm_input.to("cpu"),
+            content_input.to("cpu"),
+            pitch_input.to("cpu"),
+            timbre_input.to("cpu"),
+            len_crop.to("cpu"),
         )
 
 
 class MultiSampler(torch.utils.data.sampler.Sampler):
     """Samples elements more than once in a single pass through the data."""
 
-    def __init__(self, num_samples, n_repeats, shuffle=False):
+    def __init__(self, num_samples, n_repeats, shuffle=False) -> None:
         self.num_samples = num_samples
         self.n_repeats = n_repeats
         self.shuffle = shuffle
 
-    def gen_sample_array(self):
+    def gen_sample_array(
+        self,
+    ) -> torch.Tensor:
         self.sample_idx_array = torch.arange(
-            self.num_samples, dtype=torch.int64
+            self.num_samples,
+            dtype=torch.int64,
         ).repeat(self.n_repeats)
         if self.shuffle:
             self.sample_idx_array = self.sample_idx_array[
-                torch.randperm(len(self.sample_idx_array))
+                torch.randperm(
+                    len(self.sample_idx_array),
+                )
             ]
         return self.sample_idx_array
 
@@ -218,22 +253,29 @@ class MultiSampler(torch.utils.data.sampler.Sampler):
         return len(self.sample_idx_array)
 
 
-def get_loader(config):
+def worker_init_fn(x):
+    return torch.random.manual_seed(
+        (torch.initial_seed()) % (2**32),
+    )
+
+
+def get_loader(config) -> torch.utils.data.DataLoader:
     """Build and return a data loader list."""
 
     dataset = Utterances(config)
     collator = Collator(config)
-    sampler = MultiSampler(len(dataset), config.samplier, shuffle=config.shuffle)
-
-    def worker_init_fn(x):
-        return torch.random.manual_seed((torch.initial_seed()) % (2**32))
+    sampler = MultiSampler(
+        len(dataset),
+        config.samplier,
+        shuffle=config.shuffle,
+    )
 
     data_loader = torch.utils.data.DataLoader(
         dataset=dataset,
         batch_size=config.batch_size,
         sampler=sampler,
         num_workers=config.num_workers,
-        prefetch_factor=config.num_workers,
+        prefetch_factor=config.num_workers if config.num_workers != 0 else None,
         drop_last=False,
         pin_memory=True,
         worker_init_fn=worker_init_fn,

@@ -4,6 +4,7 @@ from os.path import dirname
 from sys import _getframe, stderr, stdout
 from time import gmtime, strftime
 from typing import Collection, Iterable, Iterator, Optional, TextIO
+
 from util.patterns import Singleton
 
 
@@ -26,7 +27,9 @@ class Logger(metaclass=Singleton):
     __file: Optional[TextIO] = None
 
     def __init__(
-        self, level: Optional[LogLevel] = None, use_stderr: Optional[bool] = None
+        self,
+        level: Optional[LogLevel] = None,
+        use_stderr: Optional[bool] = None,
     ) -> None:
         if level is not None:
             self.__level = level
@@ -40,23 +43,52 @@ class Logger(metaclass=Singleton):
         else:
             raise RuntimeError
 
-    def __format_msg(self, level: LogLevel, caller: str, message: str) -> str:
+    def __format_msg(
+        self,
+        level: LogLevel,
+        caller: str,
+        message: str,
+    ) -> str:
         return "{} - {:>26} - {} - {}".format(
-            strftime("%Y/%m/%d %H:%M:%S", gmtime()),
+            strftime(
+                "%Y/%m/%d %H:%M:%S",
+                gmtime(),
+            ),
             caller,
             self.__level_to_string(level),
             message,
         )
 
-    def __log(self, level: LogLevel, caller: str, message: str) -> None:
+    def __log(
+        self,
+        level: LogLevel,
+        caller: str,
+        message: str,
+    ) -> None:
         if level >= self.__level:
-            fullmsg = self.__format_msg(level=level, caller=caller, message=message)
-            print(fullmsg, end="\n", file=self.__stream, flush=True)
+            fullmsg = self.__format_msg(
+                level=level,
+                caller=caller,
+                message=message,
+            )
+            print(
+                fullmsg,
+                end="\n",
+                file=self.__stream,
+                flush=True,
+            )
             if self.__file is not None:
-                print(fullmsg, end="\n", file=self.__file)
+                print(
+                    fullmsg,
+                    end="\n",
+                    file=self.__file,
+                )
         return None
 
-    def __level_to_string(self, level: Optional[LogLevel] = None) -> str:
+    def __level_to_string(
+        self,
+        level: Optional[LogLevel] = None,
+    ) -> str:
         if level is None:
             level = self.__level
         match level:
@@ -76,10 +108,16 @@ class Logger(metaclass=Singleton):
     def get_level(self) -> LogLevel:
         return self.__level
 
-    def set_level(self, level: LogLevel) -> None:
+    def set_level(
+        self,
+        level: LogLevel,
+    ) -> None:
         self.__level = level
 
-    def set_level_str(self, string: str) -> None:
+    def set_level_str(
+        self,
+        string: str,
+    ) -> None:
         match string.upper():
             case "TRACE":
                 self.__level = LogLevel.TRACE
@@ -94,22 +132,41 @@ class Logger(metaclass=Singleton):
             case "FATAL":
                 self.__level = LogLevel.FATAL
             case _:
-                raise RuntimeError(f"Invalid config level string '{string.upper()}'")
+                raise RuntimeError(
+                    f"Invalid config level string '{string.upper()}'",
+                )
 
-    def get_stream(self) -> TextIO:
+    def get_stream(
+        self,
+    ) -> TextIO:
         return self.__stream
 
-    def get_file(self) -> Optional[TextIO]:
+    def get_file(
+        self,
+    ) -> Optional[TextIO]:
         return self.__file
 
-    def set_stream(self, stream: TextIO) -> None:
+    def set_stream(
+        self,
+        stream: TextIO,
+    ) -> None:
         self.__stream = stream
 
-    def set_file(self, file: str) -> None:
+    def set_file(
+        self,
+        file: str,
+    ) -> None:
         makedirs(dirname(file), exist_ok=True)
-        self.__file = open(file, "wt", encoding="utf-8")
+        self.__file = open(
+            file,
+            "wt",
+            encoding="utf-8",
+        )
 
-    def use_stderr(self, use_stderr: bool) -> None:
+    def use_stderr(
+        self,
+        use_stderr: bool,
+    ) -> None:
         if use_stderr:
             self.__steam = stderr
         else:
@@ -202,21 +259,93 @@ class Logger(metaclass=Singleton):
             )
         return None
 
-    def trace(self, message: str) -> None:
-        self.__log(level=LogLevel.TRACE, caller=self.__get_caller(), message=message)
+    def input(
+        self,
+        message: str,
+        prompt: str = "",
+        level: LogLevel = LogLevel.INFO,
+    ) -> str:
+        self.__log(
+            level=LogLevel.INFO,
+            caller=self.__get_caller(),
+            message=message,
+        )
+        return input(prompt)
 
-    def debug(self, message: str) -> None:
-        self.__log(level=LogLevel.DEBUG, caller=self.__get_caller(), message=message)
+    def input_with_default(
+        self,
+        message: str,
+        default: str,
+        prompt: str = "",
+        level: LogLevel = LogLevel.INFO,
+    ) -> str:
+        if self.__level <= level:
+            self.__log(
+                level=LogLevel.INFO,
+                caller=self.__get_caller(),
+                message=message,
+            )
+            return input(prompt)
+        else:
+            return default
 
-    def info(self, message: str) -> None:
-        self.__log(level=LogLevel.INFO, caller=self.__get_caller(), message=message)
+    def trace(
+        self,
+        message: str,
+    ) -> None:
+        self.__log(
+            level=LogLevel.TRACE,
+            caller=self.__get_caller(),
+            message=message,
+        )
 
-    def warn(self, message: str) -> None:
-        self.__log(level=LogLevel.WARN, caller=self.__get_caller(), message=message)
+    def debug(
+        self,
+        message: str,
+    ) -> None:
+        self.__log(
+            level=LogLevel.DEBUG,
+            caller=self.__get_caller(),
+            message=message,
+        )
 
-    def error(self, message: str) -> None:
-        self.__log(level=LogLevel.ERROR, caller=self.__get_caller(), message=message)
+    def info(
+        self,
+        message: str,
+    ) -> None:
+        self.__log(
+            level=LogLevel.INFO,
+            caller=self.__get_caller(),
+            message=message,
+        )
 
-    def fatal(self, message: str) -> None:
-        self.__log(level=LogLevel.FATAL, caller=self.__get_caller(), message=message)
+    def warn(
+        self,
+        message: str,
+    ) -> None:
+        self.__log(
+            level=LogLevel.WARN,
+            caller=self.__get_caller(),
+            message=message,
+        )
+
+    def error(
+        self,
+        message: str,
+    ) -> None:
+        self.__log(
+            level=LogLevel.ERROR,
+            caller=self.__get_caller(),
+            message=message,
+        )
+
+    def fatal(
+        self,
+        message: str,
+    ) -> None:
+        self.__log(
+            level=LogLevel.FATAL,
+            caller=self.__get_caller(),
+            message=message,
+        )
         raise LoggedException(message)
