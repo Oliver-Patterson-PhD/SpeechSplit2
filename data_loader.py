@@ -8,14 +8,23 @@ from util.logging import Logger
 from utils import clip, get_spenv, get_spmel, vtlp
 
 logger = Logger()
-DataLoadItemType = Tuple[str, str, Tuple[torch.Tensor, torch.Tensor, torch.Tensor], str]
+DataLoadItemType = Tuple[
+    str,  # spk_dir
+    torch.Tensor,  # spk_emb
+    Tuple[
+        torch.Tensor,  # wav_mono
+        torch.Tensor,  # spmel
+        torch.Tensor,  # f0
+    ],
+    str,  # filepath
+]
 DataLoadType = List[DataLoadItemType]
 
 
 class Utterances(torch.utils.data.Dataset):
     """Dataset class for the Utterances dataset."""
 
-    dataset: list
+    dataset: DataLoadType
     dataset_name: str
     experiment: str
     f0_dir: str
@@ -44,77 +53,60 @@ class Utterances(torch.utils.data.Dataset):
             weights_only=True,
         )
 
-        self.dataset = self.load_data(metadata)
+        self.dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
         self.num_tokens = len(self.dataset)
 
-    def load_data(
+    def load_item(
         self,
-        metadata,
-    ) -> DataLoadType:
-        dataset: DataLoadType = []
-        for sbmt in metadata:
-            # load speaker id and embedding
-            # load features
-            wav_mono = torch.load(
-                os.path.join(self.wav_dir, sbmt[2]),
-                weights_only=True,
-            )
-            spmel = torch.load(
-                os.path.join(self.spmel_dir, sbmt[2]),
-                weights_only=True,
-            )
-            f0 = torch.load(
-                os.path.join(self.f0_dir, sbmt[2]),
-                weights_only=True,
-            )
-            dataset.append(
-                (
-                    sbmt[0],
-                    sbmt[1],
-                    (wav_mono, spmel, f0),
-                    sbmt[2],
-                )
-            )
-        return dataset
+        sbmt: Tuple[str, torch.Tensor, str],
+    ) -> DataLoadItemType:
+        wav_mono: torch.Tensor = torch.load(
+            os.path.join(self.wav_dir, sbmt[2]),
+            weights_only=True,
+        )
+        spmel: torch.Tensor = torch.load(
+            os.path.join(self.spmel_dir, sbmt[2]),
+            weights_only=True,
+        )
+        f0: torch.Tensor = torch.load(
+            os.path.join(self.f0_dir, sbmt[2]),
+            weights_only=True,
+        )
+        assert not wav_mono.isnan().any().item(), f"wav has NaNs: {sbmt[2]}"
+        assert not spmel.isnan().any().item(), f"spmel has NaNs: {sbmt[2]}"
+        assert not f0.isnan().any().item(), f"f0 has NaNs: {sbmt[2]}"
+        return (
+            sbmt[0],
+            sbmt[1],
+            (wav_mono, spmel, f0),
+            sbmt[2],
+        )
 
     def __getitem__(
         self,
         index: int,
     ):
-        list_uttrs = self.dataset[index]
-        spk_id_org = list_uttrs[0]
-        emb_org = list_uttrs[1]
-        if self.dataset_name == "uaspeech":
-            dysarthric = list_uttrs[3]
-        else:
-            dysarthric = None
+        list_uttrs: DataLoadItemType = self.dataset[index]
+        spk_id_org: str = list_uttrs[0]
+        emb_org: torch.Tensor = list_uttrs[1]
+        wav_mono: torch.Tensor
+        spmel: torch.Tensor
+        f0: torch.Tensor
         wav_mono, spmel, f0 = list_uttrs[2]
-        alpha = 0.2 * torch.rand(1).item() + 0.9
-        wav_mono = vtlp(wav_mono, 16000, alpha)
-        spenv = get_spenv(wav_mono)
-        spmel_mono = get_spmel(wav_mono)
-        rhythm_input = spenv
-        content_input = spmel_mono
-        pitch_input = f0
-        timbre_input = emb_org
-        # print(f"Collator: dysarthric    {dysarthric}")
-        # print(f"Collator: wav_mono      {wav_mono.shape}")
-        # print(f"Collator: spk_id_org    {spk_id_org}")
-        # print(f"Collator: spmel         {spmel.shape}")
-        # print(f"Collator: rhythm_input  {rhythm_input.shape}")
-        # print(f"Collator: content_input {content_input.shape}")
-        # print(f"Collator: pitch_input   {pitch_input.shape}")
-        # print(f"Collator: timbre_input  {timbre_input.shape}")
-
+        dysarthric: str = list_uttrs[3]
+        alpha: float = 0.2 * torch.rand(1).item() + 0.9
+        perturbed_wav_mono: torch.Tensor = vtlp(wav_mono, 16000, alpha)
+        spenv: torch.Tensor = get_spenv(perturbed_wav_mono)
+        spmel_mono: torch.Tensor = get_spmel(perturbed_wav_mono)
         return (
-            dysarthric,
-            wav_mono,
-            spk_id_org,
-            spmel,
-            rhythm_input,
-            content_input,
-            pitch_input,
-            timbre_input,
+            dysarthric,  # Single char string D=Dysarthric, C=Control
+            perturbed_wav_mono,  # Monotonic wavform with VTLP
+            spk_id_org,  # speaker ID string
+            spmel,  # MelSpectrogram
+            spenv,  # rhythm_input
+            spmel_mono,  # content_input
+            f0,  # pitch_input
+            emb_org,  # timbre_input
         )
 
     def __len__(
@@ -138,40 +130,36 @@ class Collator(object):
         for token in batch:
 
             (
-                _,
-                _,
-                spk_id_org,
-                spmel_gt,
-                rhythm_input,
-                content_input,
-                pitch_input,
-                timbre_input,
+                _,  # Single char string Dysarthric
+                _,  # Monotonic waveform with VTLP
+                spk_id_org,  # speaker ID string
+                melspec,  # MelSpectrogram
+                rhythm_input,  # spenv
+                content_input,  # spmel_mono
+                pitch_input,  # f0
+                timbre_input,  # emb_org
             ) = token
             len_crop = torch.randint(
                 low=self.min_len_seq, high=self.max_len_seq + 1, size=(1,)
             )
-            left = torch.randint(low=0, high=len(spmel_gt) - len_crop, size=(1,))
-            spmel_gt = spmel_gt[left : left + len_crop, :]  # [Lc, F]
+            left = torch.randint(low=0, high=len(melspec) - len_crop, size=(1,))
+            spmel_gt = melspec[left : left + len_crop, :]  # [Lc, F]
             rhythm_input = rhythm_input[left : left + len_crop, :]  # [Lc, F]
             content_input = content_input[left : left + len_crop, :]  # [Lc, F]
             pitch_input = pitch_input[left : left + len_crop]  # [Lc, ]
 
-            spmel_gt = clip(spmel_gt, 0, 1)
-            rhythm_input = clip(rhythm_input, 0, 1)
-            content_input = clip(content_input, 0, 1)
-
             spmel_gt = torch.nn.functional.pad(
-                spmel_gt,
+                clip(spmel_gt, 0, 1),
                 ((0, 0, 0, self.max_len_pad - spmel_gt.shape[0])),
                 "constant",
             )
             rhythm_input = torch.nn.functional.pad(
-                rhythm_input,
+                clip(rhythm_input, 0, 1),
                 ((0, 0, 0, self.max_len_pad - rhythm_input.shape[0])),
                 "constant",
             )
             content_input = torch.nn.functional.pad(
-                content_input,
+                clip(content_input, 0, 1),
                 ((0, 0, 0, self.max_len_pad - content_input.shape[0])),
                 "constant",
             )
@@ -261,7 +249,6 @@ def worker_init_fn(x):
 
 def get_loader(config) -> torch.utils.data.DataLoader:
     """Build and return a data loader list."""
-
     dataset = Utterances(config)
     collator = Collator(config)
     sampler = MultiSampler(
@@ -269,7 +256,6 @@ def get_loader(config) -> torch.utils.data.DataLoader:
         config.samplier,
         shuffle=config.shuffle,
     )
-
     data_loader = torch.utils.data.DataLoader(
         dataset=dataset,
         batch_size=config.batch_size,

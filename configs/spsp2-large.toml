@@ -1,21 +1,21 @@
 [paths]
-artefacts = "artefacts"
-models = "models"
+artefacts = "tmp/artefacts"
 proc_data = "/mnt/datasets/processed/SpeechSplit2"
 raw_data = "/mnt/datasets/raw"
 # Smaller Testing Dataset
-raw_uaspeech = "/mnt/datasets/processed/SmolSpeech"
-dataset_uaspeech = "/mnt/datasets/processed/SpeechSplit2/SmolSpeech"
+# raw_uaspeech = "/mnt/datasets/processed/SmolSpeech"
+# dataset_uaspeech = "/mnt/datasets/processed/SpeechSplit2/SmolSpeech"
 
 [options]
 bottleneck = "large"
-experiment = "LatentSwap-spsp2"
+experiment = "tmp"
 dataset_name = "uaspeech"
 device_id = 0
 return_latents = true
 trace = false
 train = true
 regenerate_data = false
+regenerate_metadata = true
 log_step = 1
 
 [log]

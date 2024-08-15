@@ -17,19 +17,6 @@ def main(config: Config, args: argparse.Namespace):
     preprocess_data(config)
     data_loader = get_loader(config)
     solver = Solver(data_loader, args, config)
-    device_id = torch.cuda.current_device()
-    gpu_properties = torch.cuda.get_device_properties(device_id)
-    Logger().info(
-        ("Using GPU %d (%s) of compute capability " + "%d.%d with %.1fGb total memory.")
-        % (
-            device_id,
-            gpu_properties.name,
-            gpu_properties.major,
-            gpu_properties.minor,
-            gpu_properties.total_memory / 1e9,
-        )
-    )
-
     solver.train()
 
 

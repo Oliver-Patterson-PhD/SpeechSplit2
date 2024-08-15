@@ -36,7 +36,11 @@ def has_nans(
     return "Has NaNs" if x.isnan().any().item() else "No NaNs"
 
 
-def butter_highpass(cutoff, fs, order=5):
+def butter_highpass(
+    cutoff,
+    fs: int,
+    order: int = 5,
+):
     b, a = scipy.signal.butter(
         order,
         (cutoff / (0.5 * fs)),
@@ -46,7 +50,11 @@ def butter_highpass(cutoff, fs, order=5):
     return b, a
 
 
-def butter_lowpass(cutoff, fs, order=5):
+def butter_lowpass(
+    cutoff,
+    fs: int,
+    order: int = 5,
+):
     b, a = scipy.signal.butter(
         order,
         (cutoff / (0.5 * fs)),
@@ -71,8 +79,9 @@ def speaker_normalization(
 
 
 def quantize_f0_torch(
-    x: torch.Tensor, num_bins: int = 256
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    x: torch.Tensor,
+    num_bins: int = 256,
+) -> torch.Tensor:
     # x is logf0
     B = x.size(0)
     x = x.view(-1).clone()
@@ -86,10 +95,12 @@ def quantize_f0_torch(
     x[uv] = 0
     enc = torch.zeros((x.size(0), num_bins + 1), device=x.device)
     enc[torch.arange(x.size(0)), x.long()] = 1
-    return enc.view(B, -1, num_bins + 1), x.view(B, -1).long()
+    return enc.view(B, -1, num_bins + 1)
 
 
-def filter_wav(x: torch.Tensor) -> torch.Tensor:
+def filter_wav(
+    x: torch.Tensor,
+) -> torch.Tensor:
     # bn, an = butter_highpass(30, 16000, order=5)
     # a = torch.tensor(an, device=x.device, dtype=x.dtype)
     # b = torch.tensor(bn, device=x.device, dtype=x.dtype)
@@ -100,7 +111,9 @@ def filter_wav(x: torch.Tensor) -> torch.Tensor:
     return wav
 
 
-def get_spmel(wav: torch.Tensor) -> torch.Tensor:
+def get_spmel(
+    wav: torch.Tensor,
+) -> torch.Tensor:
     return torch_melbasis(torch_stft(wav)).T
 
 
@@ -154,7 +167,8 @@ def extract_f0(
     fs: int,
     lo: int,
     hi: int,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    normalise: bool = True,
+) -> torch.Tensor:
     f0_rapt = torch.tensor(
         rapt(
             wav.cpu().numpy() * 32768,
@@ -179,7 +193,7 @@ def extract_f0(
         mean_f0,
         std_f0,
     )
-    return f0_rapt, f0_norm
+    return f0_norm if normalise else f0_rapt
 
 
 def zero_one_norm(
@@ -212,7 +226,9 @@ def average_f0s(
     f0_voiced: torch.Tensor = torch.tensor([])
     for i, f0 in enumerate(f0s):
         v = f0 > 0
-        f0_voiced = torch.cat((f0_voiced.to(f0.device), f0[v]))
+        f0_voiced = torch.cat(
+            (f0_voiced.to(f0.device), f0[v]),
+        )
     f0_avg = torch.mean(f0_voiced)
 
     def mapfn(
@@ -253,7 +269,9 @@ def get_monotonic_wav(
     return y[: len(x)]
 
 
-def tensor2onehot(x: torch.Tensor) -> torch.Tensor:
+def tensor2onehot(
+    x: torch.Tensor,
+) -> torch.Tensor:
     indices = torch.argmax(x, dim=-1)
     return torch.nn.functional.one_hot(indices, x.size(-1))
 
@@ -325,7 +343,12 @@ def vtlp(
     if len(x) <= len(y):
         y = y[: len(x)]
     else:
-        y = torch.nn.functional.pad(y, (0, len(x) - len(y)), mode="constant", value=0)
+        y = torch.nn.functional.pad(
+            y,
+            (0, len(x) - len(y)),
+            mode="constant",
+            value=0,
+        )
     return y
 
 

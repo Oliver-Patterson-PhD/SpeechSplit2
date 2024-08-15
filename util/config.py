@@ -19,7 +19,9 @@ class ConfigPaths:
     freqs: str
     spmels: str
     monowavs: str
+
     models: str
+    tensorboard: str
 
     raw_data: str
     raw_wavs: str
@@ -76,9 +78,11 @@ class ConfigOptions:
     trace: bool = False
     train: bool = True
     regenerate_data: bool = False
+    regenerate_metadata: bool = False
     device_id: int = 0
     num_iters: int = 800000
     resume_iters: int = 0
+    auto_resume: bool = False
     log_step: int = 100
     ckpt_save_step: int = 1000
 
@@ -175,6 +179,8 @@ class Config(metaclass=Singleton):
                 self.options.__dict__.update(subdict)
                 if not subdict.keys() >= {"experiment"}:
                     self.options.experiment = self.current_time
+                if self.options.regenerate_data:
+                    self.options.regenerate_metadata = True
             case _:
                 self.__dict__.update(subdict)
         return
@@ -182,6 +188,7 @@ class Config(metaclass=Singleton):
     def __fill_nulls(
         self,
     ) -> None:
+
         if not hasattr(self.paths, "raw_timit"):
             self.paths.raw_timit = f"{self.paths.raw_data}/TIMIT"
         if not hasattr(self.paths, "dataset_timit"):
@@ -199,6 +206,22 @@ class Config(metaclass=Singleton):
                 f"{self.paths.proc_data}/UASpeech/audio/noisereduce"
             )
 
+        self.__set_data_and_feat()
+
+        if not hasattr(self.paths, "tensorboard"):
+            self.paths.tensorboard = f"{self.paths.artefacts}/tensorboard"
+        if not hasattr(self.paths, "models"):
+            self.paths.models = f"{self.paths.artefacts}/models"
+        if not hasattr(self.paths, "freqs"):
+            self.paths.freqs = f"{self.paths.features}/freqs"
+        if not hasattr(self.paths, "spmels"):
+            self.paths.spmels = f"{self.paths.features}/spmels"
+        if not hasattr(self.paths, "monowavs"):
+            self.paths.monowavs = f"{self.paths.features}/monowavs"
+
+    def __set_data_and_feat(
+        self,
+    ) -> None:
         if self.options.dataset_name == "vctk":
             data_dir = self.paths.raw_vctk
             feat_dir = self.paths.dataset_vctk
@@ -210,16 +233,10 @@ class Config(metaclass=Singleton):
             feat_dir = self.paths.dataset_timit
         else:
             Logger().fatal(
-                f"Invalid options.dataset_name in config: {self.options.dataset_name}"
+                "Invalid options.dataset_name in config: {}".format(
+                    self.options.dataset_name
+                )
             )
         self.paths.features = feat_dir
         self.paths.raw_wavs = data_dir
-
-        if not hasattr(self.paths, "models"):
-            self.paths.models = f"{self.paths.artefacts}/models"
-        if not hasattr(self.paths, "freqs"):
-            self.paths.freqs = f"{self.paths.features}/freqs"
-        if not hasattr(self.paths, "spmels"):
-            self.paths.spmels = f"{self.paths.features}/spmels"
-        if not hasattr(self.paths, "monowavs"):
-            self.paths.monowavs = f"{self.paths.features}/monowavs"
+        return

@@ -12,6 +12,44 @@ from utils import (average_f0s, extract_f0, filter_wav, get_monotonic_wav,
 DataPreProcessType = List[Tuple[str, torch.Tensor, str]]
 
 
+def split_feats(
+    fea: torch.Tensor,
+    fea_dir: str,
+    trunk_len: int,
+    spk_dir: str,
+    filename: str,
+) -> None:
+    start_idx = 0
+    while start_idx * trunk_len < len(fea):
+        this_trunk = start_idx * trunk_len
+        next_trunk = (start_idx + 1) * trunk_len
+        fea_trunk = fea[this_trunk:next_trunk]
+        if len(fea_trunk) < trunk_len:
+            if fea_trunk.ndim == 2:
+                fea_trunk = torch.nn.functional.pad(
+                    fea_trunk,
+                    (0, 0, 0, trunk_len - len(fea_trunk)),
+                )
+            elif fea_trunk.ndim == 1:
+                fea_trunk = torch.nn.functional.pad(
+                    fea_trunk,
+                    (0, trunk_len - len(fea_trunk)),
+                )
+            else:
+                raise ValueError
+        torch.save(
+            fea_trunk.to(torch.float32),
+            "{}/{}/{}_{}.pt".format(
+                fea_dir,
+                spk_dir,
+                os.path.splitext(filename)[0],
+                start_idx,
+            ),
+        )
+        start_idx += 1
+    return
+
+
 def process_file(
     filename: str,
     wav: torch.Tensor,
@@ -28,67 +66,33 @@ def process_file(
 ) -> None:
     wav_mono = get_monotonic_wav(wav, f0, sp, ap, fs)
     spmel = get_spmel(wav)
-    f0_rapt, f0_norm = extract_f0(wav, fs, lo, hi)
-    assert len(spmel) == len(f0_rapt), (
+    f0_norm = extract_f0(wav, fs, lo, hi)
+    assert len(spmel) == len(f0_norm), (
         f"melspec and f0 lengths do not match for {filename}",
         f"spmel: {len(spmel)}\n",
-        f"f0_rapt: {len(f0_rapt)}\n",
+        f"f0_rapt: {len(f0_norm)}\n",
     )
-    start_idx = 0
-    trunk_len = 49151
-    while start_idx * trunk_len < len(wav_mono):
-        this_trunk = start_idx * trunk_len
-        next_trunk = (start_idx + 1) * trunk_len
-        wav_mono_trunk = wav_mono[this_trunk:next_trunk]
-        if len(wav_mono_trunk) < trunk_len:
-            wav_mono_trunk = torch.nn.functional.pad(
-                wav_mono_trunk, (0, trunk_len - len(wav_mono_trunk))
-            )
-        torch.save(
-            wav_mono_trunk.to(torch.float32),
-            "{}/{}/{}_{}.pt".format(
-                wav_dir,
-                spk_dir,
-                os.path.splitext(filename)[0],
-                start_idx,
-            ),
-        )
-        start_idx += 1
-    feas = [spmel, f0_norm]
-    fea_dirs = [spmel_dir, f0_dir]
-    for fea, fea_dir in zip(feas, fea_dirs):
-        start_idx = 0
-        trunk_len = 192
-        while start_idx * trunk_len < len(fea):
-            this_trunk = start_idx * trunk_len
-            next_trunk = (start_idx + 1) * trunk_len
-            fea_trunk = fea[this_trunk:next_trunk]
-            if len(fea_trunk) < trunk_len:
-                if fea_trunk.ndim == 2:
-                    fea_trunk = torch.nn.functional.pad(
-                        fea_trunk,
-                        (0, 0, 0, trunk_len - len(fea_trunk)),
-                    )
-                elif fea_trunk.ndim == 1:
-                    fea_trunk = torch.nn.functional.pad(
-                        fea_trunk,
-                        (
-                            0,
-                            trunk_len - len(fea_trunk),
-                        ),
-                    )
-                else:
-                    raise ValueError
-            torch.save(
-                fea_trunk.to(torch.float32),
-                "{}/{}/{}_{}.pt".format(
-                    fea_dir,
-                    spk_dir,
-                    os.path.splitext(filename)[0],
-                    start_idx,
-                ),
-            )
-            start_idx += 1
+    split_feats(
+        fea=wav_mono,
+        fea_dir=wav_dir,
+        trunk_len=49151,
+        spk_dir=spk_dir,
+        filename=filename,
+    )
+    split_feats(
+        fea=spmel,
+        fea_dir=spmel_dir,
+        trunk_len=192,
+        spk_dir=spk_dir,
+        filename=filename,
+    )
+    split_feats(
+        fea=f0_norm,
+        fea_dir=f0_dir,
+        trunk_len=192,
+        spk_dir=spk_dir,
+        filename=filename,
+    )
 
 
 def world_list(
@@ -207,9 +211,10 @@ def process_item(
     config: Config,
     dir_name: str,
 ) -> DataPreProcessType:
+    spk_id: str
     spk_id, _, _ = spk_meta[spk_dir]
     # may use generalized speaker embedding for zero-shot conversion
-    spk_emb = torch.zeros(
+    spk_emb: torch.Tensor = torch.zeros(
         (config.model.dim_spk_emb,),
         dtype=torch.float32,
     )
@@ -222,15 +227,16 @@ def process_item(
             )
         )
     )
-    file_list = sorted(file_list)
-    utterances = [os.path.join(spk_dir, filename) for filename in file_list]
+    filepaths: List[str] = [
+        str(os.path.join(spk_dir, filename)) for filename in sorted(file_list)
+    ]
     return [
         (
             spk_dir,
             spk_emb,
-            utterance,
+            filepath,
         )
-        for utterance in utterances
+        for filepath in filepaths
     ]
 
 
@@ -264,29 +270,32 @@ def make_metadata(
     )
 
 
-def trigger_preprocess(config: Config) -> None:
-    Logger().info("Start preprocessing...")
-    make_spect_f0(config)
-    make_metadata(config)
-    Logger().info("Done")
-    return
-
-
 def preprocess_data(
     config: Config,
 ):
-    if not os.path.exists(
-        os.path.join(
-            config.paths.features,
-            "dataset.pkl",
+    dataset_file = os.path.join(config.paths.features, "dataset.pkl")
+    dataset_exists = os.path.exists(dataset_file)
+    if not dataset_exists or config.options.regenerate_metadata:
+        feat_dir = config.paths.features
+        procdata_exists = all(
+            [
+                os.path.exists(f"{feat_dir}/freqs/{speaker}")
+                for speaker in getattr(
+                    __import__("meta_dicts"),
+                    config.options.dataset_name,
+                ).keys()
+            ]
         )
-    ):
-        trigger_preprocess(config)
-    elif config.options.regenerate_data:
-        trigger_preprocess(config)
+        if config.options.regenerate_data or not procdata_exists:
+            Logger().info("Generating Spectrograms and Frequency Contours")
+            make_spect_f0(config)
+        if dataset_exists:
+            os.remove(dataset_file)
+        Logger().info("Generating Metadata")
+        make_metadata(config)
+        Logger().info("Preprocessing Complete")
     else:
         Logger().info(
-            "Dataset '{}/dataset.pkl' exists, skipping preprocessing".format(
-                config.paths.features
-            )
+            f"Dataset '{config.paths.features}/dataset.pkl' exists, "
+            "skipping preprocessing"
         )
