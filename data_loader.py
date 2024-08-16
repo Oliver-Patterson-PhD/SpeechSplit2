@@ -56,9 +56,8 @@ class Utterances(torch.utils.data.Dataset):
             self.dataset = pickle.load(open(data_file, "rb"))
         else:
             Logger().info("Loading data")
-            dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
-            pickle.dump(dataset, open(data_file, "wb"))
-            self.dataset = dataset
+            self.dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
+            pickle.dump(self.dataset, open(data_file, "wb"))
         self.num_tokens = len(self.dataset)
 
     def load_item(
