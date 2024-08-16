@@ -9,8 +9,6 @@ from util.logging import Logger
 from utils import (average_f0s, extract_f0, filter_wav, get_monotonic_wav,
                    get_spmel, get_world_params)
 
-DataPreProcessType = List[Tuple[str, torch.Tensor, str]]
-
 
 def split_feats(
     fea: torch.Tensor,
@@ -107,7 +105,8 @@ def world_list(
     )[0].squeeze()
     if raw_wav.shape[0] % 256 == 0:
         raw_wav = torch.cat(
-            (raw_wav, torch.tensor([[1e-06]], device=raw_wav.device)), dim=0
+            (raw_wav, torch.tensor([[1e-06]], device=raw_wav.device)),
+            dim=0,
         )
     wav = filter_wav(raw_wav)
     f0, sp, ap = get_world_params(wav, 16000)
@@ -210,7 +209,7 @@ def process_item(
     spk_meta: MetaDictType,
     config: Config,
     dir_name: str,
-) -> DataPreProcessType:
+) -> List[Tuple[str, torch.Tensor, str]]:
     spk_id: str
     spk_id, _, _ = spk_meta[spk_dir]
     # may use generalized speaker embedding for zero-shot conversion
@@ -242,6 +241,7 @@ def process_item(
 
 def make_metadata(
     config: Config,
+    meta_file: str,
 ) -> None:
     # use wav directory simply because all inputs have the same filename
     dir_name, spk_dir_list, _ = next(os.walk(config.paths.monowavs))
@@ -249,7 +249,7 @@ def make_metadata(
         __import__("meta_dicts"),
         config.options.dataset_name,
     )
-    dataset: DataPreProcessType = []
+    dataset = []
 
     [
         dataset.extend(
@@ -264,38 +264,21 @@ def make_metadata(
         if spk_dir in spk_meta
     ]
 
-    torch.save(
-        dataset,
-        os.path.join(config.paths.features, "dataset.pkl"),
-    )
+    torch.save(dataset, meta_file)
 
 
 def preprocess_data(
     config: Config,
 ):
-    dataset_file = os.path.join(config.paths.features, "dataset.pkl")
-    dataset_exists = os.path.exists(dataset_file)
-    if not dataset_exists or config.options.regenerate_metadata:
-        feat_dir = config.paths.features
-        procdata_exists = all(
-            [
-                os.path.exists(f"{feat_dir}/freqs/{speaker}")
-                for speaker in getattr(
-                    __import__("meta_dicts"),
-                    config.options.dataset_name,
-                ).keys()
-            ]
-        )
-        if config.options.regenerate_data or not procdata_exists:
-            Logger().info("Generating Spectrograms and Frequency Contours")
-            make_spect_f0(config)
-        if dataset_exists:
-            os.remove(dataset_file)
-        Logger().info("Generating Metadata")
-        make_metadata(config)
-        Logger().info("Preprocessing Complete")
-    else:
-        Logger().info(
-            f"Dataset '{config.paths.features}/dataset.pkl' exists, "
-            "skipping preprocessing"
-        )
+    speaker_list = getattr(
+        __import__("meta_dicts"),
+        config.options.dataset_name,
+    ).keys()
+    feat_dir = config.paths.features
+    procdata_exists = all(
+        [os.path.exists(f"{feat_dir}/freqs/{speaker}") for speaker in speaker_list]
+    )
+    if config.options.regenerate_data or not procdata_exists:
+        Logger().info("Generating Spectrograms and Frequency Contours")
+        make_spect_f0(config)
+    Logger().info("Preprocessing Complete")

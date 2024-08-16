@@ -3,7 +3,7 @@ artefacts = "tmp/artefacts"
 proc_data = "/mnt/datasets/processed/SpeechSplit2"
 raw_data = "/mnt/datasets/raw"
 # Smaller Testing Dataset
-# raw_uaspeech = "/mnt/datasets/processed/SmolSpeech"
+# raw_uaspeech = "/mnt/datasets/raw/SmolSpeech"
 # dataset_uaspeech = "/mnt/datasets/processed/SpeechSplit2/SmolSpeech"
 
 [options]
@@ -15,7 +15,6 @@ return_latents = true
 trace = false
 train = true
 regenerate_data = false
-regenerate_metadata = true
 log_step = 1
 
 [log]

@@ -78,7 +78,6 @@ class ConfigOptions:
     trace: bool = False
     train: bool = True
     regenerate_data: bool = False
-    regenerate_metadata: bool = False
     device_id: int = 0
     num_iters: int = 800000
     resume_iters: int = 0
@@ -179,8 +178,6 @@ class Config(metaclass=Singleton):
                 self.options.__dict__.update(subdict)
                 if not subdict.keys() >= {"experiment"}:
                     self.options.experiment = self.current_time
-                if self.options.regenerate_data:
-                    self.options.regenerate_metadata = True
             case _:
                 self.__dict__.update(subdict)
         return

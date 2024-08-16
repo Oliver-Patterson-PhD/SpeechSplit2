@@ -1,4 +1,5 @@
 import datetime
+import math
 import os
 import time
 from collections import OrderedDict
@@ -8,8 +9,8 @@ from model import Generator_3 as Generator
 from model import InterpLnr
 from torch.utils.tensorboard import SummaryWriter
 from util.compute import Compute
-from util.logging import Logger, LogLevel
-from utils import has_nans, quantize_f0_torch
+from util.logging import Logger
+from utils import is_nan, quantize_f0_torch
 
 
 class Solver(object):
@@ -249,23 +250,6 @@ class Solver(object):
                     timbre_input,
                 )
 
-            if self.logger.get_level() == LogLevel.TRACE:
-                # fmt: off
-                self.logger.trace(f"spmel_gt                    {has_nans(spmel_gt)}")
-                self.logger.trace(f"rhythm_input                {has_nans(rhythm_input)}")
-                self.logger.trace(f"content_input               {has_nans(content_input)}")
-                self.logger.trace(f"pitch_input                 {has_nans(pitch_input)}")
-                self.logger.trace(f"timbre_input                {has_nans(timbre_input)}")
-                self.logger.trace(f"len_crop                    {has_nans(len_crop)}")
-                self.logger.trace(f"content_pitch_input_intrp_2 {has_nans(content_pitch_input)}")
-                self.logger.trace(f"spmel_output:               {has_nans(spmel_output)}")
-                if self.return_latents:
-                    self.logger.trace(f"code_exp_1                  {has_nans(code_exp_1)}")
-                    self.logger.trace(f"code_exp_2                  {has_nans(code_exp_2)}")
-                    self.logger.trace(f"code_exp_3                  {has_nans(code_exp_3)}")
-                    self.logger.trace(f"code_exp_4                  {has_nans(code_exp_4)}")
-                # fmt: on
-
             loss_id = torch.torch.nn.functional.mse_loss(spmel_output, spmel_gt)
 
             # Backward and optimize.
@@ -273,9 +257,31 @@ class Solver(object):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-
             # Logging.
             train_loss_id = loss_id.item()
+
+            if is_nan(loss_id) or math.isnan(train_loss_id):
+                self.log_training_step(i + 1, train_loss_id)
+                self.logger.trace_nans(spmel_gt)
+                self.logger.trace_var(spmel_gt)
+                self.logger.trace_nans(spmel_output)
+                self.logger.trace_var(spmel_output)
+
+                self.logger.trace_nans(spmel_gt)
+                self.logger.trace_nans(rhythm_input)
+                self.logger.trace_nans(content_input)
+                self.logger.trace_nans(pitch_input)
+                self.logger.trace_nans(timbre_input)
+                self.logger.trace_nans(len_crop)
+                self.logger.trace_nans(content_pitch_input)
+                self.logger.trace_nans(spmel_output)
+                if self.return_latents:
+                    self.logger.trace_nans(code_exp_1)
+                    self.logger.trace_nans(code_exp_2)
+                    self.logger.trace_nans(code_exp_3)
+                    self.logger.trace_nans(code_exp_4)
+                self.logger.fatal("Step has NaN loss")
+
             self.writer.add_scalar(
                 f"{self.experiment}/{self.model_type}/train_loss_id",
                 train_loss_id,

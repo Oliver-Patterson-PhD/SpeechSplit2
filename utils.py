@@ -1,7 +1,6 @@
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import pyworld
-import scipy
 import torch
 import torchaudio
 from pysptk.sptk import rapt
@@ -36,32 +35,22 @@ def has_nans(
     return "Has NaNs" if x.isnan().any().item() else "No NaNs"
 
 
-def butter_highpass(
-    cutoff,
-    fs: int,
-    order: int = 5,
-):
-    b, a = scipy.signal.butter(
-        order,
-        (cutoff / (0.5 * fs)),
-        btype="high",
-        analog=False,
-    )
-    return b, a
+def is_nan(
+    x: torch.Tensor,
+) -> bool:
+    return True if x.isnan().any().item() else False
 
 
-def butter_lowpass(
-    cutoff,
-    fs: int,
-    order: int = 5,
-):
-    b, a = scipy.signal.butter(
-        order,
-        (cutoff / (0.5 * fs)),
-        btype="low",
-        analog=False,
-    )
-    return b, a
+def any_nans(
+    xi: Iterable[torch.Tensor],
+) -> bool:
+    return any([is_nan(x) for x in xi])
+
+
+def filter_wav(
+    x: torch.Tensor,
+) -> torch.Tensor:
+    return torchaudio.functional.highpass_biquad(x, 16000, 30)
 
 
 def speaker_normalization(
@@ -87,28 +76,13 @@ def quantize_f0_torch(
     x = x.view(-1).clone()
     uv = x <= 0
     x[uv] = 0
-    av = x >= 1
-    x[av] = 1
+    x[x >= 1] = 1
     assert (x >= 0).all() and (x <= 1).all()
-    x = torch.round(x * (num_bins - 1))
-    x = x + 1
+    x = torch.round(x * (num_bins - 1)) + 1
     x[uv] = 0
     enc = torch.zeros((x.size(0), num_bins + 1), device=x.device)
     enc[torch.arange(x.size(0)), x.long()] = 1
     return enc.view(B, -1, num_bins + 1)
-
-
-def filter_wav(
-    x: torch.Tensor,
-) -> torch.Tensor:
-    # bn, an = butter_highpass(30, 16000, order=5)
-    # a = torch.tensor(an, device=x.device, dtype=x.dtype)
-    # b = torch.tensor(bn, device=x.device, dtype=x.dtype)
-    # y = torchaudio.functional.filtfilt(x, a, b)
-    # y = torch.tensor(scipy.signal.filtfilt(bn, an, x.numpy().copy()))
-    # wav = y * 0.96 + (torch.rand(y.shape[0]) - 0.5) * 1e-06
-    wav = torchaudio.functional.highpass_biquad(x, 16000, 30)
-    return wav
 
 
 def get_spmel(
@@ -352,9 +326,11 @@ def vtlp(
     return y
 
 
-def clip(x: torch.Tensor, min: float, max: float) -> torch.Tensor:
-    idx_over = x > max
-    idx_under = x < min
-    x[idx_over] = max
-    x[idx_under] = min
+def clip(
+    x: torch.Tensor,
+    min: float,
+    max: float,
+) -> torch.Tensor:
+    x[x > max] = max
+    x[x < min] = min
     return x

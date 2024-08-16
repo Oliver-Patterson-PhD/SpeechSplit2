@@ -3,9 +3,12 @@ from os import makedirs
 from os.path import dirname
 from sys import _getframe, stderr, stdout
 from time import gmtime, strftime
-from typing import Collection, Iterable, Iterator, Optional, TextIO
+from traceback import extract_stack
+from typing import Any, Collection, Iterable, Iterator, Optional, TextIO
 
+from torch import Tensor
 from util.patterns import Singleton
+from utils import has_nans, is_nan
 
 
 class LogLevel(IntEnum):
@@ -36,8 +39,11 @@ class Logger(metaclass=Singleton):
         if use_stderr is not None:
             self.use_stderr(use_stderr)
 
-    def __get_caller(self) -> str:
-        tmp_frame = _getframe(1).f_back
+    def __get_caller(
+        self,
+        back: int = 1,
+    ) -> str:
+        tmp_frame = _getframe(back).f_back
         if tmp_frame is not None:
             return tmp_frame.f_code.co_qualname
         else:
@@ -156,7 +162,10 @@ class Logger(metaclass=Singleton):
         self,
         file: str,
     ) -> None:
-        makedirs(dirname(file), exist_ok=True)
+        makedirs(
+            dirname(file),
+            exist_ok=True,
+        )
         self.__file = open(
             file,
             "wt",
@@ -349,3 +358,43 @@ class Logger(metaclass=Singleton):
             message=message,
         )
         raise LoggedException(message)
+
+    def trace_var(
+        self,
+        var: Any,
+        level: LogLevel = LogLevel.TRACE,
+    ) -> None:
+        code = extract_stack()[-2][-1]
+        varname = code[code.find("(") + 1 : code.rfind(")")]
+        self.__log(
+            level=level,
+            caller=self.__get_caller(),
+            message=f"{varname}: ({var})",
+        )
+
+    def trace_nans(
+        self,
+        var: Tensor,
+        level: LogLevel = LogLevel.ERROR,
+    ) -> None:
+        code = extract_stack()[-2][-1]
+        varname = code[code.find("(") + 1 : code.rfind(")")]
+        self.__log(
+            level=level,
+            caller=self.__get_caller(),
+            message=f"{varname}: {has_nans(var)}",
+        )
+
+    def log_if_nan(
+        self,
+        x: Tensor,
+        level: LogLevel = LogLevel.ERROR,
+    ) -> None:
+        if is_nan(x):
+            code = extract_stack()[-2][-1]
+            varname = code[code.find("(") + 1 : code.rfind(")")]
+            self.__log(
+                level=level,
+                caller=self.__get_caller(),
+                message=f"{varname}: {has_nans(x)}",
+            )

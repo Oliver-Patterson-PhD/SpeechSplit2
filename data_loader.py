@@ -2,12 +2,12 @@ import os
 from typing import List, Tuple
 
 import torch
-from data_preprocessing import DataPreProcessType
+import pickle
 from util.config import Config
 from util.logging import Logger
-from utils import clip, get_spenv, get_spmel, vtlp
+from data_preprocessing import make_metadata
+from utils import any_nans, clip, get_spenv, get_spmel, vtlp
 
-logger = Logger()
 DataLoadItemType = Tuple[
     str,  # spk_dir
     torch.Tensor,  # spk_emb
@@ -18,13 +18,12 @@ DataLoadItemType = Tuple[
     ],
     str,  # filepath
 ]
-DataLoadType = List[DataLoadItemType]
 
 
 class Utterances(torch.utils.data.Dataset):
     """Dataset class for the Utterances dataset."""
 
-    dataset: DataLoadType
+    dataset: List[DataLoadItemType]
     dataset_name: str
     experiment: str
     f0_dir: str
@@ -46,14 +45,20 @@ class Utterances(torch.utils.data.Dataset):
         self.experiment = config.options.experiment
         self.dataset_name = config.options.dataset_name
         self.model_type = "G"
-        logger.info("Loading data...")
-
-        metadata: DataPreProcessType = torch.load(
-            os.path.join(self.feat_dir, "dataset.pkl"),
-            weights_only=True,
-        )
-
-        self.dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
+        meta_file = os.path.join(self.feat_dir, "metadata.pkl")
+        data_file = os.path.join(self.feat_dir, "fulldata.pkl")
+        if os.path.exists(meta_file):
+            os.remove(meta_file)
+        make_metadata(config, meta_file)
+        metadata = torch.load(meta_file, weights_only=True)
+        if os.path.exists(data_file):
+            Logger().info("Loading pre-collated data")
+            self.dataset = pickle.load(open(data_file, "rb"))
+        else:
+            Logger().info("Loading data")
+            dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
+            pickle.dump(dataset, open(data_file, "wb"))
+            self.dataset = dataset
         self.num_tokens = len(self.dataset)
 
     def load_item(
@@ -86,7 +91,7 @@ class Utterances(torch.utils.data.Dataset):
         self,
         index: int,
     ):
-        list_uttrs: DataLoadItemType = self.dataset[index]
+        list_uttrs = self.dataset[index]
         spk_id_org: str = list_uttrs[0]
         emb_org: torch.Tensor = list_uttrs[1]
         wav_mono: torch.Tensor
@@ -98,6 +103,23 @@ class Utterances(torch.utils.data.Dataset):
         perturbed_wav_mono: torch.Tensor = vtlp(wav_mono, 16000, alpha)
         spenv: torch.Tensor = get_spenv(perturbed_wav_mono)
         spmel_mono: torch.Tensor = get_spmel(perturbed_wav_mono)
+        if any_nans(
+            [
+                perturbed_wav_mono,
+                spmel,
+                spenv,
+                spmel_mono,
+                f0,
+                emb_org,
+            ]
+        ):
+            Logger().log_if_nan(perturbed_wav_mono)
+            Logger().log_if_nan(spmel)
+            Logger().log_if_nan(spenv)
+            Logger().log_if_nan(spmel_mono)
+            Logger().log_if_nan(f0)
+            Logger().log_if_nan(emb_org)
+            Logger().error(f"Dataset: {list_uttrs[0]}, {list_uttrs[3]}")
         return (
             dysarthric,  # Single char string D=Dysarthric, C=Control
             perturbed_wav_mono,  # Monotonic wavform with VTLP
@@ -147,6 +169,13 @@ class Collator(object):
             rhythm_input = rhythm_input[left : left + len_crop, :]  # [Lc, F]
             content_input = content_input[left : left + len_crop, :]  # [Lc, F]
             pitch_input = pitch_input[left : left + len_crop]  # [Lc, ]
+
+            Logger().log_if_nan(len_crop)
+            Logger().log_if_nan(left)
+            Logger().log_if_nan(spmel_gt)
+            Logger().log_if_nan(rhythm_input)
+            Logger().log_if_nan(content_input)
+            Logger().log_if_nan(pitch_input)
 
             spmel_gt = torch.nn.functional.pad(
                 clip(spmel_gt, 0, 1),
