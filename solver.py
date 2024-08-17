@@ -5,6 +5,7 @@ import time
 from collections import OrderedDict
 
 import torch
+from data_loader import get_loader
 from model import Generator_3 as Generator
 from model import InterpLnr
 from torch.utils.tensorboard import SummaryWriter
@@ -16,7 +17,7 @@ from utils import is_nan, quantize_f0_torch
 class Solver(object):
     """Solver for training"""
 
-    def __init__(self, data_loader, args, config):
+    def __init__(self, config):
         self.logger = Logger()
 
         # Step configuration
@@ -30,7 +31,7 @@ class Solver(object):
         self.config = config
 
         # Data loader.
-        self.data_loader = data_loader
+        self.data_loader = get_loader(config)
         self.data_iter = iter(self.data_loader)
 
         # Training configurations.
@@ -40,10 +41,11 @@ class Solver(object):
         self.experiment = self.config.options.experiment
         self.bottleneck = self.config.options.bottleneck
         self.model_type = "G"
-        self.use_cuda = torch.cuda.is_available()
-        self.device = torch.device(
-            "cuda:{}".format(self.config.options.device_id) if self.use_cuda else "cpu"
-        )
+
+        compute = Compute()
+        compute.print_compute()
+        compute.set_gpu()
+        self.device = compute.device()
 
         # Directories.
         self.model_save_dir = self.config.paths.models
@@ -68,14 +70,6 @@ class Solver(object):
         self.logger.info(self.model)
         self.logger.info(self.model_type)
         self.logger.info("The number of parameters: {}".format(num_params))
-        # Set GPU
-        compute = Compute()
-        compute.print_compute()
-        compute.set_gpu()
-        self.device = compute.device()
-        # gpu_count = torch.cuda.device_count()
-        # if gpu_count > 1:
-        #     self.model = torch.nn.DataParallel(self.model)
         self.model.to(self.device)
 
         self.Interp = InterpLnr(self.config)
@@ -191,6 +185,7 @@ class Solver(object):
             # Load data
             try:
                 (
+                    fname,
                     spk_id_org,
                     spmel_gt,
                     rhythm_input,
@@ -202,6 +197,7 @@ class Solver(object):
             except StopIteration:
                 self.data_iter = iter(self.data_loader)
                 (
+                    fname,
                     spk_id_org,
                     spmel_gt,
                     rhythm_input,

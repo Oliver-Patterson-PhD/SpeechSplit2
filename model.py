@@ -411,7 +411,7 @@ class Generator_3(nn.Module):
 
     def decode(self, code_exp_1, code_exp_2, code_exp_3, c_trg, T):
         encoder_outputs = torch.cat(
-            (code_exp_1, code_exp_2, code_exp_3, c_trg.unsqueeze(1).expand(-1, T, -1)),
+            (code_exp_1, code_exp_2, code_exp_3, c_trg.expand(-1, T, -1)),
             dim=-1,
         )
 

@@ -67,3 +67,9 @@ class Compute(metaclass=Singleton):
         else:
             self.__logger.info("Using CPU for inference.")
         return None
+
+    def is_cpu(self) -> bool:
+        return self.__current_device == torch.device("cpu")
+
+    def is_gpu(self) -> bool:
+        return self.__current_device != torch.device("cpu")

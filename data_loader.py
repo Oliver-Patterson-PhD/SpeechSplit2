@@ -1,11 +1,11 @@
 import os
+import pickle
 from typing import List, Tuple
 
 import torch
-import pickle
+from data_preprocessing import make_metadata
 from util.config import Config
 from util.logging import Logger
-from data_preprocessing import make_metadata
 from utils import any_nans, clip, get_spenv, get_spmel, vtlp
 
 DataLoadItemType = Tuple[
@@ -121,6 +121,7 @@ class Utterances(torch.utils.data.Dataset):
             Logger().log_if_nan(emb_org)
             Logger().error(f"Dataset: {list_uttrs[0]}, {list_uttrs[3]}")
         return (
+            list_uttrs[3],  # Filename
             dysarthric,  # Single char string D=Dysarthric, C=Control
             perturbed_wav_mono,  # Monotonic wavform with VTLP
             spk_id_org,  # speaker ID string
@@ -152,8 +153,9 @@ class Collator(object):
         for token in batch:
 
             (
-                _,  # Single char string Dysarthric
-                _,  # Monotonic waveform with VTLP
+                fname,  # Filename
+                dysarthric,  # Single char string Dysarthric
+                perturbed_wav_mono,  # Monotonic waveform with VTLP
                 spk_id_org,  # speaker ID string
                 melspec,  # MelSpectrogram
                 rhythm_input,  # spenv
@@ -201,6 +203,7 @@ class Collator(object):
 
             new_batch.append(
                 (
+                    fname,
                     spk_id_org,
                     spmel_gt,
                     rhythm_input,
@@ -213,6 +216,7 @@ class Collator(object):
 
         batch = new_batch
         (
+            fname,
             spk_id_org,
             spmel_gt,
             rhythm_input,
@@ -230,6 +234,7 @@ class Collator(object):
         len_crop = torch.stack(len_crop, axis=0).double()
 
         return (
+            fname,
             spk_id_org,
             spmel_gt.to("cpu"),
             rhythm_input.to("cpu"),
@@ -276,21 +281,31 @@ def worker_init_fn(x):
     )
 
 
-def get_loader(config) -> torch.utils.data.DataLoader:
+def get_loader(
+    config,
+    singleitem: bool = False,
+) -> torch.utils.data.DataLoader:
     """Build and return a data loader list."""
     dataset = Utterances(config)
     collator = Collator(config)
-    sampler = MultiSampler(
-        len(dataset),
-        config.samplier,
-        shuffle=config.shuffle,
-    )
+    sampler: torch.utils.data.sampler.Sampler
+    if singleitem:
+        sampler = torch.utils.data.SequentialSampler(dataset)
+    else:
+        sampler = MultiSampler(
+            len(dataset),
+            config.samplier,
+            shuffle=config.shuffle,
+        )
+    batch = 1 if singleitem else config.batch_size
+    workers = 0 if singleitem else config.num_workers
+    prefetch = None if config.num_workers == 0 or singleitem else config.num_workers
     data_loader = torch.utils.data.DataLoader(
         dataset=dataset,
-        batch_size=config.batch_size,
+        batch_size=batch,
         sampler=sampler,
-        num_workers=config.num_workers,
-        prefetch_factor=config.num_workers if config.num_workers != 0 else None,
+        num_workers=workers,
+        prefetch_factor=prefetch,
         drop_last=False,
         pin_memory=True,
         worker_init_fn=worker_init_fn,

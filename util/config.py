@@ -22,6 +22,7 @@ class ConfigPaths:
 
     models: str
     tensorboard: str
+    latents: str
 
     raw_data: str
     raw_wavs: str
@@ -30,10 +31,12 @@ class ConfigPaths:
     raw_vctk: str
     raw_timit: str
     raw_uaspeech: str
+    raw_smolspeech: str
 
     dataset_vctk: str
     dataset_timit: str
     dataset_uaspeech: str
+    dataset_smolspeech: str
 
 
 class ConfigModel:
@@ -185,7 +188,6 @@ class Config(metaclass=Singleton):
     def __fill_nulls(
         self,
     ) -> None:
-
         if not hasattr(self.paths, "raw_timit"):
             self.paths.raw_timit = f"{self.paths.raw_data}/TIMIT"
         if not hasattr(self.paths, "dataset_timit"):
@@ -194,6 +196,10 @@ class Config(metaclass=Singleton):
             self.paths.raw_vctk = f"{self.paths.raw_data}/VCTK-Corpus/wav"
         if not hasattr(self.paths, "dataset_vctk"):
             self.paths.dataset_vctk = f"{self.paths.proc_data}/VCTK-Corpus"
+        if not hasattr(self.paths, "raw_smolspeech"):
+            self.paths.raw_smolspeech = f"{self.paths.raw_data}/SmolSpeech"
+        if not hasattr(self.paths, "dataset_smolspeech"):
+            self.paths.dataset_smolspeech = f"{self.paths.proc_data}/SmolSpeech"
         if not hasattr(self.paths, "raw_uaspeech"):
             self.paths.raw_uaspeech = (
                 f"{self.paths.raw_data}/UASpeech/audio/noisereduce"
@@ -209,6 +215,8 @@ class Config(metaclass=Singleton):
             self.paths.tensorboard = f"{self.paths.artefacts}/tensorboard"
         if not hasattr(self.paths, "models"):
             self.paths.models = f"{self.paths.artefacts}/models"
+        if not hasattr(self.paths, "latents"):
+            self.paths.latents = f"{self.paths.artefacts}/latents"
         if not hasattr(self.paths, "freqs"):
             self.paths.freqs = f"{self.paths.features}/freqs"
         if not hasattr(self.paths, "spmels"):
@@ -222,6 +230,9 @@ class Config(metaclass=Singleton):
         if self.options.dataset_name == "vctk":
             data_dir = self.paths.raw_vctk
             feat_dir = self.paths.dataset_vctk
+        elif self.options.dataset_name == "smolspeech":
+            data_dir = self.paths.raw_smolspeech
+            feat_dir = self.paths.dataset_smolspeech
         elif self.options.dataset_name == "uaspeech":
             data_dir = self.paths.raw_uaspeech
             feat_dir = self.paths.dataset_uaspeech
