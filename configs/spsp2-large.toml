@@ -6,13 +6,14 @@ raw_data = "/mnt/datasets/raw"
 [options]
 bottleneck = "large"
 experiment = "tmp"
-dataset_name = "smolspeech"
+dataset_name = "uaspeech"
 device_id = 0
-return_latents = true
 trace = false
-train = false
+return_latents = true
 regenerate_data = false
 log_step = 1
+train = true
+swap = true
 
 [log]
 level = "DEBUG"

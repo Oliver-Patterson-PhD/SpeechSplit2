@@ -18,7 +18,7 @@ def main(config: Config):
     if config.options.train:
         solver = Solver(config)
         solver.train()
-    else:
+    if config.options.swap:
         swapper = Swapper(config)
         swapper.save_latents()
         swapper.swap_latents()

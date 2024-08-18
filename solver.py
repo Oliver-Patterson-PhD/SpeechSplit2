@@ -258,25 +258,49 @@ class Solver(object):
 
             if is_nan(loss_id) or math.isnan(train_loss_id):
                 self.log_training_step(i + 1, train_loss_id)
+
+                self.logger.trace_nans(loss)
+                self.logger.trace_nans(loss_id)
+
+                self.logger.trace_nans(train_loss_id)
                 self.logger.trace_nans(spmel_gt)
-                self.logger.trace_var(spmel_gt)
+                torch.save(spmel_gt, f"{self.config.paths.artefacts}/NaNs/spmel_gt-{fname}-{i}.pt")
                 self.logger.trace_nans(spmel_output)
+                torch.save(spmel_output, f"{self.config.paths.artefacts}/NaNs/spmel_output-{fname}-{i}.pt")
+
+                self.logger.trace_var(spmel_gt)
                 self.logger.trace_var(spmel_output)
 
+                os.makedirs(f"{self.config.paths.artefacts}/NaNs", exist_ok=True)
                 self.logger.trace_nans(spmel_gt)
+                torch.save(spmel_gt, f"{self.config.paths.artefacts}/NaNs/spmel_gt-{fname}-{i}.pt")
                 self.logger.trace_nans(rhythm_input)
+                torch.save(rhythm_input, f"{self.config.paths.artefacts}/NaNs/rhythm_input-{fname}-{i}.pt")
                 self.logger.trace_nans(content_input)
+                torch.save(content_input, f"{self.config.paths.artefacts}/NaNs/content_input-{fname}-{i}.pt")
                 self.logger.trace_nans(pitch_input)
+                torch.save(pitch_input, f"{self.config.paths.artefacts}/NaNs/pitch_input-{fname}-{i}.pt")
                 self.logger.trace_nans(timbre_input)
+                torch.save(timbre_input, f"{self.config.paths.artefacts}/NaNs/timbre_input-{fname}-{i}.pt")
                 self.logger.trace_nans(len_crop)
+                torch.save(len_crop, f"{self.config.paths.artefacts}/NaNs/len_crop-{fname}-{i}.pt")
                 self.logger.trace_nans(content_pitch_input)
+                torch.save(content_pitch_input, f"{self.config.paths.artefacts}/NaNs/content_pitch_input-{fname}-{i}.pt")
                 self.logger.trace_nans(spmel_output)
+                torch.save(spmel_output, f"{self.config.paths.artefacts}/NaNs/spmel_output-{fname}-{i}.pt")
+
                 if self.return_latents:
                     self.logger.trace_nans(code_exp_1)
+                    torch.save(code_exp_1, f"{self.config.paths.artefacts}/NaNs/code_exp_1-{fname}-{i}.pt")
                     self.logger.trace_nans(code_exp_2)
+                    torch.save(code_exp_2, f"{self.config.paths.artefacts}/NaNs/code_exp_2-{fname}-{i}.pt")
                     self.logger.trace_nans(code_exp_3)
+                    torch.save(code_exp_3, f"{self.config.paths.artefacts}/NaNs/code_exp_3-{fname}-{i}.pt")
                     self.logger.trace_nans(code_exp_4)
-                self.logger.fatal("Step has NaN loss")
+                    torch.save(code_exp_4, f"{self.config.paths.artefacts}/NaNs/code_exp_4-{fname}-{i}.pt")
+
+                self.logger.error("Step has NaN loss")
+                self.logger.error(f"filename: {fname}")
 
             self.writer.add_scalar(
                 f"{self.experiment}/{self.model_type}/train_loss_id",

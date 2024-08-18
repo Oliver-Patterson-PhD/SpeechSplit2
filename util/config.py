@@ -80,6 +80,7 @@ class ConfigOptions:
     return_latents: bool = False
     trace: bool = False
     train: bool = True
+    swap: bool = True
     regenerate_data: bool = False
     device_id: int = 0
     num_iters: int = 800000
