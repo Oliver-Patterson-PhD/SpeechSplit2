@@ -11,7 +11,7 @@ device_id = 0
 trace = false
 return_latents = true
 regenerate_data = false
-log_step = 1
+log_step = 25
 train = true
 swap = true
 

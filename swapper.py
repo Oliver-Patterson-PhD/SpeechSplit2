@@ -27,7 +27,7 @@ class Swapper(object):
         self.model_type = "G"
         self.config = config
         self.compute.print_compute()
-        self.compute.set_cpu()
+        self.compute.set_gpu()
         self.device = self.compute.device()
 
         self.build_model()
