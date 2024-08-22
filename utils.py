@@ -4,6 +4,7 @@ import pyworld
 import torch
 import torchaudio
 from pysptk.sptk import rapt
+from util.logging import Logger
 
 n_fft = 1024
 hop_length = 256
@@ -44,7 +45,10 @@ def is_nan(
 def any_nans(
     xi: Iterable[torch.Tensor],
 ) -> bool:
-    return any([is_nan(x) for x in xi])
+    for x in xi:
+        if is_nan(x):
+            return True
+    return False
 
 
 def filter_wav(
@@ -95,45 +99,28 @@ def get_spenv(
     wav: torch.Tensor,
     cutoff: int = 3,
 ) -> torch.Tensor:
-    ceps = torch.fft.irfft(
-        torch.log(torch_stft(wav).T + 1e-6),
-        axis=-1,
-    ).real.to(dtype=torch.double)
-    lifter = torch.zeros(
-        ceps.shape[1],
-        dtype=torch.double,
-    )
+    spec = torch_stft(wav).T
+    ceps = torch.fft.irfft(torch.log(spec + 1e-6), axis=-1).to(dtype=torch.double)
+    lifter = torch.zeros(ceps.shape[1], dtype=torch.double)
     lifter[:cutoff] = 1
     lifter[cutoff] = 0.5
-    env = zero_one_norm(
-        (
-            20
-            * torch.log10(
-                torch.maximum(
-                    min_level,
-                    torch.abs(
-                        torch.exp(
-                            torch.fft.rfft(
-                                torch.matmul(
-                                    ceps,
-                                    torch.diag(lifter).to(ceps.device),
-                                ),
-                                axis=-1,
-                            )
-                        )
-                    ),
-                )
-            )
-            - 16
-            + 100
-        )
-        / 100
-    )
-    return torchaudio.functional.resample(
+    mmul = torch.matmul(ceps, torch.diag(lifter).to(ceps.device))
+    expfft = torch.exp(torch.fft.rfft(mmul, axis=-1))
+    maxval = torch.maximum(min_level, torch.abs(expfft))
+    env = zero_one_norm((20 * torch.log10(maxval) - 16 + 100) / 100)
+    retval = torchaudio.functional.resample(
         env,
         orig_freq=env.size(dim=-1),
         new_freq=dim_freq,
     )
+    if __debug__ and is_nan(retval):
+        Logger().error("Tensors with Nans: ")
+        Logger().trace_nans(mmul)
+        Logger().trace_nans(expfft)
+        Logger().trace_nans(maxval)
+        Logger().trace_nans(env)
+        Logger().trace_nans(retval)
+    return retval
 
 
 def extract_f0(

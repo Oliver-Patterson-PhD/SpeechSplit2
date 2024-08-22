@@ -15,9 +15,9 @@ def main(config: Config):
     torch.multiprocessing.set_sharing_strategy("file_system")
     torch.multiprocessing.set_start_method("spawn")
     preprocess_data(config)
-    if config.options.train:
-        solver = Solver(config)
-        solver.train()
+    # if config.options.train:
+    #     solver = Solver(config)
+    #     solver.train()
     if config.options.swap:
         swapper = Swapper(config)
         swapper.save_latents()

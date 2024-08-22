@@ -1,5 +1,4 @@
 import os
-import pickle
 from typing import List, Tuple
 
 import torch
@@ -20,9 +19,8 @@ DataLoadItemType = Tuple[
 ]
 
 
+## Dataset class for the Utterances dataset.
 class Utterances(torch.utils.data.Dataset):
-    """Dataset class for the Utterances dataset."""
-
     dataset: List[DataLoadItemType]
     dataset_name: str
     experiment: str
@@ -33,11 +31,8 @@ class Utterances(torch.utils.data.Dataset):
     spmel_dir: str
     wav_dir: str
 
-    def __init__(
-        self,
-        config: Config,
-    ) -> None:
-        """Initialize and preprocess the Utterances dataset."""
+    ## Initialize and preprocess the Utterances dataset.
+    def __init__(self, config: Config) -> None:
         self.feat_dir = config.paths.features
         self.wav_dir = config.paths.monowavs
         self.spmel_dir = config.paths.spmels
@@ -46,18 +41,12 @@ class Utterances(torch.utils.data.Dataset):
         self.dataset_name = config.options.dataset_name
         self.model_type = "G"
         meta_file = os.path.join(self.feat_dir, "metadata.pkl")
-        data_file = os.path.join(self.feat_dir, "fulldata.pkl")
         if os.path.exists(meta_file):
             os.remove(meta_file)
         make_metadata(config, meta_file)
         metadata = torch.load(meta_file, weights_only=True)
-        if os.path.exists(data_file):
-            Logger().info("Loading pre-collated data")
-            self.dataset = pickle.load(open(data_file, "rb"))
-        else:
-            Logger().info("Loading data")
-            self.dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
-            pickle.dump(self.dataset, open(data_file, "wb"))
+        Logger().info("Loading data")
+        self.dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
         self.num_tokens = len(self.dataset)
 
     def load_item(
@@ -86,10 +75,7 @@ class Utterances(torch.utils.data.Dataset):
             sbmt[2],
         )
 
-    def __getitem__(
-        self,
-        index: int,
-    ):
+    def __getitem__(self, index: int):
         list_uttrs = self.dataset[index]
         spk_id_org: str = list_uttrs[0]
         emb_org: torch.Tensor = list_uttrs[1]
@@ -102,7 +88,7 @@ class Utterances(torch.utils.data.Dataset):
         perturbed_wav_mono: torch.Tensor = vtlp(wav_mono, 16000, alpha)
         spenv: torch.Tensor = get_spenv(perturbed_wav_mono)
         spmel_mono: torch.Tensor = get_spmel(perturbed_wav_mono)
-        if any_nans(
+        if __debug__ and any_nans(
             [
                 perturbed_wav_mono,
                 spmel,
@@ -131,10 +117,7 @@ class Utterances(torch.utils.data.Dataset):
             emb_org,  # timbre_input
         )
 
-    def __len__(
-        self,
-    ):
-        """Return the number of spkrs."""
+    def __len__(self):
         return self.num_tokens
 
 
@@ -170,13 +153,6 @@ class Collator(object):
             rhythm_input = rhythm_input[left : left + len_crop, :]  # [Lc, F]
             content_input = content_input[left : left + len_crop, :]  # [Lc, F]
             pitch_input = pitch_input[left : left + len_crop]  # [Lc, ]
-
-            Logger().log_if_nan(len_crop)
-            Logger().log_if_nan(left)
-            Logger().log_if_nan(spmel_gt)
-            Logger().log_if_nan(rhythm_input)
-            Logger().log_if_nan(content_input)
-            Logger().log_if_nan(pitch_input)
 
             spmel_gt = torch.nn.functional.pad(
                 clip(spmel_gt, 0, 1),
@@ -281,7 +257,7 @@ def worker_init_fn(x):
 
 
 def get_loader(
-    config,
+    config: Config,
     singleitem: bool = False,
 ) -> torch.utils.data.DataLoader:
     """Build and return a data loader list."""
@@ -293,8 +269,8 @@ def get_loader(
     else:
         sampler = MultiSampler(
             len(dataset),
-            config.samplier,
-            shuffle=config.shuffle,
+            config.dataloader.samplier,
+            shuffle=config.dataloader.shuffle,
         )
     batch = 1 if singleitem else config.batch_size
     workers = 0 if singleitem else config.num_workers

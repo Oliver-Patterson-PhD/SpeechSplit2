@@ -1,14 +1,15 @@
+from __future__ import annotations
+
 from enum import IntEnum
 from os import makedirs
 from os.path import dirname
 from sys import _getframe, stderr, stdout
 from time import gmtime, strftime
 from traceback import extract_stack
-from typing import Any, Collection, Iterable, Iterator, Optional, TextIO
+from typing import Any, Optional, TextIO, overload
 
 from torch import Tensor
 from util.patterns import Singleton
-from utils import has_nans, is_nan
 
 
 class LogLevel(IntEnum):
@@ -18,6 +19,34 @@ class LogLevel(IntEnum):
     WARN = 80
     ERROR = 90
     FATAL = 255
+
+    def __str__(self) -> str:
+        match self:
+            case self.TRACE:
+                return "TRACE"
+            case self.DEBUG:
+                return "DEBUG"
+            case self.INFO:
+                return "INFO "
+            case self.WARN:
+                return "WARN "
+            case self.ERROR:
+                return "ERROR"
+            case self.FATAL:
+                return "FATAL"
+            case _:
+                raise ValueError
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    @classmethod
+    def _missing_(cls, value: object) -> Optional[LogLevel]:
+        if isinstance(value, str):
+            for member in cls:
+                if str(member.value) == value.upper().strip():
+                    return member
+        return None
 
 
 class LoggedException(Exception):
@@ -39,11 +68,8 @@ class Logger(metaclass=Singleton):
         if use_stderr is not None:
             self.use_stderr(use_stderr)
 
-    def __get_caller(
-        self,
-        back: int = 1,
-    ) -> str:
-        tmp_frame = _getframe(back).f_back
+    def __get_caller(self) -> str:
+        tmp_frame = _getframe(1).f_back
         if tmp_frame is not None:
             return tmp_frame.f_code.co_qualname
         else:
@@ -61,7 +87,7 @@ class Logger(metaclass=Singleton):
                 gmtime(),
             ),
             caller,
-            self.__level_to_string(level),
+            str(level),
             message,
         )
 
@@ -91,77 +117,38 @@ class Logger(metaclass=Singleton):
                 )
         return None
 
-    def __level_to_string(
-        self,
-        level: Optional[LogLevel] = None,
-    ) -> str:
-        if level is None:
-            level = self.__level
-        match level:
-            case LogLevel.TRACE:
-                return "TRACE"
-            case LogLevel.DEBUG:
-                return "DEBUG"
-            case LogLevel.INFO:
-                return "INFO "
-            case LogLevel.WARN:
-                return "WARN "
-            case LogLevel.ERROR:
-                return "ERROR"
-            case LogLevel.FATAL:
-                return "FATAL"
+    def __is_nan(self, x: Tensor) -> bool:
+        return True if x.isnan().any().item() else False
 
     def get_level(self) -> LogLevel:
         return self.__level
 
-    def set_level(
-        self,
-        level: LogLevel,
-    ) -> None:
-        self.__level = level
+    @overload
+    def set_level(self, level: str) -> None:
+        pass
 
-    def set_level_str(
-        self,
-        string: str,
-    ) -> None:
-        match string.upper():
-            case "TRACE":
-                self.__level = LogLevel.TRACE
-            case "DEBUG":
-                self.__level = LogLevel.DEBUG
-            case "INFO":
-                self.__level = LogLevel.INFO
-            case "WARN":
-                self.__level = LogLevel.WARN
-            case "ERROR":
-                self.__level = LogLevel.ERROR
-            case "FATAL":
-                self.__level = LogLevel.FATAL
-            case _:
-                raise RuntimeError(
-                    f"Invalid config level string '{string.upper()}'",
-                )
+    @overload
+    def set_level(self, level: LogLevel) -> None:
+        pass
 
-    def get_stream(
-        self,
-    ) -> TextIO:
+    def set_level(self, level: LogLevel | str) -> None:
+        if isinstance(level, str):
+            self.__level = LogLevel[level]
+        elif isinstance(level, int):
+            self.__level = level
+        else:
+            raise ValueError
+
+    def get_stream(self) -> TextIO:
         return self.__stream
 
-    def get_file(
-        self,
-    ) -> Optional[TextIO]:
+    def get_file(self) -> Optional[TextIO]:
         return self.__file
 
-    def set_stream(
-        self,
-        stream: TextIO,
-    ) -> None:
+    def set_stream(self, stream: TextIO) -> None:
         self.__stream = stream
 
-    def set_file(
-        self,
-        file: str,
-    ) -> None:
+    def set_file(self, file: str) -> None:
         makedirs(
             dirname(file),
             exist_ok=True,
@@ -181,93 +168,6 @@ class Logger(metaclass=Singleton):
         else:
             self.__steam = stdout
 
-    def counter(
-        self,
-        iterable: Collection,
-        unit: str = "",
-        level: LogLevel = LogLevel.DEBUG,
-    ) -> Iterator:
-        countlen = len(iterable)
-        count_num_size = len(str(countlen))
-        for i, item in enumerate(iterable):
-            print(
-                f"\r{i + 1: {count_num_size}d}/{countlen} {unit}",
-                end="",
-                file=self.__stream,
-                flush=True,
-            )
-            yield item
-        print(
-            end="\n",
-            file=self.__stream,
-            flush=True,
-        )
-        if self.__file is not None:
-            print(
-                self.__format_msg(
-                    level=level,
-                    caller=self.__get_caller(),
-                    message=f"{unit} all finished",
-                ),
-                end="\n",
-                file=self.__file,
-            )
-        return None
-
-    def print_counter(
-        self,
-        iterable: Collection,
-        prefix: str = "",
-        unit: str = "",
-        level: LogLevel = LogLevel.DEBUG,
-    ) -> Iterator:
-        countlen = len(iterable)
-        count_num_size = len(str(countlen))
-        for i, item in enumerate(iterable):
-            print(
-                f"{prefix}{i + 1: {count_num_size}d}/{countlen} {unit}",
-                file=self.__stream,
-            )
-            yield item
-        if self.__file is not None:
-            print(
-                self.__format_msg(
-                    level=level,
-                    caller=self.__get_caller(),
-                    message=f"{prefix}{unit} all finished",
-                ),
-                end="\n",
-                file=self.__file,
-            )
-        return None
-
-    def print_iterator(
-        self,
-        iterable: Iterable,
-        size: int,
-        prefix: str = "",
-        unit: str = "",
-        level: LogLevel = LogLevel.DEBUG,
-    ) -> Iterator:
-        count_num_size = len(str(size))
-        for i, item in enumerate(iterable):
-            print(
-                f"{prefix}{i + 1: {count_num_size}d}/{size} {unit}",
-                file=self.__stream,
-            )
-            yield item
-        if self.__file is not None:
-            print(
-                self.__format_msg(
-                    level=level,
-                    caller=self.__get_caller(),
-                    message=f"{prefix}{unit} all finished",
-                ),
-                end="\n",
-                file=self.__file,
-            )
-        return None
-
     def input(
         self,
         message: str,
@@ -275,7 +175,7 @@ class Logger(metaclass=Singleton):
         level: LogLevel = LogLevel.INFO,
     ) -> str:
         self.__log(
-            level=LogLevel.INFO,
+            level=level,
             caller=self.__get_caller(),
             message=message,
         )
@@ -290,7 +190,7 @@ class Logger(metaclass=Singleton):
     ) -> str:
         if self.__level <= level:
             self.__log(
-                level=LogLevel.INFO,
+                level=level,
                 caller=self.__get_caller(),
                 message=message,
             )
@@ -298,60 +198,42 @@ class Logger(metaclass=Singleton):
         else:
             return default
 
-    def trace(
-        self,
-        message: str,
-    ) -> None:
+    def trace(self, message: str) -> None:
         self.__log(
             level=LogLevel.TRACE,
             caller=self.__get_caller(),
             message=message,
         )
 
-    def debug(
-        self,
-        message: str,
-    ) -> None:
+    def debug(self, message: str) -> None:
         self.__log(
             level=LogLevel.DEBUG,
             caller=self.__get_caller(),
             message=message,
         )
 
-    def info(
-        self,
-        message: str,
-    ) -> None:
+    def info(self, message: str) -> None:
         self.__log(
             level=LogLevel.INFO,
             caller=self.__get_caller(),
             message=message,
         )
 
-    def warn(
-        self,
-        message: str,
-    ) -> None:
+    def warn(self, message: str) -> None:
         self.__log(
             level=LogLevel.WARN,
             caller=self.__get_caller(),
             message=message,
         )
 
-    def error(
-        self,
-        message: str,
-    ) -> None:
+    def error(self, message: str) -> None:
         self.__log(
             level=LogLevel.ERROR,
             caller=self.__get_caller(),
             message=message,
         )
 
-    def fatal(
-        self,
-        message: str,
-    ) -> None:
+    def fatal(self, message: str) -> None:
         self.__log(
             level=LogLevel.FATAL,
             caller=self.__get_caller(),
@@ -365,7 +247,7 @@ class Logger(metaclass=Singleton):
         level: LogLevel = LogLevel.TRACE,
     ) -> None:
         code = extract_stack()[-2][-1]
-        varname = code[code.find("(") + 1 : code.rfind(")")]
+        varname = code[code.find("trace_var(") + 10 : code.rfind(")")]
         self.__log(
             level=level,
             caller=self.__get_caller(),
@@ -374,15 +256,17 @@ class Logger(metaclass=Singleton):
 
     def trace_nans(
         self,
-        var: Tensor,
+        x: Tensor,
         level: LogLevel = LogLevel.ERROR,
     ) -> None:
         code = extract_stack()[-2][-1]
-        varname = code[code.find("(") + 1 : code.rfind(")")]
+        varname = code[code.find("trace_nans(") + 11 : code.rfind(")")]
         self.__log(
             level=level,
             caller=self.__get_caller(),
-            message=f"{varname}: {has_nans(var)}",
+            message=f"{varname}: {
+                "Has NaNs" if self.__is_nan(x) else "No NaNs"
+            }",
         )
 
     def log_if_nan(
@@ -390,11 +274,11 @@ class Logger(metaclass=Singleton):
         x: Tensor,
         level: LogLevel = LogLevel.ERROR,
     ) -> None:
-        if is_nan(x):
+        if self.__is_nan(x):
             code = extract_stack()[-2][-1]
-            varname = code[code.find("(") + 1 : code.rfind(")")]
+            varname = code[code.find("log_if_nan(") + 11 : code.rfind(")")]
             self.__log(
                 level=level,
                 caller=self.__get_caller(),
-                message=f"{varname}: {has_nans(x)}",
+                message=f"{varname}: Has NaNs",
             )

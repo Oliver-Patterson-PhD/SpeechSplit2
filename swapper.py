@@ -14,9 +14,7 @@ from model import InterpLnr
 from util.compute import Compute
 from util.logging import Logger
 from utils import quantize_f0_torch
-from wavenet import Synthesizer
-
-torchaudio.set_audio_backend("sox_io")
+from parallelwavegan import Synthesizer
 
 
 class Swapper(object):
@@ -215,7 +213,7 @@ class Swapper(object):
         self.compute.set_gpu()
         self.device = self.compute.device()
         self.synthesizer = Synthesizer(self.device)
-        self.synthesizer.load_ckpt("models/wavenet_vocoder.pth")
+        self.synthesizer.load_ckpt("full_models/lj_wavenet_vocoder.pth")
         [
             self.single_spmel_to_audio(file)  # type: ignore [func-returns-value]
             for file in iglob(

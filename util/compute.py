@@ -57,8 +57,7 @@ class Compute(metaclass=Singleton):
     def print_compute(self):
         if self.__device.type == "cuda":
             self.__logger.info(
-                "Using GPU %d (%s) with %.1fGb total memory."
-                % (
+                "Using GPU {:d} {:s} with {:.1f}Gb total memory.".format(
                     self.__device_id,
                     self.__gpu_name[0],
                     self.__gpu_memory[0],

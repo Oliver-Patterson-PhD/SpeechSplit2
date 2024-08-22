@@ -96,6 +96,13 @@ class ConfigTraining:
     beta2: float = 0.999
 
 
+class ConfigDataLoader:
+    batch_size: int = 1
+    shuffle: bool = True
+    num_workers: int = 16
+    samplier: int = 16
+
+
 ## Configuration object
 # The Config object is a Singleton,
 # The config file is generally only read once at the beginning of execution
@@ -109,6 +116,7 @@ class Config(metaclass=Singleton):
     model: ConfigModel = ConfigModel()
     options: ConfigOptions = ConfigOptions()
     training: ConfigTraining = ConfigTraining()
+    dataloader: ConfigDataLoader = ConfigDataLoader()
 
     sample_rate: int = 16000
     batch_size: int = 1
@@ -150,7 +158,7 @@ class Config(metaclass=Singleton):
         match key.lower():
             case "log":
                 if "level" in subdict:
-                    Logger().set_level_str(subdict["level"])
+                    Logger().set_level(subdict["level"])
                 if "path" in subdict:
                     self.__logging.path = subdict["path"]
                 if "file" in subdict:
@@ -174,6 +182,8 @@ class Config(metaclass=Singleton):
                 self.paths.__dict__.update(subdict)
             case "model":
                 self.model.__dict__.update(subdict)
+            case "dataloader":
+                self.dataloader.__dict__.update(subdict)
             case "training":
                 self.training.__dict__.update(subdict)
             case "options":
@@ -186,9 +196,26 @@ class Config(metaclass=Singleton):
                 self.__dict__.update(subdict)
         return
 
-    def __fill_nulls(
-        self,
-    ) -> None:
+    def __fill_nulls(self) -> None:
+        self.__set_dataset_paths()
+        self.__set_data_and_feat()
+        self.__set_artefact_paths()
+
+    def __set_artefact_paths(self) -> None:
+        if not hasattr(self.paths, "tensorboard"):
+            self.paths.tensorboard = f"{self.paths.artefacts}/tensorboard"
+        if not hasattr(self.paths, "models"):
+            self.paths.models = f"{self.paths.artefacts}/models"
+        if not hasattr(self.paths, "latents"):
+            self.paths.latents = f"{self.paths.artefacts}/latents"
+        if not hasattr(self.paths, "freqs"):
+            self.paths.freqs = f"{self.paths.features}/freqs"
+        if not hasattr(self.paths, "spmels"):
+            self.paths.spmels = f"{self.paths.features}/spmels"
+        if not hasattr(self.paths, "monowavs"):
+            self.paths.monowavs = f"{self.paths.features}/monowavs"
+
+    def __set_dataset_paths(self) -> None:
         if not hasattr(self.paths, "raw_timit"):
             self.paths.raw_timit = f"{self.paths.raw_data}/TIMIT"
         if not hasattr(self.paths, "dataset_timit"):
@@ -210,24 +237,7 @@ class Config(metaclass=Singleton):
                 f"{self.paths.proc_data}/UASpeech/audio/noisereduce"
             )
 
-        self.__set_data_and_feat()
-
-        if not hasattr(self.paths, "tensorboard"):
-            self.paths.tensorboard = f"{self.paths.artefacts}/tensorboard"
-        if not hasattr(self.paths, "models"):
-            self.paths.models = f"{self.paths.artefacts}/models"
-        if not hasattr(self.paths, "latents"):
-            self.paths.latents = f"{self.paths.artefacts}/latents"
-        if not hasattr(self.paths, "freqs"):
-            self.paths.freqs = f"{self.paths.features}/freqs"
-        if not hasattr(self.paths, "spmels"):
-            self.paths.spmels = f"{self.paths.features}/spmels"
-        if not hasattr(self.paths, "monowavs"):
-            self.paths.monowavs = f"{self.paths.features}/monowavs"
-
-    def __set_data_and_feat(
-        self,
-    ) -> None:
+    def __set_data_and_feat(self) -> None:
         if self.options.dataset_name == "vctk":
             data_dir = self.paths.raw_vctk
             feat_dir = self.paths.dataset_vctk
@@ -248,4 +258,3 @@ class Config(metaclass=Singleton):
             )
         self.paths.features = feat_dir
         self.paths.raw_wavs = data_dir
-        return

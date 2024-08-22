@@ -31,7 +31,7 @@ class Solver(object):
         self.config = config
 
         # Data loader.
-        self.data_loader = get_loader(config)
+        self.data_loader = get_loader(config, singleitem=True)
         self.data_iter = iter(self.data_loader)
 
         # Training configurations.
@@ -159,6 +159,7 @@ class Solver(object):
 
     def train(self):
         # Start training from scratch or resume training.
+        nantrace = True
         start_iters = 0
         if self.resume_iters:
             self.logger.info("Resuming ...")
@@ -176,14 +177,20 @@ class Solver(object):
         self.logger.info("Start training...")
         self.start_time = time.time()
         self.model = self.model.train()
-        for i in range(start_iters, self.num_iters):
+        if __debug__ and nantrace:
+            self.num_iters = len(self.data_loader)
+            loopthrough = enumerate(self.data_loader)
+        else:
+            loopthrough = range(start_iters, self.num_iters)
+        # for i in range(start_iters, self.num_iters):
+
+        for li in loopthrough:
 
             # =============================================================== #
             #                   1. Load input data                            #
             # =============================================================== #
-
-            # Load data
-            try:
+            if __debug__ and nantrace:
+                i, batch = li
                 (
                     fname,
                     spk_id_org,
@@ -193,19 +200,33 @@ class Solver(object):
                     pitch_input,
                     timbre_input,
                     len_crop,
-                ) = next(self.data_iter)
-            except StopIteration:
-                self.data_iter = iter(self.data_loader)
-                (
-                    fname,
-                    spk_id_org,
-                    spmel_gt,
-                    rhythm_input,
-                    content_input,
-                    pitch_input,
-                    timbre_input,
-                    len_crop,
-                ) = next(self.data_iter)
+                ) = batch
+            else:
+                i = li
+                # Load data
+                try:
+                    (
+                        fname,
+                        spk_id_org,
+                        spmel_gt,
+                        rhythm_input,
+                        content_input,
+                        pitch_input,
+                        timbre_input,
+                        len_crop,
+                    ) = next(self.data_iter)
+                except StopIteration:
+                    self.data_iter = iter(self.data_loader)
+                    (
+                        fname,
+                        spk_id_org,
+                        spmel_gt,
+                        rhythm_input,
+                        content_input,
+                        pitch_input,
+                        timbre_input,
+                        len_crop,
+                    ) = next(self.data_iter)
 
             # =============================================================== #
             #                   2. Train the model                            #
@@ -256,7 +277,8 @@ class Solver(object):
             # Logging.
             train_loss_id = loss_id.item()
 
-            if is_nan(loss_id) or math.isnan(train_loss_id):
+            if __debug__ and (is_nan(loss_id) or math.isnan(train_loss_id)):
+                # fmt: off
                 self.log_training_step(i + 1, train_loss_id)
 
                 self.logger.trace_nans(loss)
@@ -264,43 +286,29 @@ class Solver(object):
 
                 self.logger.trace_nans(train_loss_id)
                 self.logger.trace_nans(spmel_gt)
-                torch.save(spmel_gt, f"{self.config.paths.artefacts}/NaNs/spmel_gt-{fname}-{i}.pt")
                 self.logger.trace_nans(spmel_output)
-                torch.save(spmel_output, f"{self.config.paths.artefacts}/NaNs/spmel_output-{fname}-{i}.pt")
 
                 self.logger.trace_var(spmel_gt)
                 self.logger.trace_var(spmel_output)
 
-                os.makedirs(f"{self.config.paths.artefacts}/NaNs", exist_ok=True)
                 self.logger.trace_nans(spmel_gt)
-                torch.save(spmel_gt, f"{self.config.paths.artefacts}/NaNs/spmel_gt-{fname}-{i}.pt")
                 self.logger.trace_nans(rhythm_input)
-                torch.save(rhythm_input, f"{self.config.paths.artefacts}/NaNs/rhythm_input-{fname}-{i}.pt")
                 self.logger.trace_nans(content_input)
-                torch.save(content_input, f"{self.config.paths.artefacts}/NaNs/content_input-{fname}-{i}.pt")
                 self.logger.trace_nans(pitch_input)
-                torch.save(pitch_input, f"{self.config.paths.artefacts}/NaNs/pitch_input-{fname}-{i}.pt")
                 self.logger.trace_nans(timbre_input)
-                torch.save(timbre_input, f"{self.config.paths.artefacts}/NaNs/timbre_input-{fname}-{i}.pt")
                 self.logger.trace_nans(len_crop)
-                torch.save(len_crop, f"{self.config.paths.artefacts}/NaNs/len_crop-{fname}-{i}.pt")
                 self.logger.trace_nans(content_pitch_input)
-                torch.save(content_pitch_input, f"{self.config.paths.artefacts}/NaNs/content_pitch_input-{fname}-{i}.pt")
                 self.logger.trace_nans(spmel_output)
-                torch.save(spmel_output, f"{self.config.paths.artefacts}/NaNs/spmel_output-{fname}-{i}.pt")
 
                 if self.return_latents:
                     self.logger.trace_nans(code_exp_1)
-                    torch.save(code_exp_1, f"{self.config.paths.artefacts}/NaNs/code_exp_1-{fname}-{i}.pt")
                     self.logger.trace_nans(code_exp_2)
-                    torch.save(code_exp_2, f"{self.config.paths.artefacts}/NaNs/code_exp_2-{fname}-{i}.pt")
                     self.logger.trace_nans(code_exp_3)
-                    torch.save(code_exp_3, f"{self.config.paths.artefacts}/NaNs/code_exp_3-{fname}-{i}.pt")
                     self.logger.trace_nans(code_exp_4)
-                    torch.save(code_exp_4, f"{self.config.paths.artefacts}/NaNs/code_exp_4-{fname}-{i}.pt")
 
                 self.logger.error("Step has NaN loss")
                 self.logger.error(f"filename: {fname}")
+                # fmt: on
 
             self.writer.add_scalar(
                 f"{self.experiment}/{self.model_type}/train_loss_id",

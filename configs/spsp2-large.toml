@@ -27,9 +27,9 @@ beta2 = 0.999
 
 [dataloader]
 batch_size = 1
-shuffle = true
+shuffle = false
 num_workers = 0
-samplier = 8
+samplier = 1
 
 [model]
 freq_1 = 1
