@@ -11,10 +11,11 @@ from data_preprocessing import MetaDictType
 from meta_dicts import NamedMetaDictType
 from model import Generator_3 as Generator
 from model import InterpLnr
+from synthesizers.parallelwavegan import \
+    ParallelWaveGanSynthesizer as Synthesizer
 from util.compute import Compute
 from util.logging import Logger
 from utils import quantize_f0_torch
-from parallelwavegan import Synthesizer
 
 
 class Swapper(object):
@@ -213,7 +214,6 @@ class Swapper(object):
         self.compute.set_gpu()
         self.device = self.compute.device()
         self.synthesizer = Synthesizer(self.device)
-        self.synthesizer.load_ckpt("full_models/lj_wavenet_vocoder.pth")
         [
             self.single_spmel_to_audio(file)  # type: ignore [func-returns-value]
             for file in iglob(

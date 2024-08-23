@@ -10,10 +10,10 @@ dataset_name = "uaspeech"
 device_id = 0
 trace = false
 return_latents = true
-regenerate_data = false
+regenerate_data = true
 log_step = 25
 train = true
-swap = true
+swap = false
 
 [log]
 level = "DEBUG"
@@ -28,7 +28,7 @@ beta2 = 0.999
 [dataloader]
 batch_size = 1
 shuffle = false
-num_workers = 0
+num_workers = 8
 samplier = 1
 
 [model]

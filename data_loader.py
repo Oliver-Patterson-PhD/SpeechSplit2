@@ -1,5 +1,5 @@
 import os
-from typing import List, Tuple
+from typing import Iterable, List, Tuple
 
 import torch
 from data_preprocessing import make_metadata
@@ -16,6 +16,40 @@ DataLoadItemType = Tuple[
         torch.Tensor,  # f0
     ],
     str,  # filepath
+]
+
+DataGetItemType = Tuple[
+    str,
+    str,
+    torch.Tensor,
+    str,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]
+
+CollaterInternalItemType = Tuple[
+    str,
+    str,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]
+
+CollaterItemType = Tuple[
+    List[str],
+    List[str],
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
 ]
 
 
@@ -75,7 +109,7 @@ class Utterances(torch.utils.data.Dataset):
             sbmt[2],
         )
 
-    def __getitem__(self, index: int):
+    def __getitem__(self, index: int) -> DataGetItemType:
         list_uttrs = self.dataset[index]
         spk_id_org: str = list_uttrs[0]
         emb_org: torch.Tensor = list_uttrs[1]
@@ -125,13 +159,13 @@ class Collator(object):
     def __init__(
         self,
         config: Config,
-    ):
+    ) -> None:
         self.min_len_seq = config.model.min_len_seq
         self.max_len_seq = config.model.max_len_seq
         self.max_len_pad = config.model.max_len_pad
 
-    def __call__(self, batch):
-        new_batch = []
+    def __call__(self, batch: Iterable[DataGetItemType]) -> CollaterItemType:
+        new_batch: List[CollaterInternalItemType] = []
         for token in batch:
 
             (
@@ -189,48 +223,51 @@ class Collator(object):
                 )
             )
 
-        batch = new_batch
+        secbatch = new_batch
         (
-            fname,
-            spk_id_org,
-            spmel_gt,
-            rhythm_input,
-            content_input,
-            pitch_input,
-            timbre_input,
-            len_crop,
-        ) = zip(*batch)
-        spk_id_org = list(spk_id_org)
-        spmel_gt = torch.stack(spmel_gt, axis=0).float()
-        rhythm_input = torch.stack(rhythm_input, axis=0).float()
-        content_input = torch.stack(content_input, axis=0).float()
-        pitch_input = torch.stack(pitch_input, axis=0).float()
-        timbre_input = torch.stack(timbre_input, axis=0).float()
-        len_crop = torch.stack(len_crop, axis=0).double()
+            it_fname,
+            it_spk_id_org,
+            it_spmel_gt,
+            it_rhythm_input,
+            it_content_input,
+            it_pitch_input,
+            it_timbre_input,
+            it_len_crop,
+        ) = zip(*secbatch)
+        out_fname: List[str] = list(it_fname)
+        out_spk_id_org: List[str] = list(it_spk_id_org)
+        out_spmel_gt = torch.stack(it_spmel_gt, dim=0).float()
+        out_rhythm_input = torch.stack(it_rhythm_input, dim=0).float()
+        out_content_input = torch.stack(it_content_input, dim=0).float()
+        out_pitch_input = torch.stack(it_pitch_input, dim=0).float()
+        out_timbre_input = torch.stack(it_timbre_input, dim=0).float()
+        out_len_crop = torch.stack(it_len_crop, dim=0).double()
 
         return (
-            fname,
-            spk_id_org,
-            spmel_gt.to("cpu"),
-            rhythm_input.to("cpu"),
-            content_input.to("cpu"),
-            pitch_input.to("cpu"),
-            timbre_input.to("cpu"),
-            len_crop.to("cpu"),
+            out_fname,
+            out_spk_id_org,
+            out_spmel_gt.to("cpu"),
+            out_rhythm_input.to("cpu"),
+            out_content_input.to("cpu"),
+            out_pitch_input.to("cpu"),
+            out_timbre_input.to("cpu"),
+            out_len_crop.to("cpu"),
         )
 
 
+## Samples elements more than once in a single pass through the data
 class MultiSampler(torch.utils.data.sampler.Sampler):
-    """Samples elements more than once in a single pass through the data."""
-
-    def __init__(self, num_samples, n_repeats, shuffle=False) -> None:
+    def __init__(
+        self,
+        num_samples: int,
+        n_repeats: int,
+        shuffle: bool = False,
+    ) -> None:
         self.num_samples = num_samples
         self.n_repeats = n_repeats
         self.shuffle = shuffle
 
-    def gen_sample_array(
-        self,
-    ) -> torch.Tensor:
+    def gen_sample_array(self) -> torch.Tensor:
         self.sample_idx_array = torch.arange(
             self.num_samples,
             dtype=torch.int64,
@@ -246,7 +283,7 @@ class MultiSampler(torch.utils.data.sampler.Sampler):
     def __iter__(self):
         return iter(self.gen_sample_array())
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.sample_idx_array)
 
 
@@ -256,11 +293,11 @@ def worker_init_fn(x):
     )
 
 
+## Build and return a data loader list
 def get_loader(
     config: Config,
     singleitem: bool = False,
 ) -> torch.utils.data.DataLoader:
-    """Build and return a data loader list."""
     dataset = Utterances(config)
     collator = Collator(config)
     sampler: torch.utils.data.sampler.Sampler

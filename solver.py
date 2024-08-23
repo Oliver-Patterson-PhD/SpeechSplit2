@@ -3,6 +3,7 @@ import math
 import os
 import time
 from collections import OrderedDict
+from typing import Any, Iterable
 
 import torch
 from data_loader import get_loader
@@ -10,6 +11,7 @@ from model import Generator_3 as Generator
 from model import InterpLnr
 from torch.utils.tensorboard import SummaryWriter
 from util.compute import Compute
+from util.config import Config
 from util.logging import Logger
 from utils import is_nan, quantize_f0_torch
 
@@ -17,7 +19,7 @@ from utils import is_nan, quantize_f0_torch
 class Solver(object):
     """Solver for training"""
 
-    def __init__(self, config):
+    def __init__(self, config: Config) -> None:
         self.logger = Logger()
 
         # Step configuration
@@ -61,13 +63,13 @@ class Solver(object):
         self.writer_pref = f"{self.experiment}/{self.model_type}"
         self.writer = SummaryWriter(log_dir=f"tensorboard/{self.writer_pref}")
 
-    def build_model(self):
+    def build_model(self) -> None:
         self.model = Generator(self.config)
         # Print out the network information.
         num_params = 0
         for p in self.model.parameters():
             num_params += p.numel()
-        self.logger.info(self.model)
+        self.logger.info(str(self.model))
         self.logger.info(self.model_type)
         self.logger.info("The number of parameters: {}".format(num_params))
         self.model.to(self.device)
@@ -76,12 +78,12 @@ class Solver(object):
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
             self.lr,
-            [self.beta1, self.beta2],
+            (self.beta1, self.beta2),
             weight_decay=1e-6,
         )
         self.Interp.to(self.device)
 
-    def restore_model(self, resume_iters):
+    def restore_model(self, resume_iters: int) -> None:
         self.logger.info(f"Loading the trained models from step {resume_iters}...")
         ckpt_name = "{}-{}-{}-{}.ckpt".format(
             self.experiment,
@@ -157,7 +159,7 @@ class Solver(object):
         )
         return content_pitch_input_intrp_2
 
-    def train(self):
+    def train(self) -> None:
         # Start training from scratch or resume training.
         nantrace = True
         start_iters = 0
@@ -166,7 +168,7 @@ class Solver(object):
             start_iters = self.resume_iters
             self.num_iters += self.resume_iters
             self.restore_model(self.resume_iters)
-            self.logger.info(self.optimizer)
+            self.logger.info(str(self.optimizer))
             self.logger.info("optimizer")
 
         # Learning rate cache for decaying.
@@ -177,20 +179,34 @@ class Solver(object):
         self.logger.info("Start training...")
         self.start_time = time.time()
         self.model = self.model.train()
+        loopthrough: Iterable[Any]
         if __debug__ and nantrace:
             self.num_iters = len(self.data_loader)
             loopthrough = enumerate(self.data_loader)
         else:
             loopthrough = range(start_iters, self.num_iters)
-        # for i in range(start_iters, self.num_iters):
 
         for li in loopthrough:
+            i: int
+            fname: str
+            spk_id_org: str
+            spmel_gt: torch.Tensor
+            rhythm_input: torch.Tensor
+            content_input: torch.Tensor
+            pitch_input: torch.Tensor
+            timbre_input: torch.Tensor
+            len_crop: torch.Tensor
+            spmel_output: torch.Tensor
+            code_exp_1: torch.Tensor
+            code_exp_2: torch.Tensor
+            code_exp_3: torch.Tensor
+            code_exp_4: torch.Tensor
 
             # =============================================================== #
             #                   1. Load input data                            #
             # =============================================================== #
             if __debug__ and nantrace:
-                i, batch = li
+                i, batch = li  # type: ignore [misc]
                 (
                     fname,
                     spk_id_org,
@@ -200,9 +216,9 @@ class Solver(object):
                     pitch_input,
                     timbre_input,
                     len_crop,
-                ) = batch
+                ) = batch  # type: ignore [has-type]
             else:
-                i = li
+                i = li  # type: ignore [assignment]
                 # Load data
                 try:
                     (
@@ -267,15 +283,17 @@ class Solver(object):
                     timbre_input,
                 )
 
-            loss_id = torch.torch.nn.functional.mse_loss(spmel_output, spmel_gt)
+            loss_id: torch.Tensor = torch.torch.nn.functional.mse_loss(
+                spmel_output, spmel_gt
+            )
 
             # Backward and optimize.
-            loss = loss_id
+            loss: torch.Tensor = loss_id
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
             # Logging.
-            train_loss_id = loss_id.item()
+            train_loss_id: float = loss_id.item()
 
             if __debug__ and (is_nan(loss_id) or math.isnan(train_loss_id)):
                 # fmt: off
@@ -284,9 +302,9 @@ class Solver(object):
                 self.logger.trace_nans(loss)
                 self.logger.trace_nans(loss_id)
 
-                self.logger.trace_nans(train_loss_id)
                 self.logger.trace_nans(spmel_gt)
                 self.logger.trace_nans(spmel_output)
+                self.logger.trace_var(train_loss_id)
 
                 self.logger.trace_var(spmel_gt)
                 self.logger.trace_var(spmel_output)
