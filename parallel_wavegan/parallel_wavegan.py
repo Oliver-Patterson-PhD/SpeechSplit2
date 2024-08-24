@@ -108,7 +108,7 @@ class ParallelWaveGANGenerator(torch.nn.Module):
                     )
                 self.upsample_net = ConvInUpsampleNetwork(**upsample_params)
             self.upsample_factor = math.floor(
-                torch.prod(upsample_params["upsample_scales"]).item()
+                torch.prod(torch.tensor(upsample_params["upsample_scales"])).item()
             )
         else:
             self.upsample_net = None

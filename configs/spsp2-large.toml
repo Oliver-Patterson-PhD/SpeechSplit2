@@ -1,19 +1,20 @@
 [paths]
-artefacts = "tmp/artefacts"
+artefacts = "artefacts/tmp"
 proc_data = "/mnt/datasets/processed/SpeechSplit2"
 raw_data = "/mnt/datasets/raw"
+trained_models = "full_models"
 
 [options]
 bottleneck = "large"
 experiment = "tmp"
-dataset_name = "uaspeech"
+dataset_name = "smolspeech"
 device_id = 0
 trace = false
 return_latents = true
-regenerate_data = true
+regenerate_data = false
 log_step = 25
-train = true
-swap = false
+train = false
+swap = true
 
 [log]
 level = "DEBUG"
@@ -28,7 +29,7 @@ beta2 = 0.999
 [dataloader]
 batch_size = 1
 shuffle = false
-num_workers = 8
+num_workers = 16
 samplier = 1
 
 [model]

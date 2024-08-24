@@ -1,25 +1,30 @@
 import os
 from collections import OrderedDict
-from glob import iglob
+from glob import glob
 from itertools import product
-from typing import Tuple
+from typing import Self, Tuple
 
 import torch
 import torchaudio
-from data_loader import get_loader
+from data_loader import CollaterItemType, get_loader
 from data_preprocessing import MetaDictType
 from meta_dicts import NamedMetaDictType
 from model import Generator_3 as Generator
 from model import InterpLnr
-from synthesizers.parallelwavegan import \
-    ParallelWaveGanSynthesizer as Synthesizer
+from synthesizers.melgan import MelGanSynthesizer
+from synthesizers.parallelwavegan import ParallelWaveGanSynthesizer
+from synthesizers.synthesizer import Synthesizer
+from synthesizers.wavenet import WavenetSynthesizer
 from util.compute import Compute
+from util.config import Config
 from util.logging import Logger
-from utils import quantize_f0_torch
+from utils import quantize_f0_torch, save_tensor
 
 
 class Swapper(object):
-    def __init__(self, config):
+    synthesizer: Synthesizer
+
+    def __init__(self: Self, config: Config) -> None:
         self.logger = Logger()
         self.compute = Compute()
         self.return_latents = True
@@ -38,13 +43,13 @@ class Swapper(object):
             "code_exp_4",
         ]
 
-    def build_model(self):
+    def build_model(self: Self) -> None:
         self.model = Generator(self.config)
         # Print out the network information.
         num_params = 0
         for p in self.model.parameters():
             num_params += p.numel()
-        self.logger.info(self.model)
+        self.logger.info(str(self.model))
         self.logger.info(self.model_type)
         self.logger.info("The number of parameters: {}".format(num_params))
         self.model.to(self.device)
@@ -52,16 +57,15 @@ class Swapper(object):
         self.Interp = InterpLnr(self.config)
         self.Interp.to(self.device)
 
-    def restore_model(self):
-        ckpt_name = "{}-{}-{}-{}.ckpt".format(
+    def restore_model(self: Self) -> None:
+        ckpt_name = "{}-{}-{}.ckpt".format(
             self.config.options.experiment,
             self.config.options.bottleneck,
             self.model_type,
-            self.config.options.resume_iters,
         )
         self.logger.info(f"Loading model {ckpt_name}")
         ckpt = torch.load(
-            os.path.join(self.config.paths.models, ckpt_name),
+            os.path.join(self.config.paths.trained_models, ckpt_name),
             map_location=lambda storage, loc: storage,
             weights_only=True,
         )
@@ -75,7 +79,7 @@ class Swapper(object):
 
     @torch.no_grad()
     def prepare_input(
-        self,
+        self: Self,
         content_input: torch.Tensor,
         pitch_input: torch.Tensor,
         len_crop: torch.Tensor,
@@ -97,14 +101,14 @@ class Swapper(object):
         return content_pitch_input_intrp_2
 
     @torch.no_grad()
-    def save_latents(self) -> None:
+    def save_latents(self: Self) -> None:
         if os.path.exists(f"{self.config.paths.latents}/{self.latents[0]}"):
             return
         self.data_loader = get_loader(config=self.config, singleitem=True)
         [self.save_single_latent(batch) for batch in self.data_loader]  # type: ignore [func-returns-value]
 
     @torch.no_grad()
-    def save_single_latent(self, batch) -> None:
+    def save_single_latent(self: Self, batch: CollaterItemType) -> None:
         (
             fname,
             spk_id_org,
@@ -149,10 +153,11 @@ class Swapper(object):
         for latent in self.latents:
             latentfile = f"{self.config.paths.latents}/{latent}/{main_name}"
             os.makedirs(os.path.dirname(latentfile), exist_ok=True)
+            save_tensor(eval(latent), f"{latentfile}.png")
             torch.save(eval(latent), latentfile)
 
     @torch.no_grad()
-    def swap_latents(self) -> None:
+    def swap_latents(self: Self) -> None:
         if os.path.exists(f"{self.config.paths.latents}/out_spec"):
             return
 
@@ -177,7 +182,7 @@ class Swapper(object):
 
     @torch.no_grad()
     def swap_single_latent(
-        self,
+        self: Self,
         uttr: str,
         dys: str,
         con: str,
@@ -208,28 +213,38 @@ class Swapper(object):
         )
         os.makedirs(os.path.dirname(code_file), exist_ok=True)
         torch.save(code_spec, code_file)
+        spec_file = code_file.replace("out_spec", "out_imag").replace(".pt", ".png")
+        os.makedirs(os.path.dirname(spec_file), exist_ok=True)
+        save_tensor(code_spec, spec_file)
 
     @torch.no_grad()
-    def save_audios(self) -> None:
+    def save_audios(self: Self) -> None:
         self.compute.set_gpu()
         self.device = self.compute.device()
-        self.synthesizer = Synthesizer(self.device)
-        [
-            self.single_spmel_to_audio(file)  # type: ignore [func-returns-value]
-            for file in iglob(
-                f"{self.config.paths.latents}/out_spec/**/*.pt",
-                recursive=True,
-            )
-        ]
+        filelist = glob(
+            f"{self.config.paths.latents}/out_spec/**/*.pt",
+            recursive=True,
+        )
+        self.synthesizer = MelGanSynthesizer(self.device, config=self.config)
+        [self.single_spmel_to_audio(file, "melgan") for file in filelist]
+
+        self.synthesizer = ParallelWaveGanSynthesizer(self.device, config=self.config)
+        [self.single_spmel_to_audio(file, "parallelwavegan") for file in filelist]
+
+        self.synthesizer = WavenetSynthesizer(self.device, config=self.config)
+        [self.single_spmel_to_audio(file, "wavenet") for file in filelist]
+
         return
 
     @torch.no_grad()
-    def single_spmel_to_audio(self, file: str) -> None:
-        self.logger.debug(f"file: {file}")
-        outfile = file.replace("out_spec", "out_wav").replace(".pt", ".wav")
+    def single_spmel_to_audio(self: Self, file: str, name: str) -> None:
+        outfile = file.replace("out_spec", f"out_wav_{name}").replace(".pt", ".wav")
+        self.logger.debug(f"Creating Audio: {outfile}")
         os.makedirs(os.path.dirname(outfile), exist_ok=True)
-        wav = self.synthesizer.spect2wav(torch.load(file, weights_only=True).squeeze())
-        torchaudio.save(outfile, wav, sample_rate=16000, backend="soundfile")
+        spec = torch.load(file, weights_only=True).squeeze()
+        wav = self.synthesizer.spect2wav(spec)
+        wav = wav.unsqueeze(dim=0)
+        torchaudio.save(outfile, wav.cpu(), sample_rate=16000, backend="sox")
 
 
 def get_valid(

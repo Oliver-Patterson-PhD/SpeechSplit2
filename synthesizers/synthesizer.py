@@ -1,34 +1,34 @@
 from tomllib import load as loadtoml
-from typing import Optional
 
 import torch
+from util.config import Config
 
 
 class Synthesizer(object):
     device: torch.device
     model: torch.nn.Module
-    checkpoint_path: str = "full_models/ParallelWaveGan"
+    checkpoint_path: str
     model_name: str
+    config: Config
 
     def __init__(
         self,
         device: torch.device,
         model: type,
         model_name: str,
-        checkpoint_path: Optional[str] = None,
+        config: Config,
     ) -> None:
         self.device = device
         self.model_name = model_name
-        if checkpoint_path is not None:
-            self.checkpoint_path = checkpoint_path
-        config_file = f"{self.checkpoint_path}/{self.model_name}.toml"
-        pickle_file = f"{self.checkpoint_path}/{self.model_name}.pkl"
+        self.config = config
+        config_file = f"{self.config.paths.trained_models}/{self.model_name}.toml"
+        pickle_file = f"{self.config.paths.trained_models}/{self.model_name}.pkl"
 
-        config = loadtoml(open(config_file, "rb"))
+        tomlconfig = loadtoml(open(config_file, "rb"))
         state_dict = torch.load(pickle_file, map_location="cpu")
         model_params = {
             k.replace("upsample_kernal_sizes", "upsample_kernel_sizes"): v
-            for k, v in config["generator_params"].items()
+            for k, v in tomlconfig["generator_params"].items()
         }
 
         self.model = model(**model_params)
@@ -38,5 +38,5 @@ class Synthesizer(object):
     @torch.no_grad()
     def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
         self.model.eval()
-        outwav = self.model.inference(c=spect).view(-1)
+        outwav = self.model.inference(c=spect.to(self.device)).view(-1)
         return outwav

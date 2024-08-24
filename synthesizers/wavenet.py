@@ -1,9 +1,10 @@
 from tomllib import load as loadtoml
 
 import torch
+from synthesizers.synthesizer import Synthesizer
 from tqdm import tqdm
+from util.config import Config
 from wavenet_vocoder import builder
-from synthesizer.synthesizer import Synthesizer
 
 
 class WavenetSynthesizer(Synthesizer):
@@ -11,29 +12,33 @@ class WavenetSynthesizer(Synthesizer):
     model: torch.nn.Module
     model_name: str = "lj_wavenet_vocoder"
     checkpoint_path: str = "full_models"
-    config: dict
+    configtoml: dict
+    config: Config
 
-    def __init__(self, device: torch.device) -> None:
+    def __init__(self, device: torch.device, config: Config) -> None:
         config_file = f"{self.checkpoint_path}/{self.model_name}.toml"
-        self.config = loadtoml(open(config_file, "rb"))
+        self.configtoml = loadtoml(open(config_file, "rb"))
+        self.config = config
         self.model = getattr(builder, "wavenet")(
-            out_channels=self.config["out_channels"],
-            layers=self.config["layers"],
-            stacks=self.config["stacks"],
-            residual_channels=self.config["residual_channels"],
-            gate_channels=self.config["gate_channels"],
-            skip_out_channels=self.config["skip_out_channels"],
-            cin_channels=self.config["cin_channels"],
-            gin_channels=self.config["gin_channels"],
-            weight_normalization=self.config["weight_normalization"],
-            n_speakers=self.config["n_speakers"],
-            dropout=self.config["dropout"],
-            kernel_size=self.config["kernel_size"],
-            upsample_conditional_features=self.config["upsample_conditional_features"],
-            upsample_scales=self.config["upsample_scales"],
-            freq_axis_kernel_size=self.config["freq_axis_kernel_size"],
+            out_channels=self.configtoml["out_channels"],
+            layers=self.configtoml["layers"],
+            stacks=self.configtoml["stacks"],
+            residual_channels=self.configtoml["residual_channels"],
+            gate_channels=self.configtoml["gate_channels"],
+            skip_out_channels=self.configtoml["skip_out_channels"],
+            cin_channels=self.configtoml["cin_channels"],
+            gin_channels=self.configtoml["gin_channels"],
+            weight_normalization=self.configtoml["weight_normalization"],
+            n_speakers=self.configtoml["n_speakers"],
+            dropout=self.configtoml["dropout"],
+            kernel_size=self.configtoml["kernel_size"],
+            upsample_conditional_features=self.configtoml[
+                "upsample_conditional_features"
+            ],
+            upsample_scales=self.configtoml["upsample_scales"],
+            freq_axis_kernel_size=self.configtoml["freq_axis_kernel_size"],
             scalar_input=True,
-            legacy=self.config["legacy"],
+            legacy=True,
         )
         self.device = device
         ckpt = torch.load(
@@ -44,16 +49,17 @@ class WavenetSynthesizer(Synthesizer):
         self.model = self.model.to(self.device)
 
     @torch.no_grad()
-    def spect2wav(self, c: torch.Tensor) -> None:
+    def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
         self.model.eval()
         self.model.make_generation_fast_()
-        return self.model.incremental_forward(
+        model_out = self.model.incremental_forward(
             torch.zeros(1, 1, 1).fill_(0.0).to(self.device),
-            c=torch.FloatTensor(c.T).unsqueeze(0).to(self.device),
+            c=spect.T.to(dtype=torch.float).unsqueeze(0).to(self.device),
             g=None,
-            T=c.shape[0] * self.config["hop_size"],
+            T=spect.shape[0] * self.configtoml["hop_size"],
             tqdm=tqdm,
             softmax=True,
             quantize=True,
-            log_scale_min=self.config["log_scale_min"],
-        ).view(-1)
+            log_scale_min=self.configtoml["log_scale_min"],
+        )
+        return model_out.view(-1)

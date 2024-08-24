@@ -3,6 +3,7 @@ from typing import Iterable, List, Optional, Tuple
 import pyworld
 import torch
 import torchaudio
+import torchvision
 from pysptk.sptk import rapt
 from util.logging import Logger
 
@@ -321,3 +322,28 @@ def clip(
     x[x > max] = max
     x[x < min] = min
     return x
+
+
+def save_tensor(tensor: torch.Tensor, save_path: str) -> None:
+    image = try_image(tensor)
+    if image is not None:
+        im_min = image.min()
+        im_max = image.max()
+        norm_image = 1.0 / (im_max - im_min) * image + 1.0 * im_min / (im_min - im_max)
+        torchvision.utils.save_image(norm_image, save_path)
+    else:
+        torch.save(tensor, save_path.rsplit(",", 1)[0] + ".pth")
+    return
+
+
+def try_image(tensor: torch.Tensor) -> torch.Tensor | None:
+    if tensor is None:
+        return None
+    elif tensor.dim() == 2:
+        return tensor
+    elif tensor.dim() < 2:
+        return None
+    elif tensor.dim() > 2 and tensor.size(0) == 1:
+        for in_tensor in tensor:
+            return try_image(in_tensor)
+    return None

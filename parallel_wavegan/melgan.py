@@ -1,10 +1,10 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Self
 
 import torch
 
-from .causal_conv1d import CausalConv1d
-from .causal_conv_transpose1d import CausalConvTranspose1d
-from .residual_stack import ResidualStack
+from .layers.causal_conv1d import CausalConv1d
+from .layers.causal_conv_transpose1d import CausalConvTranspose1d
+from .layers.residual_stack import ResidualStack
 
 
 class MelGANGenerator(torch.nn.Module):
@@ -27,7 +27,7 @@ class MelGANGenerator(torch.nn.Module):
     # @param use_weight_norm                 Whether to use weight norm. (applied to all of the conv layers.)
     # @param use_causal_conv                 Whether to use causal convolution.
     def __init__(
-        self,
+        self: Self,
         in_channels: int = 80,
         out_channels: int = 1,
         kernel_size: int = 7,
@@ -156,11 +156,11 @@ class MelGANGenerator(torch.nn.Module):
     ## Calculate forward propagation.
     # @param c Input tensor (B, channels, T).
     # @return Output tensor (B, 1, T ** prod(upsample_scales)).
-    def forward(self, c: torch.Tensor) -> torch.Tensor:
+    def forward(self: Self, c: torch.Tensor) -> torch.Tensor:
         return self.melgan(c)
 
     ## Reset parameters.
-    def reset_parameters(self):
+    def reset_parameters(self: Self) -> None:
 
         def _reset_parameters(m):
             if isinstance(m, torch.nn.Conv1d) or isinstance(
@@ -175,7 +175,7 @@ class MelGANGenerator(torch.nn.Module):
     # @param normalize_before  Whether to perform normalization.
     # @return Output tensor (T ** prod(upsample_scales), out_channels).
     def inference(
-        self,
+        self: Self,
         c: torch.Tensor,
         normalize_before: bool = False,
     ) -> torch.Tensor:
@@ -187,3 +187,14 @@ class MelGANGenerator(torch.nn.Module):
         if self.pqmf is not None:
             c = self.pqmf.synthesis(c)
         return c.squeeze(0).transpose(1, 0)
+
+    def apply_weight_norm(self):
+        """Apply weight normalization module from all of the layers."""
+
+        def _apply_weight_norm(m):
+            if isinstance(m, torch.nn.Conv1d) or isinstance(
+                m, torch.nn.ConvTranspose1d
+            ):
+                torch.nn.utils.weight_norm(m)
+
+        self.apply(_apply_weight_norm)
