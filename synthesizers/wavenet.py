@@ -10,7 +10,7 @@ from wavenet_vocoder import builder
 class WavenetSynthesizer(Synthesizer):
     device: torch.device
     model: torch.nn.Module
-    model_name: str = "lj_wavenet_vocoder"
+    model_name: str = "wavenet_vocoder-lj"
     checkpoint_path: str = "full_models"
     configtoml: dict
     config: Config

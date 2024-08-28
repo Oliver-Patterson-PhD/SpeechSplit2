@@ -9,6 +9,6 @@ class MelGanSynthesizer(Synthesizer):
         super().__init__(
             device=device,
             model=MelGANGenerator,
-            model_name="lj_melgan-4M",
+            model_name="melgan-lj-4M",
             config=config,
         )

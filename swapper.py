@@ -23,12 +23,15 @@ from utils import quantize_f0_torch, save_tensor
 
 class Swapper(object):
     synthesizer: Synthesizer
+    use_synth_melgan: bool = True
+    use_synth_parallelwavegan: bool = True
+    use_synth_wavenet: bool = True
 
     def __init__(self: Self, config: Config) -> None:
         self.logger = Logger()
         self.compute = Compute()
         self.return_latents = True
-        self.model_type = "G"
+        self.model_type = "SpeechSplit2"
         self.config = config
         self.compute.print_compute()
         self.compute.set_gpu()
@@ -225,14 +228,17 @@ class Swapper(object):
             f"{self.config.paths.latents}/out_spec/**/*.pt",
             recursive=True,
         )
-        self.synthesizer = MelGanSynthesizer(self.device, config=self.config)
-        [self.single_spmel_to_audio(file, "melgan") for file in filelist]
+        if self.use_synth_melgan:
+            self.synthesizer = MelGanSynthesizer(self.device, config=self.config)
+            [self.single_spmel_to_audio(file, "melgan") for file in filelist]
 
-        self.synthesizer = ParallelWaveGanSynthesizer(self.device, config=self.config)
-        [self.single_spmel_to_audio(file, "parallelwavegan") for file in filelist]
+        if self.use_synth_parallelwavegan:
+            self.synthesizer = ParallelWaveGanSynthesizer(self.device, config=self.config)
+            [self.single_spmel_to_audio(file, "parallelwavegan") for file in filelist]
 
-        self.synthesizer = WavenetSynthesizer(self.device, config=self.config)
-        [self.single_spmel_to_audio(file, "wavenet") for file in filelist]
+        if self.use_synth_wavenet:
+            self.synthesizer = WavenetSynthesizer(self.device, config=self.config)
+            [self.single_spmel_to_audio(file, "wavenet") for file in filelist]
 
         return
 

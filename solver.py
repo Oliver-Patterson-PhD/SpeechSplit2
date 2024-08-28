@@ -1,19 +1,18 @@
 import datetime
-import math
 import os
 import time
 from collections import OrderedDict
-from typing import Any, Iterable
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
+
 from data_loader import get_loader
 from model import Generator_3 as Generator
 from model import InterpLnr
-from torch.utils.tensorboard import SummaryWriter
 from util.compute import Compute
 from util.config import Config
 from util.logging import Logger
-from utils import is_nan, quantize_f0_torch
+from utils import quantize_f0_torch
 
 
 class Solver(object):
@@ -42,7 +41,7 @@ class Solver(object):
         self.beta2 = self.config.training.beta2
         self.experiment = self.config.options.experiment
         self.bottleneck = self.config.options.bottleneck
-        self.model_type = "G"
+        self.model_type = "SpeechSplit2"
 
         compute = Compute()
         compute.print_compute()
@@ -161,7 +160,6 @@ class Solver(object):
 
     def train(self) -> None:
         # Start training from scratch or resume training.
-        nantrace = True
         start_iters = 0
         if self.resume_iters:
             self.logger.info("Resuming ...")
@@ -179,15 +177,8 @@ class Solver(object):
         self.logger.info("Start training...")
         self.start_time = time.time()
         self.model = self.model.train()
-        loopthrough: Iterable[Any]
-        if __debug__ and nantrace:
-            self.num_iters = len(self.data_loader)
-            loopthrough = enumerate(self.data_loader)
-        else:
-            loopthrough = range(start_iters, self.num_iters)
 
-        for li in loopthrough:
-            i: int
+        for i in range(start_iters, self.num_iters):
             fname: str
             spk_id_org: str
             spmel_gt: torch.Tensor
@@ -205,8 +196,8 @@ class Solver(object):
             # =============================================================== #
             #                   1. Load input data                            #
             # =============================================================== #
-            if __debug__ and nantrace:
-                i, batch = li  # type: ignore [misc]
+            # Load data
+            try:
                 (
                     fname,
                     spk_id_org,
@@ -216,33 +207,23 @@ class Solver(object):
                     pitch_input,
                     timbre_input,
                     len_crop,
-                ) = batch  # type: ignore [has-type]
-            else:
-                i = li  # type: ignore [assignment]
-                # Load data
-                try:
-                    (
-                        fname,
-                        spk_id_org,
-                        spmel_gt,
-                        rhythm_input,
-                        content_input,
-                        pitch_input,
-                        timbre_input,
-                        len_crop,
-                    ) = next(self.data_iter)
-                except StopIteration:
-                    self.data_iter = iter(self.data_loader)
-                    (
-                        fname,
-                        spk_id_org,
-                        spmel_gt,
-                        rhythm_input,
-                        content_input,
-                        pitch_input,
-                        timbre_input,
-                        len_crop,
-                    ) = next(self.data_iter)
+                ) = next(self.data_iter)
+
+            except StopIteration:
+                self.data_iter = iter(self.data_loader)
+                (
+                    fname,
+                    spk_id_org,
+                    spmel_gt,
+                    rhythm_input,
+                    content_input,
+                    pitch_input,
+                    timbre_input,
+                    len_crop,
+                ) = next(self.data_iter)
+
+            except AssertionError:
+                continue
 
             # =============================================================== #
             #                   2. Train the model                            #
@@ -295,34 +276,34 @@ class Solver(object):
             # Logging.
             train_loss_id: float = loss_id.item()
 
-            if __debug__ and (is_nan(loss_id) or math.isnan(train_loss_id)):
+            if __debug__:
                 # fmt: off
                 self.log_training_step(i + 1, train_loss_id)
 
-                self.logger.trace_nans(loss)
-                self.logger.trace_nans(loss_id)
+                self.logger.log_if_nan(loss)
+                self.logger.log_if_nan(loss_id)
 
-                self.logger.trace_nans(spmel_gt)
-                self.logger.trace_nans(spmel_output)
+                self.logger.log_if_nan(spmel_gt)
+                self.logger.log_if_nan(spmel_output)
                 self.logger.trace_var(train_loss_id)
 
                 self.logger.trace_var(spmel_gt)
                 self.logger.trace_var(spmel_output)
 
-                self.logger.trace_nans(spmel_gt)
-                self.logger.trace_nans(rhythm_input)
-                self.logger.trace_nans(content_input)
-                self.logger.trace_nans(pitch_input)
-                self.logger.trace_nans(timbre_input)
-                self.logger.trace_nans(len_crop)
-                self.logger.trace_nans(content_pitch_input)
-                self.logger.trace_nans(spmel_output)
+                self.logger.log_if_nan(spmel_gt)
+                self.logger.log_if_nan(rhythm_input)
+                self.logger.log_if_nan(content_input)
+                self.logger.log_if_nan(pitch_input)
+                self.logger.log_if_nan(timbre_input)
+                self.logger.log_if_nan(len_crop)
+                self.logger.log_if_nan(content_pitch_input)
+                self.logger.log_if_nan(spmel_output)
 
                 if self.return_latents:
-                    self.logger.trace_nans(code_exp_1)
-                    self.logger.trace_nans(code_exp_2)
-                    self.logger.trace_nans(code_exp_3)
-                    self.logger.trace_nans(code_exp_4)
+                    self.logger.log_if_nan(code_exp_1)
+                    self.logger.log_if_nan(code_exp_2)
+                    self.logger.log_if_nan(code_exp_3)
+                    self.logger.log_if_nan(code_exp_4)
 
                 self.logger.error("Step has NaN loss")
                 self.logger.error(f"filename: {fname}")

@@ -2,10 +2,11 @@ import os
 from typing import Iterable, List, Tuple
 
 import torch
+
 from data_preprocessing import make_metadata
 from util.config import Config
 from util.logging import Logger
-from utils import any_nans, clip, get_spenv, get_spmel, vtlp
+from utils import clip, get_spenv, get_spmel, is_nan, vtlp
 
 DataLoadItemType = Tuple[
     str,  # spk_dir
@@ -73,7 +74,7 @@ class Utterances(torch.utils.data.Dataset):
         self.f0_dir = config.paths.freqs
         self.experiment = config.options.experiment
         self.dataset_name = config.options.dataset_name
-        self.model_type = "G"
+        self.model_type = "SpeechSplit2"
         meta_file = os.path.join(self.feat_dir, "metadata.pkl")
         if os.path.exists(meta_file):
             os.remove(meta_file)
@@ -99,9 +100,9 @@ class Utterances(torch.utils.data.Dataset):
             os.path.join(self.f0_dir, sbmt[2]),
             weights_only=True,
         )
-        assert not wav_mono.isnan().any().item(), f"wav has NaNs: {sbmt[2]}"
-        assert not spmel.isnan().any().item(), f"spmel has NaNs: {sbmt[2]}"
-        assert not f0.isnan().any().item(), f"f0 has NaNs: {sbmt[2]}"
+        assert not is_nan(wav_mono), f"wav has NaNs: {sbmt[2]}"
+        assert not is_nan(spmel), f"spmel has NaNs: {sbmt[2]}"
+        assert not is_nan(f0), f"f0 has NaNs: {sbmt[2]}"
         return (
             sbmt[0],
             sbmt[1],
@@ -122,23 +123,12 @@ class Utterances(torch.utils.data.Dataset):
         perturbed_wav_mono: torch.Tensor = vtlp(wav_mono, 16000, alpha)
         spenv: torch.Tensor = get_spenv(perturbed_wav_mono)
         spmel_mono: torch.Tensor = get_spmel(perturbed_wav_mono)
-        if __debug__ and any_nans(
-            [
-                perturbed_wav_mono,
-                spmel,
-                spenv,
-                spmel_mono,
-                f0,
-                emb_org,
-            ]
-        ):
-            Logger().log_if_nan(perturbed_wav_mono)
-            Logger().log_if_nan(spmel)
-            Logger().log_if_nan(spenv)
-            Logger().log_if_nan(spmel_mono)
-            Logger().log_if_nan(f0)
-            Logger().log_if_nan(emb_org)
-            Logger().error(f"Dataset: {list_uttrs[0]}, {list_uttrs[3]}")
+        assert not is_nan(perturbed_wav_mono), f"{list_uttrs[3]} has NaNs"
+        assert not is_nan(spmel), f"{list_uttrs[3]} has NaNs"
+        assert not is_nan(spenv), f"{list_uttrs[3]} has NaNs"
+        assert not is_nan(spmel_mono), f"{list_uttrs[3]} has NaNs"
+        assert not is_nan(f0), f"{list_uttrs[3]} has NaNs"
+        assert not is_nan(emb_org), f"{list_uttrs[3]} has NaNs"
         return (
             list_uttrs[3],  # Filename
             dysarthric,  # Single char string D=Dysarthric, C=Control

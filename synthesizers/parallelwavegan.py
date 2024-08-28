@@ -9,6 +9,6 @@ class ParallelWaveGanSynthesizer(Synthesizer):
         super().__init__(
             device=device,
             model=ParallelWaveGANGenerator,
-            model_name="lj_parallelwavegan-3M",
+            model_name="parallelwavegan-lj-3M",
             config=config,
         )

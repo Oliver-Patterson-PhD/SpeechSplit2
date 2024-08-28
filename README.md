@@ -56,15 +56,3 @@ To generate features, run
 python main.py --stage 0
 ```
 By default, all generated features are saved in the `feat` directory.
-
-### 3. Train the model
-To train a model from scratch, run
-```
-python main.py --stage 1 --config_name spsp2-large --model_type G
-```
-To finetune a pretrained model(make sure all pretrained models are downloaded into `models`), run
-```
-python main.py --stage 1 --config_name spsp2-large --model_type G --resume_iters 800000
-```
-If you want to train the variant with smaller bottleneck, replace `spsp2-large` with `spsp2-small`.
-If you want to train the pitch converter, replace `G` with `F`.

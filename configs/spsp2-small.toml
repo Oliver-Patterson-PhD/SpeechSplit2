@@ -33,11 +33,11 @@ num_workers = 16
 samplier = 1
 
 [model]
-freq_1 = 8
-freq_2 = 8
-freq_3 = 8
-dim_neck_1 = 8
-dim_neck_2 = 1
+freq_1 = 1
+freq_2 = 1
+freq_3 = 1
+dim_neck_1 = 32
+dim_neck_2 = 32
 dim_neck_3 = 32
 dim_enc = 512
 dim_enc_2 = 128
