@@ -3,9 +3,10 @@
 #
 
 from datetime import datetime
+from enum import Flag, auto
 from os import path
 from tomllib import load as loadtoml
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from util.logging import Logger, LogLevel
 from util.patterns import Singleton
@@ -48,7 +49,7 @@ class ConfigModel:
     dim_enc_3: int = 256
     dim_f0: int = 257
     dim_freq: int = 80
-    dim_neck: int = 32
+    dim_neck_1: int = 32
     dim_neck_2: int = 32
     dim_neck_3: int = 32
     dim_pit: int = 257
@@ -74,14 +75,24 @@ class ConfigLogging:
     file: Optional[str] = None
 
 
+class RunTests(Flag):
+    NOTHING = 0
+    TRAIN = auto()
+    SAVE_LATENTS = auto()
+    SWAP_LATENTS = auto()
+    SAVE_AUDIOS = auto()
+
+
 class ConfigOptions:
     bottleneck: str = "large"
+    model_type: str = "SpeechSplit2"
+    ntfy_url: str
     experiment: str
     dataset_name: str
     return_latents: bool = False
     trace: bool = False
     train: bool = True
-    swap: bool = True
+    run_tests: RunTests = RunTests.NOTHING
     regenerate_data: bool = False
     device_id: int = 0
     num_iters: int = 800000
@@ -190,12 +201,28 @@ class Config(metaclass=Singleton):
             case "options":
                 if not subdict.keys() >= {"dataset_name"}:
                     Logger().fatal("Could not find options.dataset_name in config")
+                if "run_tests" in subdict.keys():
+                    subdict["run_tests"] = self.__set_runtypes(subdict["run_tests"])
                 self.options.__dict__.update(subdict)
                 if not subdict.keys() >= {"experiment"}:
                     self.options.experiment = self.current_time
             case _:
                 self.__dict__.update(subdict)
         return
+
+    def __set_runtypes(self, runtype_list: List[str]) -> RunTests:
+        runtype = RunTests.NOTHING
+        for runtype_str in runtype_list:
+            runtype_str = runtype_str.upper().strip()
+            try:
+                runtype |= RunTests[runtype_str]
+            except Exception as e:
+                Logger().fatal(
+                    f"Invalid options.run_tests value in config: {runtype_str}\n"
+                    f"Options: {[str(test) for test in RunTests]}\n"
+                    f"Exception: {e}"
+                )
+        return runtype
 
     def __fill_nulls(self) -> None:
         self.__set_dataset_paths()

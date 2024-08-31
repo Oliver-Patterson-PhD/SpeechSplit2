@@ -14,7 +14,8 @@ return_latents = true
 regenerate_data = false
 log_step = 25
 train = false
-swap = true
+run_tests = ["train", "save_latents", "swap_latents", "save_audios"]
+ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
 
 [log]
 level = "DEBUG"
@@ -27,10 +28,10 @@ beta1 = 0.9
 beta2 = 0.999
 
 [dataloader]
-batch_size = 1
-shuffle = false
+batch_size = 16
+shuffle = true
 num_workers = 16
-samplier = 1
+samplier = 16
 
 [model]
 freq_1 = 8

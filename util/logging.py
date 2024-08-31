@@ -282,3 +282,20 @@ class Logger(metaclass=Singleton):
                 caller=self.__get_caller(),
                 message=f"{varname}: Has NaNs",
             )
+
+    def log_if_nan_ret(
+        self,
+        x: Tensor,
+        level: LogLevel = LogLevel.ERROR,
+    ) -> bool:
+        if self.__is_nan(x):
+            code = extract_stack()[-2][-1]
+            varname = code[code.find("log_if_nan(") + 11 : code.rfind(")")]
+            self.__log(
+                level=level,
+                caller=self.__get_caller(),
+                message=f"{varname}: Has NaNs",
+            )
+            return True
+        else:
+            return False

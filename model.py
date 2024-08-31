@@ -183,7 +183,7 @@ class Encoder_7(nn.Module):
         self.dim_neck = config.model.dim_neck_1
         self.freq = config.model.freq_1
         self.freq_3 = config.model.freq_3
-        self.dim_enc = config.model.dim_enc
+        self.dim_enc = config.model.dim_enc_1
         self.dim_enc_3 = config.model.dim_enc_3
         self.dim_con = config.model.dim_con
         self.dim_pit = config.model.dim_pit

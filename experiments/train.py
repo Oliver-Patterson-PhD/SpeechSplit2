@@ -1,121 +1,17 @@
-import datetime
-import os
 import time
-from collections import OrderedDict
+from typing import Self
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
 
-from data_loader import get_loader
-from model import Generator_3 as Generator
-from model import InterpLnr
-from util.compute import Compute
-from util.config import Config
+from experiments.experiment import Experiment
 from util.exception import NanError
-from util.logging import Logger
 from utils import quantize_f0_torch
 
 
 ## Solver for training
-class Solver(object):
-    logger = Logger()
-    compute = Compute()
-
-    def __init__(self, config: Config) -> None:
-        self.config = config
-
-        # Data loader.
-        self.data_loader = get_loader(config, singleitem=True)
-        self.data_iter = iter(self.data_loader)
-
-        self.compute.print_compute()
-        self.compute.set_gpu()
-        self.build_model()
-
-        # Logging
-        self.min_loss_step = 0
-        self.min_loss = float("inf")
-        self.writer_pref = "{}/{}".format(
-            self.config.options.experiment, self.config.options.model_type
-        )
-        self.writer = SummaryWriter(log_dir=f"tensorboard/{self.writer_pref}")
-
-    def build_model(self) -> None:
-        self.model = Generator(self.config)
-        self.intrp = InterpLnr(self.config)
-        # Print out the network information.
-        num_params = 0
-        for p in self.model.parameters():
-            num_params += p.numel()
-        self.model.to(self.compute.device())
-        self.intrp.to(self.compute.device())
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            self.config.training.lr,
-            (self.config.training.beta1, self.config.training.beta2),
-            weight_decay=1e-6,
-        )
-        self.logger.info(str(self.model))
-        self.logger.info(self.config.options.model_type)
-        self.logger.info("The number of parameters: {}".format(num_params))
-
-    def restore_model(self, resume_iters: int) -> None:
-        self.logger.info(f"Loading the trained models from step {resume_iters}...")
-        ckpt_name = "{}-{}-{}{}.ckpt".format(
-            self.config.options.experiment,
-            self.config.options.bottleneck,
-            self.config.options.model_type,
-            f"-{resume_iters}" if resume_iters > 0 else "",
-        )
-        ckpt = torch.load(
-            os.path.join(self.config.paths.models, ckpt_name),
-            map_location=lambda storage, loc: storage,
-            weights_only=True,
-        )
-        try:
-            self.model.load_state_dict(ckpt["model"])
-        except RuntimeError:
-            new_state_dict = OrderedDict()
-            for k, v in ckpt["model"].items():
-                new_state_dict[k[7:]] = v
-            self.model.load_state_dict(new_state_dict)
-        self.config.training.lr = self.optimizer.param_groups[0]["lr"]
-
-    def log_training_step(self, i: int, train_loss_id):
-        elapsed_time = str(
-            datetime.timedelta(
-                seconds=time.time() - self.start_time,
-            )
-        )[:-7]
-        self.logger.info(
-            "Elapsed [{}], Iteration [{}/{}], {}/train_loss_id: {:.8f}".format(
-                elapsed_time,
-                i,
-                self.config.options.num_iters,
-                self.config.options.model_type,
-                train_loss_id,
-            )
-        )
-
-    def save_checkpoint(self, i: int) -> None:
-        os.makedirs(self.config.paths.models, exist_ok=True)
-        ckpt_name = "{}-{}-{}-{}.ckpt".format(
-            self.config.options.experiment,
-            self.config.options.bottleneck,
-            self.config.options.model_type,
-            i,
-        )
-        torch.save(
-            {
-                "model": self.model.state_dict(),
-                "optimizer": self.optimizer.state_dict(),
-            },
-            os.path.join(self.config.paths.models, ckpt_name),
-        )
-        self.logger.info(f"Saving model checkpoint into {self.config.paths.models}...")
-
+class Train(Experiment):
     def prepare_input(
-        self,
+        self: Self,
         content_input: torch.Tensor,
         pitch_input: torch.Tensor,
         len_crop: torch.Tensor,
@@ -136,7 +32,7 @@ class Solver(object):
         )
         return content_pitch_input_intrp_2
 
-    def train(self) -> None:
+    def train(self: Self) -> None:
         # Start training from scratch or resume training.
         start_iters = 0
         if self.config.options.resume_iters:
@@ -150,14 +46,16 @@ class Solver(object):
         # Learning rate cache for decaying.
         lr = self.config.training.lr
         self.logger.info("Current learning rates, lr: {}.".format(lr))
+        self.data_iter = iter(self.data_loader)
 
         # Start training.
+        self.model.train()
+        self.intrp.train()
         self.logger.info("Start training...")
         self.start_time = time.time()
-        self.model = self.model.train()
-        self.intrp = self.intrp.train()
 
-        for i in range(start_iters, self.config.options.num_iters):
+        i = start_iters
+        while i <= self.config.options.num_iters:
             fname: str
             spk_id_org: str
             spmel_gt: torch.Tensor
@@ -255,6 +153,11 @@ class Solver(object):
             # Logging.
             train_loss_id: float = loss_id.item()
 
+            i += 1
+            # =============================================================== #
+            #                   3. Logging and saving checkpoints             #
+            # =============================================================== #
+
             if __debug__:
                 found_nan = False
                 found_nan |= self.logger.log_if_nan_ret(loss)
@@ -274,29 +177,39 @@ class Solver(object):
                     found_nan |= self.logger.log_if_nan_ret(code_exp_2)
                     found_nan |= self.logger.log_if_nan_ret(code_exp_3)
                     found_nan |= self.logger.log_if_nan_ret(code_exp_4)
-
                 if found_nan:
-                    self.log_training_step(i + 1, train_loss_id)
+                    self.log_training_step(i, train_loss_id)
                     self.logger.error("Step has NaN loss")
                     self.logger.error(f"filename: {fname}")
                     self.writer.flush()
-                    raise NanError
+                    raise NanError(f"{fname}")
 
+            # Add loss to tensorboard
             self.writer.add_scalar(
-                f"{self.config.options.experiment}/{self.config.options.model_type}/train_loss_id",
-                train_loss_id,
-                i,
+                tag=f"{self.config.options.experiment}/{self.config.options.model_type}/train_loss_id",
+                scalar_value=train_loss_id,
+                global_step=i,
             )
 
-            # =============================================================== #
-            #                   3. Logging and saving checkpoints             #
-            # =============================================================== #
-
             # Print out training information.
-            if (i + 1) % self.config.options.log_step == 0:
-                self.log_training_step(i + 1, train_loss_id)
+            if i % self.config.options.log_step == 0:
+                self.log_training_step(i, train_loss_id)
+                for i_spmel, i_fname in zip(spmel_output, fname):
+                    self.writer.add_image(
+                        tag=f"melspec/{i_fname}",
+                        img_tensor=spmel_output,
+                        global_step=i,
+                    )
 
             # Save model checkpoints
-            if (i + 1) % self.config.options.ckpt_save_step == 0:
-                self.save_checkpoint(i + 1)
+            if i % self.config.options.ckpt_save_step == 0:
+                self.save_checkpoint(i)
+                self.writer.add_graph(
+                    model=self.model,
+                    input_to_model=(
+                        content_pitch_input,
+                        rhythm_input,
+                        timbre_input,
+                    ),
+                )
                 self.writer.flush()
