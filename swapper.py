@@ -227,18 +227,18 @@ class Swapper(object):
             for spk in speaker_data.keys()
             for uttr in get_valid(metadata, spk, spk)
         ]
-        for dys, con in product(
-            [speaker for speaker, data in speaker_data.items() if data.dysarthric],
-            [speaker for speaker, data in speaker_data.items() if not data.dysarthric],
-        ):
-            [
-                (
-                    self.swap_single_latent(uttr, dys, con, latent),  # type: ignore [func-returns-value]
-                    self.swap_single_latent(uttr, con, dys, latent),  # type: ignore [func-returns-value]
-                )
-                for latent in self.latents
-                for uttr in get_valid(metadata, dys, con)
-            ]
+        # for dys, con in product(
+        #     [speaker for speaker, data in speaker_data.items() if data.dysarthric],
+        #     [speaker for speaker, data in speaker_data.items() if not data.dysarthric],
+        # ):
+        #     [
+        #         (
+        #             self.swap_single_latent(uttr, dys, con, latent),  # type: ignore [func-returns-value]
+        #             self.swap_single_latent(uttr, con, dys, latent),  # type: ignore [func-returns-value]
+        #         )
+        #         for latent in self.latents
+        #         for uttr in get_valid(metadata, dys, con)
+        #     ]
 
     @torch.no_grad()
     def swap_single_latent(
@@ -277,45 +277,47 @@ class Swapper(object):
         torch.save(code_spec, code_file)
         spec_file = code_file.replace("out_spec", "out_imag").replace(".pt", ".png")
         os.makedirs(os.path.dirname(spec_file), exist_ok=True)
-        save_tensor(code_spec.mT, spec_file)
+        save_tensor(code_spec.flip(-1).mT, spec_file)
 
     @torch.no_grad()
     def save_audios(self: Self) -> None:
         self.compute.set_gpu()
         self.device = self.compute.device()
-
-        [
-            self.spec_image(file, "orig")
-            for file in glob(
-                f"{self.config.paths.spmels}/**/*_0.pt",
-                recursive=True,
-            )
-        ]
-
+        ofilelist = glob(
+            f"{self.config.paths.spmels}/**/*_0.pt",
+            recursive=True,
+        )
         filelist = glob(
             f"{self.config.paths.latents}/out_spec/**/*_0.pt",
             recursive=True,
         )
+
+        [self.spec_image(file, "orig") for file in ofilelist]
         [self.spec_image(file, "full") for file in filelist]
 
-        if self.use_synth_griffinlim:
-            self.synthesizer = GriffinLim(self.device, config=self.config)
-            [self.single_spmel_to_audio(file, "griffinlim") for file in filelist]
+        # if self.use_synth_griffinlim:
+        #     self.synthesizer = GriffinLim(self.device, config=self.config)
+        #     [self.orig_save(file, "griffinlim") for file in ofilelist]
+        #     [self.single_spmel_to_audio(file, "griffinlim") for file in filelist]
 
         if self.use_synth_melgan:
             self.synthesizer = MelGan(self.device, config=self.config)
+            [self.orig_save(file, "melgan") for file in ofilelist]
             [self.single_spmel_to_audio(file, "melgan") for file in filelist]
 
         if self.use_synth_parallelwavegan:
             self.synthesizer = ParWavGan(self.device, config=self.config)
+            [self.orig_save(file, "parallelwavegan") for file in ofilelist]
             [self.single_spmel_to_audio(file, "parallelwavegan") for file in filelist]
 
         if self.use_synth_wavenet:
             self.synthesizer = Wavenet(self.device, config=self.config)
+            [self.orig_save(file, "wavenet") for file in ofilelist]
             [self.single_spmel_to_audio(file, "wavenet") for file in filelist]
 
         return
 
+    @torch.no_grad()
     def spec_image(self: Self, file: str, name: str) -> None:
         if name == "orig":
             inpath = f"{self.config.paths.spmels}"
@@ -334,8 +336,35 @@ class Swapper(object):
         else:
             spec = torch.load(file, weights_only=True).squeeze()
         os.makedirs(os.path.dirname(outfile), exist_ok=True)
-        self.logger.trace_var(spec.mT)
-        save_tensor(spec.mT, outfile)
+        save_tensor(spec.flip(-1).mT, outfile)
+
+    @torch.no_grad()
+    def orig_save(self: Self, file: str, name: str) -> None:
+        inpath = f"{self.config.paths.spmels}"
+        outpath = f"{self.config.paths.latents}/orig_wav_{name}"
+        outfile = file.replace(inpath, outpath).replace("_0.pt", ".wav")
+        self.logger.debug(f"Creating Audio: {outfile}")
+        filelist = sorted(glob(file.replace("_0.pt", "_*.pt")))
+        if len(filelist) > 1:
+            spec = torch.cat(
+                tuple(
+                    [torch.load(file, weights_only=True).squeeze() for file in filelist]
+                ),
+                dim=0,
+            )
+        else:
+            spec = torch.load(file, weights_only=True).squeeze()
+        wav = self.synthesizer.spect2wav(spec).unsqueeze(dim=0)
+        norm_wav = norm_audio(wav)
+        os.makedirs(os.path.dirname(outfile), exist_ok=True)
+        torchaudio.save(outfile, wav.cpu(), sample_rate=16000, backend="sox")
+        torchaudio.save(
+            outfile.replace(".wav", "-norm.wav"),
+            norm_wav.cpu(),
+            sample_rate=16000,
+            backend="sox",
+        )
+        return
 
     @torch.no_grad()
     def single_spmel_to_audio(self: Self, file: str, name: str) -> None:
@@ -343,7 +372,6 @@ class Swapper(object):
         self.logger.debug(f"Creating Audio: {outfile}")
         filelist = sorted(glob(file.replace("_0.pt", "_*.pt")))
         if len(filelist) > 1:
-            self.logger.debug(file)
             spec = torch.cat(
                 tuple(
                     [torch.load(file, weights_only=True).squeeze() for file in filelist]
