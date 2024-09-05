@@ -247,6 +247,7 @@ class Swapper(object):
         latent: str,
     ) -> None:
         fstring = self.config.paths.latents + "/{0}/{1}/{1}_" + uttr + ".pt"
+        self.logger.debug(fstring)
         c1, code_1 = get_code(fstring, "code_exp_1", latent, dys, con)
         c2, code_2 = get_code(fstring, "code_exp_2", latent, dys, con)
         c3, code_3 = get_code(fstring, "code_exp_3", latent, dys, con)
@@ -349,8 +350,8 @@ class Swapper(object):
             )
         else:
             spec = torch.load(file, weights_only=True).squeeze()
-        wav = self.synthesizer.spect2wav(spec)
-        norm_wav = norm_audio(wav).unsqueeze(dim=0)
+        wav = self.synthesizer.spect2wav(spec).unsqueeze(dim=0)
+        norm_wav = norm_audio(wav)
         os.makedirs(os.path.dirname(outfile), exist_ok=True)
         torchaudio.save(outfile, wav.cpu(), sample_rate=16000, backend="sox")
         torchaudio.save(
