@@ -4,21 +4,23 @@ import torch
 from synthesizers.synthesizer import Synthesizer
 from tqdm import tqdm
 from util.config import Config
+from util.logging import Logger
 from wavenet_vocoder import builder
 
 
 class WavenetSynthesizer(Synthesizer):
     device: torch.device
     model: torch.nn.Module
-    model_name: str = "wavenet_vocoder-lj"
+    model_name: str = "lj_wavenet_vocoder"
     checkpoint_path: str = "full_models"
     configtoml: dict
     config: Config
 
     def __init__(self, device: torch.device, config: Config) -> None:
-        config_file = f"{self.checkpoint_path}/{self.model_name}.toml"
-        self.configtoml = loadtoml(open(config_file, "rb"))
         self.config = config
+        data_dir = self.config.paths.trained_models
+        config_file = f"{data_dir}/{self.model_name}.toml"
+        self.configtoml = loadtoml(open(config_file, "rb"))
         self.model = getattr(builder, "wavenet")(
             out_channels=self.configtoml["out_channels"],
             layers=self.configtoml["layers"],
@@ -42,7 +44,7 @@ class WavenetSynthesizer(Synthesizer):
         )
         self.device = device
         ckpt = torch.load(
-            f"{self.checkpoint_path}/{self.model_name}.pth",
+            f"{data_dir}/{self.model_name}.pth",
             weights_only=False,
         )
         self.model.load_state_dict(ckpt["state_dict"])

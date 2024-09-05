@@ -1,0 +1,29 @@
+[paths]
+artefacts = "artefacts/tmp"
+proc_data = "/mnt/datasets/processed/SpeechSplit2"
+raw_data = "/mnt/datasets/raw"
+trained_models = "artefacts/full_models"
+
+[options]
+bottleneck = "large"
+experiment = "tmp"
+dataset_name = "smolspeech"
+trace = false
+regenerate_data = false
+ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
+
+[log]
+level = "DEBUG"
+path = "logs"
+file = false
+
+[training]
+lr = 0.0001
+beta1 = 0.9
+beta2 = 0.999
+
+[dataloader]
+batch_size = 16
+shuffle = true
+num_workers = 16
+samplier = 16

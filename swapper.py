@@ -11,14 +11,53 @@ from data_preprocessing import MetaDictType
 from meta_dicts import NamedMetaDictType
 from model import Generator_3 as Generator
 from model import InterpLnr
-from synthesizers.melgan import MelGanSynthesizer
-from synthesizers.parallelwavegan import ParallelWaveGanSynthesizer
+from synthesizers.melgan import MelGanSynthesizer as MelGan
+from synthesizers.parallelwavegan import ParallelWaveGanSynthesizer as ParWavGan
 from synthesizers.synthesizer import Synthesizer
-from synthesizers.wavenet import WavenetSynthesizer
+from synthesizers.wavenet import WavenetSynthesizer as Wavenet
 from util.compute import Compute
 from util.config import Config
 from util.logging import Logger
-from utils import quantize_f0_torch, save_tensor
+from utils import norm_audio, quantize_f0_torch, save_tensor
+
+
+class GriffinLim(Synthesizer):
+    n_fft = 1024
+    hop_length = 256
+    dim_freq = 80
+    f_min = 90
+    f_max = 7600
+    power = 1
+    sample_rate = 16000
+    logger = Logger()
+
+    def __init__(
+        self,
+        device: torch.device,
+        config: Config,
+    ) -> None:
+        self.demel = torchaudio.transforms.InverseMelScale(
+            n_stft=self.n_fft // 2 + 1,
+            n_mels=self.dim_freq,
+            sample_rate=self.sample_rate,
+            f_min=self.f_min,
+            f_max=self.f_max,
+            norm=None,
+            mel_scale="htk",
+            driver="gels",
+        )
+        self.glim = torchaudio.transforms.GriffinLim(
+            n_fft=self.n_fft,
+            win_length=self.n_fft,
+            hop_length=self.hop_length,
+            window_fn=torch.hann_window,
+            power=self.power,
+        )
+
+    def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
+        tspec = spect.T
+        self.logger.trace_var(tspec.shape)
+        return self.glim(self.demel(tspec))
 
 
 class Swapper(object):
@@ -26,6 +65,7 @@ class Swapper(object):
     use_synth_melgan: bool = True
     use_synth_parallelwavegan: bool = True
     use_synth_wavenet: bool = True
+    use_synth_griffinlim: bool = True
 
     def __init__(self: Self, config: Config) -> None:
         self.logger = Logger()
@@ -57,9 +97,9 @@ class Swapper(object):
         self.intrp.to(self.device)
         self.model.eval()
         self.intrp.eval()
-        self.logger.info(str(self.model))
         self.logger.info(self.model_type)
-        self.logger.info("The number of parameters: {}".format(num_params))
+        # self.logger.info(str(self.model))
+        # self.logger.info("The number of parameters: {}".format(num_params))
 
     def restore_model(self: Self) -> None:
         ckpt_name = "{}-{}-{}.ckpt".format(
@@ -75,13 +115,17 @@ class Swapper(object):
         )
         try:
             self.model.load_state_dict(ckpt["model"])
-        # except RuntimeError:
-        #     new_state_dict = OrderedDict()
-        #     for k, v in ckpt["model"].items():
-        #         new_state_dict[k[7:]] = v
-        #     self.logger.debug(ckpt["model"].keys())
-        #     self.logger.debug(new_state_dict.keys())
-        #     self.model.load_state_dict(new_state_dict)
+        except RuntimeError:
+            new_state_dict = OrderedDict()
+            for k, v in ckpt["model"].items():
+                new_state_dict[k] = v
+            self.logger.debug("model keys:")
+            self.logger.debug(ckpt["model"].keys())
+            self.logger.debug("")
+            self.logger.debug("new_state_dict keys:")
+            for key in new_state_dict.keys():
+                self.logger.debug(key)
+            self.model.load_state_dict(new_state_dict)
         finally:
             exit
 
@@ -175,6 +219,12 @@ class Swapper(object):
         )
         meta_file = os.path.join(self.config.paths.features, "metadata.pkl")
         metadata: MetaDictType = torch.load(meta_file, weights_only=True)
+
+        [
+            self.swap_single_latent(uttr, spk, spk, "None")  # type: ignore [func-returns-value]
+            for spk in speaker_data.keys()
+            for uttr in get_valid(metadata, spk, spk)
+        ]
         for dys, con in product(
             [speaker for speaker, data in speaker_data.items() if data.dysarthric],
             [speaker for speaker, data in speaker_data.items() if not data.dysarthric],
@@ -209,6 +259,8 @@ class Swapper(object):
             swapped = "Sync-Code-2"
         elif c4:
             swapped = "Speaker-Embedding"
+        else:
+            swapped = "None"
         code_spec = self.model.decode(
             code_1,
             code_2,
@@ -229,33 +281,84 @@ class Swapper(object):
     def save_audios(self: Self) -> None:
         self.compute.set_gpu()
         self.device = self.compute.device()
+
+        [
+            self.spec_image(file, "orig")
+            for file in glob(
+                f"{self.config.paths.spmels}/**/*_0.pt",
+                recursive=True,
+            )
+        ]
+
         filelist = glob(
-            f"{self.config.paths.latents}/out_spec/**/*.pt",
+            f"{self.config.paths.latents}/out_spec/**/*_0.pt",
             recursive=True,
         )
+        [self.spec_image(file, "full") for file in filelist]
+
+        if self.use_synth_griffinlim:
+            self.synthesizer = GriffinLim(self.device, config=self.config)
+            [self.single_spmel_to_audio(file, "griffinlim") for file in filelist]
+
         if self.use_synth_melgan:
-            self.synthesizer = MelGanSynthesizer(self.device, config=self.config)
+            self.synthesizer = MelGan(self.device, config=self.config)
             [self.single_spmel_to_audio(file, "melgan") for file in filelist]
 
         if self.use_synth_parallelwavegan:
-            self.synthesizer = ParallelWaveGanSynthesizer(self.device, config=self.config)
+            self.synthesizer = ParWavGan(self.device, config=self.config)
             [self.single_spmel_to_audio(file, "parallelwavegan") for file in filelist]
 
         if self.use_synth_wavenet:
-            self.synthesizer = WavenetSynthesizer(self.device, config=self.config)
+            self.synthesizer = Wavenet(self.device, config=self.config)
             [self.single_spmel_to_audio(file, "wavenet") for file in filelist]
 
         return
 
+    def spec_image(self: Self, file: str, name: str) -> None:
+        if name == "orig":
+            inpath = f"{self.config.paths.spmels}"
+        else:
+            inpath = f"{self.config.paths.latents}/out_spec"
+        outpath = f"{self.config.paths.latents}/out_spec_{name}"
+        outfile = file.replace(inpath, outpath).replace("_0.pt", ".png")
+        filelist = sorted(glob(file.replace("_0.pt", "_*.pt")))
+        if len(filelist) > 1:
+            spec = torch.cat(
+                tuple(
+                    [torch.load(file, weights_only=True).squeeze() for file in filelist]
+                ),
+                dim=0,
+            )
+        else:
+            spec = torch.load(file, weights_only=True).squeeze()
+        os.makedirs(os.path.dirname(outfile), exist_ok=True)
+        save_tensor(spec, outfile)
+
     @torch.no_grad()
     def single_spmel_to_audio(self: Self, file: str, name: str) -> None:
-        outfile = file.replace("out_spec", f"out_wav_{name}").replace(".pt", ".wav")
+        outfile = file.replace("out_spec", f"out_wav_{name}").replace("_0.pt", ".wav")
         self.logger.debug(f"Creating Audio: {outfile}")
-        os.makedirs(os.path.dirname(outfile), exist_ok=True)
-        spec = torch.load(file, weights_only=True).squeeze()
+        filelist = sorted(glob(file.replace("_0.pt", "_*.pt")))
+        if len(filelist) > 1:
+            self.logger.debug(file)
+            spec = torch.cat(
+                tuple(
+                    [torch.load(file, weights_only=True).squeeze() for file in filelist]
+                ),
+                dim=0,
+            )
+        else:
+            spec = torch.load(file, weights_only=True).squeeze()
         wav = self.synthesizer.spect2wav(spec)
-        wav = wav.unsqueeze(dim=0)
+        norm_wav = norm_audio(wav).unsqueeze(dim=0)
+        os.makedirs(os.path.dirname(outfile), exist_ok=True)
         torchaudio.save(outfile, wav.cpu(), sample_rate=16000, backend="sox")
+        torchaudio.save(
+            outfile.replace(".wav", "-norm.wav"),
+            norm_wav.cpu(),
+            sample_rate=16000,
+            backend="sox",
+        )
 
 
 def get_valid(

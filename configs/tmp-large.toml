@@ -1,8 +1,8 @@
 [options]
-return_latents = false
-log_step = 100
-train = true
-run_tests = ["train"]
+return_latents = true
+log_step = 25
+train = false
+run_tests = ["save_latents", "swap_latents", "save_audios"]
 
 [model]
 freq_1 = 1

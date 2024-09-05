@@ -21,11 +21,13 @@ torch_stft = torchaudio.transforms.Spectrogram(
     power=1,
 )
 torch_melbasis = torchaudio.transforms.MelScale(
+    n_stft=n_fft // 2 + 1,
     n_mels=dim_freq,
     sample_rate=16000,
-    n_stft=n_fft // 2 + 1,
     f_min=f_min,
     f_max=f_max,
+    mel_scale="htk",
+    norm=None,
 )
 min_level = torch.exp(-100 / 20 * torch.log(torch.tensor(10)))
 vtlp_window = torch.hann_window(2048)
@@ -347,3 +349,7 @@ def try_image(tensor: torch.Tensor) -> torch.Tensor | None:
         for in_tensor in tensor:
             return try_image(in_tensor)
     return None
+
+
+def norm_audio(x: torch.Tensor) -> torch.Tensor:
+    return (((x - x.min()) / (x.max() - x.min())) * 2) - 1

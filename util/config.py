@@ -138,29 +138,72 @@ class Config(metaclass=Singleton):
     # Reads the config toml file and creates a single object with the values
     def __init__(
         self,
-        config_file: str,
+        config_name: str,
     ) -> None:
         self.start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        self.original_config = config_file
-        self.load_config(config_file)
+        self.original_config = f"configs/{config_name}.toml"
+        self.load_config(config_name)
 
     ## Load config file and update values
     #  Duplicate values will be overwritten, existing config options that not
     #  specified in the loaded files are not removed.
     def load_config(
         self,
-        config_file: str,
+        config_name: str,
     ) -> None:
+        config_str = "configs/{}.toml"
+        config_file = config_str.format(config_name)
         if not path.exists(config_file):
             Logger().fatal(f"Could not find file: {config_file}")
-        for key, subdict in loadtoml(
-            open(config_file, "rb"),
-        ).items():
+        tomldict = loadtoml(open(config_file, "rb"))
+        if (
+            "experiment" not in tomldict["options"].keys()
+            and "bottleneck" not in tomldict["options"].keys()
+        ):
+            Logger().fatal(
+                "Could not find options.experiment and "
+                + "options.bottleneck in config file"
+            )
+        model_name = "{}-{}".format(
+            tomldict["options"]["experiment"],
+            tomldict["options"]["bottleneck"],
+        )
+        model_dict = loadtoml(open(config_str.format(model_name), "rb"))
+        tomldict = self.__merge_dicts(tomldict, model_dict)
+        # self.__print_config(tomldict)
+        for key, subdict in tomldict.items():
             self.__map_categories(
                 key,
                 subdict,
             )
         self.__fill_nulls()
+
+    def __print_config(self, config_dict: dict) -> None:
+        Logger().info(
+            "config:\n"
+            + "\n".join(
+                [
+                    "\n".join(
+                        [f"[{c}]"]
+                        + [f"{k} = {v}" for k, v in config_dict[c].items()]
+                        + [""]
+                    )
+                    for c in config_dict.keys()
+                ]
+            )
+        )
+
+    def __merge_dicts(self, dic1: dict, dic2: dict) -> dict:
+        retval: dict = {}
+        for cat in sorted({*dic1.keys(), *dic2.keys()}):
+            retval[cat] = dict()
+            if cat in sorted(dic1.keys()):
+                for key, item in dic1[cat].items():
+                    retval[cat][key] = item
+            if cat in sorted(dic2.keys()):
+                for key, item in dic2[cat].items():
+                    retval[cat][key] = item
+        return retval
 
     def __map_categories(
         self,

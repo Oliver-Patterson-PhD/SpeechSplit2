@@ -80,9 +80,9 @@ def main(config: Config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--trace", action="store_true")
-    parser.add_argument("--config_name", type=str, default="spsp2-large")
+    parser.add_argument("--config_name", type=str, default="base")
     args = parser.parse_args()
-    config = Config(f"configs/{args.config_name}.toml")
+    config = Config(args.config_name)
     if args.trace or config.options.trace:
         hr = __import__("heartrate")
         hr.trace(files=hr.files.all)
