@@ -274,7 +274,7 @@ class Config(metaclass=Singleton):
 
     def __set_artefact_paths(self) -> None:
         if not hasattr(self.paths, "trained_models"):
-            self.paths.tensorboard = f"{self.paths.artefacts}/trained_models"
+            self.paths.trained_models = f"{self.paths.artefacts}/trained_models"
         if not hasattr(self.paths, "tensorboard"):
             self.paths.tensorboard = f"{self.paths.artefacts}/tensorboard"
         if not hasattr(self.paths, "models"):

@@ -1,21 +1,21 @@
 [paths]
-artefacts = "artefacts/tmp"
+artefacts = "artefacts/trainrun"
 proc_data = "/mnt/datasets/processed/SpeechSplit2"
 raw_data = "/mnt/datasets/raw"
 trained_models = "artefacts/full_models"
 
 [options]
 bottleneck = "large"
-experiment = "tmp"
-dataset_name = "smolspeech"
+experiment = "trainrun"
+dataset_name = "vctk"
 trace = false
 regenerate_data = false
 ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
 
 [log]
 level = "DEBUG"
-path = "logs"
-file = false
+path = "artefacts/trainrun/logs"
+file = true
 
 [training]
 lr = 0.0001
@@ -23,7 +23,7 @@ beta1 = 0.9
 beta2 = 0.999
 
 [dataloader]
-batch_size = 16
+batch_size = 24
 shuffle = true
-num_workers = 16
-samplier = 16
+num_workers = 24
+samplier = 24

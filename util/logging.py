@@ -114,6 +114,7 @@ class Logger(metaclass=Singleton):
                     fullmsg,
                     end="\n",
                     file=self.__file,
+                    flush=True,
                 )
         return None
 
