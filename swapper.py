@@ -29,6 +29,7 @@ class GriffinLim(Synthesizer):
     f_max = 7600
     power = 1
     sample_rate = 16000
+    n_iter = 64
     logger = Logger()
 
     def __init__(
@@ -48,6 +49,7 @@ class GriffinLim(Synthesizer):
         )
         self.glim = torchaudio.transforms.GriffinLim(
             n_fft=self.n_fft,
+            n_iter=self.n_iter,
             win_length=self.n_fft,
             hop_length=self.hop_length,
             window_fn=torch.hann_window,
@@ -247,7 +249,6 @@ class Swapper(object):
         latent: str,
     ) -> None:
         fstring = self.config.paths.latents + "/{0}/{1}/{1}_" + uttr + ".pt"
-        self.logger.debug(fstring)
         c1, code_1 = get_code(fstring, "code_exp_1", latent, dys, con)
         c2, code_2 = get_code(fstring, "code_exp_2", latent, dys, con)
         c3, code_3 = get_code(fstring, "code_exp_3", latent, dys, con)
@@ -276,7 +277,7 @@ class Swapper(object):
         torch.save(code_spec, code_file)
         spec_file = code_file.replace("out_spec", "out_imag").replace(".pt", ".png")
         os.makedirs(os.path.dirname(spec_file), exist_ok=True)
-        save_tensor(code_spec, spec_file)
+        save_tensor(code_spec.mT, spec_file)
 
     @torch.no_grad()
     def save_audios(self: Self) -> None:
@@ -333,7 +334,8 @@ class Swapper(object):
         else:
             spec = torch.load(file, weights_only=True).squeeze()
         os.makedirs(os.path.dirname(outfile), exist_ok=True)
-        save_tensor(spec, outfile)
+        self.logger.trace_var(spec.mT)
+        save_tensor(spec.mT, outfile)
 
     @torch.no_grad()
     def single_spmel_to_audio(self: Self, file: str, name: str) -> None:
@@ -364,11 +366,17 @@ class Swapper(object):
 
 def get_valid(
     meta: MetaDictType,
-    dys: str,
-    con: str,
+    it1: str,
+    it2: str,
 ) -> set:
-    dys_uttrs = set(item[-1].split("/")[1][4:-3] for item in meta if item[0] == dys)
-    con_uttrs = set(item[-1].split("/")[1][5:-3] for item in meta if item[0] == con)
+    if it1[0][0] == "C":
+        dys_uttrs = set(item[-1].split("/")[1][5:-3] for item in meta if item[0] == it1)
+    else:
+        dys_uttrs = set(item[-1].split("/")[1][4:-3] for item in meta if item[0] == it1)
+    if it2[0][0] == "C":
+        con_uttrs = set(item[-1].split("/")[1][5:-3] for item in meta if item[0] == it2)
+    else:
+        con_uttrs = set(item[-1].split("/")[1][4:-3] for item in meta if item[0] == it2)
     return dys_uttrs and con_uttrs
 
 

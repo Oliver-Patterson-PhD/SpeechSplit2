@@ -7,7 +7,7 @@ from meta_dicts import MetaDictType
 from util.config import Config
 from util.logging import Logger
 from utils import (average_f0s, extract_f0, filter_wav, get_monotonic_wav,
-                   get_spmel, get_world_params)
+                   get_spmel, get_world_params, norm_audio)
 
 
 def split_feats(
@@ -103,6 +103,7 @@ def world_list(
         f"{dir_name}/{spk_dir}/{fname}",
         channels_first=True,
     )[0].squeeze()
+    raw_wav = norm_audio(raw_wav)
     if raw_wav.shape[0] % 256 == 0:
         raw_wav = torch.cat(
             (raw_wav, torch.tensor([[1e-06]], device=raw_wav.device)),

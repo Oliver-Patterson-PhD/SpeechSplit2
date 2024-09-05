@@ -33,6 +33,17 @@ min_level = torch.exp(-100 / 20 * torch.log(torch.tensor(10)))
 vtlp_window = torch.hann_window(2048)
 
 
+class MelSpec:
+    def __init__(
+        self,
+        device: torch.device,
+    ) -> None:
+        self.to_melscale = torchaudio.transforms.MelScale()
+        self.de_melscale = torchaudio.transforms.InverseMelScale()
+        self.to_spec = torchaudio.transforms.Spectrogram()
+        self.de_spec = torchaudio.transforms.GriffinLim()
+
+
 def has_nans(
     x: torch.Tensor,
 ) -> str:
