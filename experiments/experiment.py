@@ -24,6 +24,7 @@ class Experiment(object):
     optimizer: torch.optim.Optimizer
     start_time: float
     writer: SummaryWriter
+    tb_prefix: str
 
     def __init__(self: Self, config: Config, currtime: int = int(time.time())) -> None:
         self.config = config
@@ -39,11 +40,39 @@ class Experiment(object):
             weight_decay=1e-6,
         )
         self.writer = SummaryWriter(
-            log_dir="tensorboard/{}/{}/{}".format(
+            log_dir="{}/{}/{}/{}".format(
+                self.config.paths.tensorboard,
                 self.config.options.model_type,
                 self.config.options.experiment,
                 currtime,
             )
+        )
+        self.tb_prefix = (
+            self.config.options.experiment + "/" + self.config.options.model_type
+        )
+
+    def tb_add_scalar(
+        self: Self,
+        name: str,
+        value: float,
+        step: int,
+    ) -> None:
+        self.writer.add_scalar(
+            tag=f"{self.tb_prefix}/{name}",
+            scalar_value=value,
+            global_step=step,
+        )
+
+    def tb_add_melspec(
+        self: Self,
+        name: str,
+        tensor: torch.Tensor,
+        step: int,
+    ) -> None:
+        self.writer.add_image(
+            tag=f"{self.tb_prefix}/melspec/{name}",
+            img_tensor=tensor,
+            global_step=step,
         )
 
     def print_model_info(self: Self) -> None:
@@ -81,21 +110,25 @@ class Experiment(object):
             self.model.load_state_dict(new_state_dict)
         self.config.training.lr = self.optimizer.param_groups[0]["lr"]
 
-    def log_training_step(self: Self, i: int, train_loss_id: float):
-        elapsed_time = str(
-            datetime.timedelta(
-                seconds=time.time() - self.start_time,
-            )
-        )[:-7]
+    def log_training_step(
+        self: Self,
+        step: int,
+        loss: float,
+        orig: Optional[torch.Tensor] = None,
+        proc: Optional[torch.Tensor] = None,
+    ):
         self.logger.info(
-            "Elapsed [{}], Iteration [{}/{}], {}/train_loss_id: {:.8f}".format(
-                elapsed_time,
-                i,
+            "Elapsed [{}], Iteration [{}/{}], loss: {:.8f}".format(
+                str(datetime.timedelta(seconds=time.time() - self.start_time))[:-7],
+                step,
                 self.config.options.num_iters,
-                self.config.options.model_type,
-                train_loss_id,
+                loss,
             )
         )
+        if orig is not None and proc is not None:
+            self.tb_add_melspec(name="orig", tensor=orig, step=step)
+            self.tb_add_melspec(name="proc", tensor=proc, step=step)
+            self.writer.flush()
 
     def save_checkpoint(self: Self, i: int) -> None:
         os.makedirs(self.config.paths.models, exist_ok=True)

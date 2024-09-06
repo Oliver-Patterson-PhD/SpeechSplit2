@@ -80,7 +80,7 @@ class Utterances(torch.utils.data.Dataset):
             os.remove(meta_file)
         make_metadata(config, meta_file)
         metadata = torch.load(meta_file, weights_only=True)
-        Logger().info("Loading data")
+        Logger().info(f"Loading data: {config.options.dataset_name}")
         self.dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
         self.num_tokens = len(self.dataset)
 

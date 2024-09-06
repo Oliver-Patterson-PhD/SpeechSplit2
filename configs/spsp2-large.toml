@@ -1,8 +1,22 @@
 [options]
-return_latents = false
+run_tests = ["train"]
+dataset_name = "vctk"
+num_iters = 1600000
 log_step = 100
 train = true
-run_tests = ["train"]
+return_latents = false
+regenerate_data = false
+
+[dataloader]
+shuffle = true
+batch_size = 24
+num_workers = 24
+samplier = 24
+
+[training]
+lr = 0.0001
+beta1 = 0.9
+beta2 = 0.999
 
 [model]
 freq_1 = 1

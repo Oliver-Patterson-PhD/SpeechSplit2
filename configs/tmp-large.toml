@@ -4,6 +4,17 @@ log_step = 25
 train = false
 run_tests = ["save_latents", "swap_latents", "save_audios"]
 
+[dataloader]
+batch_size = 24
+shuffle = false
+num_workers = 24
+samplier = 24
+
+[training]
+lr = 0.0001
+beta1 = 0.9
+beta2 = 0.999
+
 [model]
 freq_1 = 1
 freq_2 = 1

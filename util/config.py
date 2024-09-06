@@ -25,6 +25,7 @@ class ConfigPaths:
     models: str
     tensorboard: str
     latents: str
+    logging: str
 
     raw_data: str
     raw_wavs: str
@@ -71,7 +72,6 @@ class ConfigModel:
 
 class ConfigLogging:
     level: LogLevel = LogLevel.INFO
-    path: str = "logs"
     file: Optional[str] = None
 
 
@@ -91,7 +91,7 @@ class ConfigOptions:
     dataset_name: str
     return_latents: bool = False
     trace: bool = False
-    train: bool = True
+    train: bool = False
     run_tests: RunTests = RunTests.NOTHING
     regenerate_data: bool = False
     device_id: int = 0
@@ -138,11 +138,15 @@ class Config(metaclass=Singleton):
     # Reads the config toml file and creates a single object with the values
     def __init__(
         self,
-        config_name: str,
+        config_name: Optional[str] = None,
     ) -> None:
         self.start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        self.original_config = f"configs/{config_name}.toml"
-        self.load_config(config_name)
+        if config_name is not None:
+            if ".toml" not in config_name:
+                self.original_config = f"configs/{config_name}.toml"
+            else:
+                self.original_config = config_name
+            self.load_config(config_name)
 
     ## Load config file and update values
     #  Duplicate values will be overwritten, existing config options that not
@@ -214,21 +218,11 @@ class Config(metaclass=Singleton):
             case "log":
                 if "level" in subdict:
                     Logger().set_level(subdict["level"])
-                if "path" in subdict:
-                    self.__logging.path = subdict["path"]
                 if "file" in subdict:
                     if subdict["file"] is False:
                         self.__logging.file = None
                     elif subdict["file"] is True:
-                        self.__logging.file = (
-                            f"{self.__logging.path}/{self.start_time}.log"
-                        )
-                    elif "/" in subdict["file"]:
-                        self.__logging.file = subdict["file"]
-                    else:
-                        self.__logging.file = f"{self.__logging.path}/{subdict["file"]}"
-                if self.__logging.file is not None:
-                    Logger().set_file(self.__logging.file)
+                        self.__logging.file = "SET_ME"
             case "paths":
                 if not subdict.keys() >= {"raw_data", "proc_data"}:
                     Logger().fatal(
@@ -271,8 +265,13 @@ class Config(metaclass=Singleton):
         self.__set_dataset_paths()
         self.__set_data_and_feat()
         self.__set_artefact_paths()
+        if self.__logging.file == "SET_ME":
+            self.__logging.file = f"{self.paths.logging}/{self.start_time}.log"
+            Logger().set_file(self.__logging.file)
 
     def __set_artefact_paths(self) -> None:
+        if not hasattr(self.paths, "logging"):
+            self.paths.logging = f"{self.paths.artefacts}/logs"
         if not hasattr(self.paths, "trained_models"):
             self.paths.trained_models = f"{self.paths.artefacts}/trained_models"
         if not hasattr(self.paths, "tensorboard"):
@@ -281,6 +280,7 @@ class Config(metaclass=Singleton):
             self.paths.models = f"{self.paths.artefacts}/models"
         if not hasattr(self.paths, "latents"):
             self.paths.latents = f"{self.paths.artefacts}/latents"
+
         if not hasattr(self.paths, "freqs"):
             self.paths.freqs = f"{self.paths.features}/freqs"
         if not hasattr(self.paths, "spmels"):
@@ -293,14 +293,17 @@ class Config(metaclass=Singleton):
             self.paths.raw_timit = f"{self.paths.raw_data}/TIMIT"
         if not hasattr(self.paths, "dataset_timit"):
             self.paths.dataset_timit = f"{self.paths.proc_data}/TIMIT"
+
         if not hasattr(self.paths, "raw_vctk"):
             self.paths.raw_vctk = f"{self.paths.raw_data}/VCTK-Corpus/wav"
         if not hasattr(self.paths, "dataset_vctk"):
             self.paths.dataset_vctk = f"{self.paths.proc_data}/VCTK-Corpus"
+
         if not hasattr(self.paths, "raw_smolspeech"):
             self.paths.raw_smolspeech = f"{self.paths.raw_data}/SmolSpeech"
         if not hasattr(self.paths, "dataset_smolspeech"):
             self.paths.dataset_smolspeech = f"{self.paths.proc_data}/SmolSpeech"
+
         if not hasattr(self.paths, "raw_uaspeech"):
             self.paths.raw_uaspeech = (
                 f"{self.paths.raw_data}/UASpeech/audio/noisereduce"

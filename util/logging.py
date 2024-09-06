@@ -9,6 +9,7 @@ from traceback import extract_stack
 from typing import Any, Optional, TextIO, overload
 
 from torch import Tensor
+
 from util.patterns import Singleton
 
 
@@ -97,18 +98,19 @@ class Logger(metaclass=Singleton):
         caller: str,
         message: str,
     ) -> None:
-        if level >= self.__level:
+        if self.__file is not None or level >= self.__level:
             fullmsg = self.__format_msg(
                 level=level,
                 caller=caller,
                 message=message,
             )
-            print(
-                fullmsg,
-                end="\n",
-                file=self.__stream,
-                flush=True,
-            )
+            if level >= self.__level:
+                print(
+                    fullmsg,
+                    end="\n",
+                    file=self.__stream,
+                    flush=True,
+                )
             if self.__file is not None:
                 print(
                     fullmsg,
