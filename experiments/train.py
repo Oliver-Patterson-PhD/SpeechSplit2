@@ -135,9 +135,10 @@ class Train(Experiment):
 
             # Backward and optimize.
             loss: torch.Tensor = loss_id
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+            if loss > 1e-6:
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
             # Logging.
             train_loss_id: float = loss_id.item()
 
