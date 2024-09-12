@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import inspect
 from enum import IntEnum
 from os import makedirs
 from os.path import dirname
 from sys import _getframe, stderr, stdout
 from time import gmtime, strftime
-from traceback import extract_stack
-from typing import Any, Optional, TextIO, overload
+from typing import Any, List, Optional, Self, TextIO, overload
 
 from torch import Tensor
 
@@ -21,7 +21,7 @@ class LogLevel(IntEnum):
     ERROR = 90
     FATAL = 255
 
-    def __str__(self) -> str:
+    def __str__(self: Self) -> str:
         match self:
             case self.TRACE:
                 return "TRACE"
@@ -38,7 +38,7 @@ class LogLevel(IntEnum):
             case _:
                 raise ValueError
 
-    def __repr__(self) -> str:
+    def __repr__(self: Self) -> str:
         return str(self)
 
     @classmethod
@@ -58,26 +58,28 @@ class Logger(metaclass=Singleton):
     __level: LogLevel = LogLevel.DEBUG
     __stream: TextIO = stdout
     __file: Optional[TextIO] = None
+    __flush: bool = False
 
     def __init__(
-        self,
+        self: Self,
         level: Optional[LogLevel] = None,
         use_stderr: Optional[bool] = None,
+        flush: Optional[bool] = None,
     ) -> None:
         if level is not None:
             self.__level = level
         if use_stderr is not None:
             self.use_stderr(use_stderr)
+        if flush is not None:
+            self.__flush = flush
 
-    def __get_caller(self) -> str:
+    def __get_caller(self: Self) -> str:
         tmp_frame = _getframe(1).f_back
-        if tmp_frame is not None:
-            return tmp_frame.f_code.co_qualname
-        else:
-            raise RuntimeError
+        assert tmp_frame is not None
+        return tmp_frame.f_code.co_qualname
 
     def __format_msg(
-        self,
+        self: Self,
         level: LogLevel,
         caller: str,
         message: str,
@@ -93,7 +95,7 @@ class Logger(metaclass=Singleton):
         )
 
     def __log(
-        self,
+        self: Self,
         level: LogLevel,
         caller: str,
         message: str,
@@ -109,32 +111,42 @@ class Logger(metaclass=Singleton):
                     fullmsg,
                     end="\n",
                     file=self.__stream,
-                    flush=True,
+                    flush=self.__flush,
                 )
             if self.__file is not None:
                 print(
                     fullmsg,
                     end="\n",
                     file=self.__file,
-                    flush=True,
+                    flush=self.__flush,
                 )
         return None
 
-    def __is_nan(self, x: Tensor) -> bool:
+    def __is_nan(self: Self, x: Tensor) -> bool:
         return True if x.isnan().any().item() else False
 
-    def get_level(self) -> LogLevel:
+    def __get_passed_varname(self: Self) -> List[str]:
+        frame = inspect.currentframe()
+        assert frame is not None
+        finfo = inspect.getouterframes(frame)[2]
+        context = inspect.getframeinfo(finfo[0]).code_context
+        assert context is not None
+        string = context[0].strip().replace("Logger()", "logger")
+        args = string[string.find("(") + 1 : -1].split(",")
+        return [i.split("=")[1].strip() if i.find("=") != -1 else i for i in args]
+
+    def get_level(self: Self) -> LogLevel:
         return self.__level
 
     @overload
-    def set_level(self, level: str) -> None:
+    def set_level(self: Self, level: str) -> None:
         pass
 
     @overload
-    def set_level(self, level: LogLevel) -> None:
+    def set_level(self: Self, level: LogLevel) -> None:
         pass
 
-    def set_level(self, level: LogLevel | str) -> None:
+    def set_level(self: Self, level: LogLevel | str) -> None:
         if isinstance(level, str):
             self.__level = LogLevel[level]
         elif isinstance(level, int):
@@ -142,16 +154,16 @@ class Logger(metaclass=Singleton):
         else:
             raise ValueError
 
-    def get_stream(self) -> TextIO:
+    def get_stream(self: Self) -> TextIO:
         return self.__stream
 
-    def get_file(self) -> Optional[TextIO]:
+    def get_file(self: Self) -> Optional[TextIO]:
         return self.__file
 
-    def set_stream(self, stream: TextIO) -> None:
+    def set_stream(self: Self, stream: TextIO) -> None:
         self.__stream = stream
 
-    def set_file(self, file: str) -> None:
+    def set_file(self: Self, file: str) -> None:
         makedirs(
             dirname(file),
             exist_ok=True,
@@ -163,7 +175,7 @@ class Logger(metaclass=Singleton):
         )
 
     def use_stderr(
-        self,
+        self: Self,
         use_stderr: bool,
     ) -> None:
         if use_stderr:
@@ -172,7 +184,7 @@ class Logger(metaclass=Singleton):
             self.__steam = stdout
 
     def input(
-        self,
+        self: Self,
         message: str,
         prompt: str = "",
         level: LogLevel = LogLevel.INFO,
@@ -185,7 +197,7 @@ class Logger(metaclass=Singleton):
         return input(prompt)
 
     def input_with_default(
-        self,
+        self: Self,
         message: str,
         default: str,
         prompt: str = "",
@@ -201,42 +213,42 @@ class Logger(metaclass=Singleton):
         else:
             return default
 
-    def trace(self, message: str) -> None:
+    def trace(self: Self, message: str) -> None:
         self.__log(
             level=LogLevel.TRACE,
             caller=self.__get_caller(),
             message=message,
         )
 
-    def debug(self, message: str) -> None:
+    def debug(self: Self, message: str) -> None:
         self.__log(
             level=LogLevel.DEBUG,
             caller=self.__get_caller(),
             message=message,
         )
 
-    def info(self, message: str) -> None:
+    def info(self: Self, message: str) -> None:
         self.__log(
             level=LogLevel.INFO,
             caller=self.__get_caller(),
             message=message,
         )
 
-    def warn(self, message: str) -> None:
+    def warn(self: Self, message: str) -> None:
         self.__log(
             level=LogLevel.WARN,
             caller=self.__get_caller(),
             message=message,
         )
 
-    def error(self, message: str) -> None:
+    def error(self: Self, message: str) -> None:
         self.__log(
             level=LogLevel.ERROR,
             caller=self.__get_caller(),
             message=message,
         )
 
-    def fatal(self, message: str) -> None:
+    def fatal(self: Self, message: str) -> None:
         self.__log(
             level=LogLevel.FATAL,
             caller=self.__get_caller(),
@@ -245,59 +257,62 @@ class Logger(metaclass=Singleton):
         raise LoggedException(message)
 
     def trace_var(
-        self,
+        self: Self,
         var: Any,
         level: LogLevel = LogLevel.TRACE,
     ) -> None:
-        code = extract_stack()[-2][-1]
-        varname = code[code.find("trace_var(") + 10 : code.rfind(")")]
         self.__log(
             level=level,
             caller=self.__get_caller(),
-            message=f"{varname}: ({var})",
+            message=f"{self.__get_passed_varname()[0]}: ({var})",
+        )
+
+    def trace_tensor(
+        self: Self,
+        var: Tensor,
+        level: LogLevel = LogLevel.TRACE,
+    ) -> None:
+        self.__log(
+            level=level,
+            caller=self.__get_caller(),
+            message=f"{self.__get_passed_varname()[0]}: ({var.shape})",
         )
 
     def trace_nans(
-        self,
+        self: Self,
         x: Tensor,
         level: LogLevel = LogLevel.ERROR,
     ) -> None:
-        code = extract_stack()[-2][-1]
-        varname = code[code.find("trace_nans(") + 11 : code.rfind(")")]
         self.__log(
             level=level,
             caller=self.__get_caller(),
-            message=f"{varname}: {
+            message=f"{self.__get_passed_varname()[0]}: {
                 "Has NaNs" if self.__is_nan(x) else "No NaNs"
             }",
         )
 
     def log_if_nan(
-        self,
+        self: Self,
         x: Tensor,
         level: LogLevel = LogLevel.ERROR,
     ) -> None:
         if self.__is_nan(x):
-            code = extract_stack()[-2][-1]
-            varname = code[code.find("log_if_nan(") + 11 : code.rfind(")")]
             self.__log(
                 level=level,
                 caller=self.__get_caller(),
-                message=f"{varname}: Has NaNs",
+                message=f"{self.__get_passed_varname()[0]}: Has NaNs",
             )
 
     def log_if_nan_ret(
-        self,
+        self: Self,
         x: Tensor,
         level: LogLevel = LogLevel.ERROR,
     ) -> bool:
         if self.__is_nan(x):
-            code = extract_stack()[-2][-1]
-            varname = code[code.find("log_if_nan(") + 11 : code.rfind(")")]
             self.__log(
                 level=level,
                 caller=self.__get_caller(),
-                message=f"{varname}: Has NaNs",
+                message=f"{self.__get_passed_varname()[0]}: Has NaNs",
             )
             return True
         else:

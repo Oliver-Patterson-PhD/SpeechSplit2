@@ -299,9 +299,9 @@ def get_loader(
             config.dataloader.samplier,
             shuffle=config.dataloader.shuffle,
         )
-    batch = 1 if singleitem else config.batch_size
-    workers = 0 if singleitem else config.num_workers
-    prefetch = None if config.num_workers == 0 or singleitem else config.num_workers
+    batch = 1
+    workers = config.num_workers
+    prefetch = None if config.num_workers == 0 else config.num_workers
     data_loader = torch.utils.data.DataLoader(
         dataset=dataset,
         batch_size=batch,

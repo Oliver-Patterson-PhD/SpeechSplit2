@@ -81,6 +81,7 @@ class RunTests(Flag):
     SAVE_LATENTS = auto()
     SWAP_LATENTS = auto()
     SAVE_AUDIOS = auto()
+    TEST = auto()
 
 
 class ConfigOptions:

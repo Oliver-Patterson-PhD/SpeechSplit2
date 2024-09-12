@@ -12,6 +12,7 @@ hop_length = 256
 dim_freq = 80
 f_min = 90
 f_max = 7600
+sample_rate = 16000
 
 torch_stft = torchaudio.transforms.Spectrogram(
     n_fft=n_fft,
@@ -23,7 +24,7 @@ torch_stft = torchaudio.transforms.Spectrogram(
 torch_melbasis = torchaudio.transforms.MelScale(
     n_stft=n_fft // 2 + 1,
     n_mels=dim_freq,
-    sample_rate=16000,
+    sample_rate=sample_rate,
     f_min=f_min,
     f_max=f_max,
     mel_scale="htk",
@@ -68,7 +69,7 @@ def any_nans(
 def filter_wav(
     x: torch.Tensor,
 ) -> torch.Tensor:
-    return torchaudio.functional.highpass_biquad(x, 16000, 30)
+    return torchaudio.functional.highpass_biquad(x, sample_rate, 30)
 
 
 def speaker_normalization(

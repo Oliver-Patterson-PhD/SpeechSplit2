@@ -3,11 +3,14 @@ from typing import List, Tuple
 
 import torch
 import torchaudio
+
 from meta_dicts import MetaDictType
 from util.config import Config
 from util.logging import Logger
 from utils import (average_f0s, extract_f0, filter_wav, get_monotonic_wav,
                    get_spmel, get_world_params, norm_audio)
+
+sample_rate = 16000
 
 
 def split_feats(
@@ -22,6 +25,8 @@ def split_feats(
         this_trunk = start_idx * trunk_len
         next_trunk = (start_idx + 1) * trunk_len
         fea_trunk = fea[this_trunk:next_trunk]
+        if fea_trunk.max() < 1e-06:
+            return
         if len(fea_trunk) < trunk_len:
             if fea_trunk.ndim == 2:
                 fea_trunk = torch.nn.functional.pad(
@@ -62,6 +67,8 @@ def process_file(
     spk_dir: str,
     spmel_dir: str,
 ) -> None:
+    if not has_content(wav):
+        return
     wav_mono = get_monotonic_wav(wav, f0, sp, ap, fs)
     spmel = get_spmel(wav)
     f0_norm = extract_f0(wav, fs, lo, hi)
@@ -70,6 +77,8 @@ def process_file(
         f"spmel: {len(spmel)}\n",
         f"f0_rapt: {len(f0_norm)}\n",
     )
+    if wav_mono.max() < 1e-06 or spmel.max() < 1e-06 or f0_norm.max() < 1e-06:
+        return
     split_feats(
         fea=wav_mono,
         fea_dir=wav_dir,
@@ -91,27 +100,6 @@ def process_file(
         spk_dir=spk_dir,
         filename=filename,
     )
-
-
-def world_list(
-    fname: str,
-    dir_name: str,
-    spk_dir: str,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    raw_wav: torch.Tensor
-    raw_wav, _ = torchaudio.load(
-        f"{dir_name}/{spk_dir}/{fname}",
-        channels_first=True,
-    )[0].squeeze()
-    raw_wav = norm_audio(raw_wav)
-    if raw_wav.shape[0] % 256 == 0:
-        raw_wav = torch.cat(
-            (raw_wav, torch.tensor([[1e-06]], device=raw_wav.device)),
-            dim=0,
-        )
-    wav = filter_wav(raw_wav)
-    f0, sp, ap = get_world_params(wav, 16000)
-    return (wav, f0, sp, ap)
 
 
 def make_spect_f0(config: Config) -> None:
@@ -143,7 +131,6 @@ def make_sf_item(
             os.makedirs(os.path.join(fea_dir, spk_dir))
 
     _, _, file_list = next(os.walk(os.path.join(dir_name, spk_dir)))
-    sorted_file_list = sorted(file_list)
 
     if spk_meta[spk_dir][1] == "M":
         lo, hi = 50, 250
@@ -152,16 +139,19 @@ def make_sf_item(
     else:
         raise ValueError
 
-    wavs: List[torch.Tensor] = []
+    wav_names: List[Tuple[torch.Tensor, str]] = []
     f0s: List[torch.Tensor] = []
     sps: List[torch.Tensor] = []
     aps: List[torch.Tensor] = []
 
     def getraw(fname: str) -> torch.Tensor:
-        x: torch.Tensor = torchaudio.load(
-            f"{dir_name}/{spk_dir}/{fname}",
-            channels_first=True,
-        )[0].squeeze()
+        x: torch.Tensor = clean_audio(
+            torchaudio.load(
+                f"{dir_name}/{spk_dir}/{fname}",
+                channels_first=True,
+            )[0],
+            fname,
+        )
         if x.shape[0] % 256 == 0:
             x = torch.cat(
                 (
@@ -172,14 +162,19 @@ def make_sf_item(
             )
         return x
 
-    wavs = [filter_wav(getraw(filename)) for filename in sorted_file_list]
-    for wav in wavs:
-        # get WORLD analyzer parameters
-        f0, sp, ap = get_world_params(wav, fs)
-        f0s.append(f0)
-        sps.append(sp)
-        aps.append(ap)
-
+    wav_names = [
+        (filter_wav(getraw(filename)), filename) for filename in sorted(file_list)
+    ]
+    wavs: List[torch.Tensor] = []
+    fnames: List[str] = []
+    for wav, fname in wav_names:
+        if has_content(wav):
+            wavs.append(wav)
+            fnames.append(fname)
+            f0, sp, ap = get_world_params(wav, fs)
+            f0s.append(f0)
+            sps.append(sp)
+            aps.append(ap)
     [
         process_file(
             filename=filename,
@@ -196,7 +191,7 @@ def make_sf_item(
             spmel_dir=config.paths.spmels,
         )  # type: ignore [func-returns-value]
         for filename, wav, f0, sp, ap in zip(
-            sorted_file_list,  # filename
+            fnames,  # filename
             wavs,  # wav
             average_f0s(f0s),  # f0
             sps,  # sp
@@ -283,3 +278,25 @@ def preprocess_data(
         Logger().info("Generating Spectrograms and Frequency Contours")
         make_spect_f0(config)
     Logger().info("Preprocessing Complete")
+
+
+vad_transform = torchaudio.transforms.Vad(
+    sample_rate=sample_rate,
+)
+
+
+def clean_audio(audio: torch.Tensor, fname: str):
+    retval = torchaudio.sox_effects.apply_effects_tensor(
+        vad_transform(
+            torchaudio.sox_effects.apply_effects_tensor(
+                vad_transform(norm_audio(audio)), sample_rate, [["reverse"]]
+            )[0]
+        ),
+        sample_rate,
+        [["reverse"]],
+    )[0]
+    return retval.squeeze()
+
+
+def has_content(audio: torch.Tensor) -> bool:
+    return audio.size(dim=-1) > 1

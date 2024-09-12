@@ -11,12 +11,20 @@ from util.notify import Notifier
 
 
 def main(config: Config, notifier: Notifier):
+    preprocess_data(config)
+
     if config.options.run_tests == RunTests.NOTHING:
         return
+
     cudnn.benchmark = True
     torch.multiprocessing.set_sharing_strategy("file_system")
     torch.multiprocessing.set_start_method("spawn")
-    preprocess_data(config)
+
+    if RunTests.TEST in config.options.run_tests:
+        from experiments.test_samples import TestSamples
+
+        tester = TestSamples(config)
+        tester.test()
 
     if RunTests.TRAIN in config.options.run_tests:
         from experiments.train import Train
@@ -71,13 +79,4 @@ if __name__ == "__main__":
     if args.trace or config.options.trace:
         hr = __import__("heartrate")
         hr.trace(files=hr.files.all)
-    try:
-        main(config=config, notifier=notifier)
-    except Exception as e:
-        msg = f"Could not successfully finish main due to: {e}"
-        Logger().error(msg)
-        notifier.send(msg)
-    finally:
-        msg = "Main Finished"
-        Logger().error(msg)
-        notifier.send(msg)
+    main(config=config, notifier=notifier)
