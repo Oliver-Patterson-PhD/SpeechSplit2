@@ -53,6 +53,7 @@ class GriffinLim(Synthesizer):
             power=self.power,
         )
 
+    @torch.no_grad()
     def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
         tspec = spect.T
         return self.glim(self.demel(tspec))
@@ -167,18 +168,19 @@ class Swapper(Experiment):
             for spk in speaker_data.keys()
             for uttr in get_valid(metadata, spk, spk)
         ]
-        # for dys, con in product(
-        #     [speaker for speaker, data in speaker_data.items() if data.dysarthric],
-        #     [speaker for speaker, data in speaker_data.items() if not data.dysarthric],
-        # ):
-        #     [
-        #         (
-        #             self.swap_single_latent(uttr, dys, con, latent),  # type: ignore [func-returns-value]
-        #             self.swap_single_latent(uttr, con, dys, latent),  # type: ignore [func-returns-value]
-        #         )
-        #         for latent in self.latents
-        #         for uttr in get_valid(metadata, dys, con)
-        #     ]
+
+        for dys, con in product(
+            [speaker for speaker, data in speaker_data.items() if data.dysarthric],
+            [speaker for speaker, data in speaker_data.items() if not data.dysarthric],
+        ):
+            [
+                (
+                    self.swap_single_latent(uttr, dys, con, latent),  # type: ignore [func-returns-value]
+                    self.swap_single_latent(uttr, con, dys, latent),  # type: ignore [func-returns-value]
+                )
+                for latent in self.latents
+                for uttr in get_valid(metadata, dys, con)
+            ]
 
     @torch.no_grad()
     def swap_single_latent(
@@ -332,6 +334,7 @@ class Swapper(Experiment):
         )
 
 
+@torch.no_grad()
 def get_valid(
     meta: MetaDictType,
     dys: str,
@@ -342,6 +345,7 @@ def get_valid(
     return dys_uttrs and con_uttrs
 
 
+@torch.no_grad()
 def get_code(
     fstring: str,
     name: str,

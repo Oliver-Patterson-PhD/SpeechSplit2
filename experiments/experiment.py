@@ -79,12 +79,15 @@ class Experiment(object):
         num_params = 0
         for p in self.model.parameters():
             num_params += p.numel()
-        self.logger.info(str(self.model))
-        self.logger.info(self.config.options.model_type)
-        self.logger.info("The number of parameters: {}".format(num_params))
+        self.logger.info(str(self.model), depth=2)
+        self.logger.info(self.config.options.model_type, depth=2)
+        self.logger.info("The number of parameters: {}".format(num_params), depth=2)
 
     def restore_model(self: Self, resume_iters: Optional[int]) -> None:
-        self.logger.info(f"Loading the trained models from step {resume_iters}...")
+        self.logger.info(
+            f"Loading the trained models from step {resume_iters}...",
+            depth=2,
+        )
         ckpt_name = "{}-{}-{}{}.ckpt".format(
             self.config.options.experiment,
             self.config.options.bottleneck,
@@ -123,7 +126,8 @@ class Experiment(object):
                 step,
                 self.config.options.num_iters,
                 loss,
-            )
+            ),
+            depth=2,
         )
         if orig is not None and proc is not None:
             self.tb_add_melspec(name="orig", tensor=orig, step=step)
@@ -132,7 +136,10 @@ class Experiment(object):
 
     def save_checkpoint(self: Self, i: int) -> None:
         os.makedirs(self.config.paths.models, exist_ok=True)
-        self.logger.info(f"Saving model checkpoint into {self.config.paths.models}...")
+        self.logger.info(
+            f"Saving model checkpoint into {self.config.paths.models}...",
+            depth=2,
+        )
         ckpt_name = "{}-{}-{}-{}.ckpt".format(
             self.config.options.experiment,
             self.config.options.bottleneck,

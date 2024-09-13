@@ -73,8 +73,8 @@ class Logger(metaclass=Singleton):
         if flush is not None:
             self.__flush = flush
 
-    def __get_caller(self: Self) -> str:
-        tmp_frame = _getframe(1).f_back
+    def __get_caller(self: Self, depth: int = 1) -> str:
+        tmp_frame = _getframe(depth).f_back
         assert tmp_frame is not None
         return tmp_frame.f_code.co_qualname
 
@@ -125,7 +125,7 @@ class Logger(metaclass=Singleton):
     def __is_nan(self: Self, x: Tensor) -> bool:
         return True if x.isnan().any().item() else False
 
-    def __get_passed_varname(self: Self) -> List[str]:
+    def __get_passed_varnames(self: Self) -> List[str]:
         frame = inspect.currentframe()
         assert frame is not None
         finfo = inspect.getouterframes(frame)[2]
@@ -213,45 +213,45 @@ class Logger(metaclass=Singleton):
         else:
             return default
 
-    def trace(self: Self, message: str) -> None:
+    def trace(self: Self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.TRACE,
-            caller=self.__get_caller(),
+            caller=self.__get_caller(depth),
             message=message,
         )
 
-    def debug(self: Self, message: str) -> None:
+    def debug(self: Self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.DEBUG,
-            caller=self.__get_caller(),
+            caller=self.__get_caller(depth),
             message=message,
         )
 
-    def info(self: Self, message: str) -> None:
+    def info(self: Self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.INFO,
-            caller=self.__get_caller(),
+            caller=self.__get_caller(depth),
             message=message,
         )
 
-    def warn(self: Self, message: str) -> None:
+    def warn(self: Self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.WARN,
-            caller=self.__get_caller(),
+            caller=self.__get_caller(depth),
             message=message,
         )
 
-    def error(self: Self, message: str) -> None:
+    def error(self: Self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.ERROR,
-            caller=self.__get_caller(),
+            caller=self.__get_caller(depth),
             message=message,
         )
 
-    def fatal(self: Self, message: str) -> None:
+    def fatal(self: Self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.FATAL,
-            caller=self.__get_caller(),
+            caller=self.__get_caller(depth),
             message=message,
         )
         raise LoggedException(message)
@@ -264,7 +264,7 @@ class Logger(metaclass=Singleton):
         self.__log(
             level=level,
             caller=self.__get_caller(),
-            message=f"{self.__get_passed_varname()[0]}: ({var})",
+            message=f"{self.__get_passed_varnames()[0]}: ({var})",
         )
 
     def trace_tensor(
@@ -275,7 +275,7 @@ class Logger(metaclass=Singleton):
         self.__log(
             level=level,
             caller=self.__get_caller(),
-            message=f"{self.__get_passed_varname()[0]}: ({var.shape})",
+            message=f"{self.__get_passed_varnames()[0]}: ({var.shape})",
         )
 
     def trace_nans(
@@ -286,7 +286,7 @@ class Logger(metaclass=Singleton):
         self.__log(
             level=level,
             caller=self.__get_caller(),
-            message=f"{self.__get_passed_varname()[0]}: {
+            message=f"{self.__get_passed_varnames()[0]}: {
                 "Has NaNs" if self.__is_nan(x) else "No NaNs"
             }",
         )
@@ -300,7 +300,7 @@ class Logger(metaclass=Singleton):
             self.__log(
                 level=level,
                 caller=self.__get_caller(),
-                message=f"{self.__get_passed_varname()[0]}: Has NaNs",
+                message=f"{self.__get_passed_varnames()[0]}: Has NaNs",
             )
 
     def log_if_nan_ret(
@@ -312,7 +312,7 @@ class Logger(metaclass=Singleton):
             self.__log(
                 level=level,
                 caller=self.__get_caller(),
-                message=f"{self.__get_passed_varname()[0]}: Has NaNs",
+                message=f"{self.__get_passed_varnames()[0]}: Has NaNs",
             )
             return True
         else:

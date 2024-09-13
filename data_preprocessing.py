@@ -15,18 +15,15 @@ sample_rate = 16000
 
 def split_feats(
     fea: torch.Tensor,
-    fea_dir: str,
     trunk_len: int,
-    spk_dir: str,
-    filename: str,
-) -> None:
+) -> List[torch.Tensor]:
     start_idx = 0
+    split_list: List[torch.Tensor] = []
     while start_idx * trunk_len < len(fea):
         this_trunk = start_idx * trunk_len
         next_trunk = (start_idx + 1) * trunk_len
+        start_idx += 1
         fea_trunk = fea[this_trunk:next_trunk]
-        if fea_trunk.max() < 1e-06:
-            return
         if len(fea_trunk) < trunk_len:
             if fea_trunk.ndim == 2:
                 fea_trunk = torch.nn.functional.pad(
@@ -40,17 +37,8 @@ def split_feats(
                 )
             else:
                 raise ValueError
-        torch.save(
-            fea_trunk.to(torch.float32),
-            "{}/{}/{}_{}.pt".format(
-                fea_dir,
-                spk_dir,
-                os.path.splitext(filename)[0],
-                start_idx,
-            ),
-        )
-        start_idx += 1
-    return
+        split_list.append(fea_trunk.to(torch.float32))
+    return split_list
 
 
 def process_file(
@@ -79,27 +67,38 @@ def process_file(
     )
     if wav_mono.max() < 1e-06 or spmel.max() < 1e-06 or f0_norm.max() < 1e-06:
         return
-    split_feats(
+    wav_mono_split = split_feats(
         fea=wav_mono,
-        fea_dir=wav_dir,
         trunk_len=49151,
-        spk_dir=spk_dir,
-        filename=filename,
     )
-    split_feats(
+    spmel_split = split_feats(
         fea=spmel,
-        fea_dir=spmel_dir,
         trunk_len=192,
-        spk_dir=spk_dir,
-        filename=filename,
     )
-    split_feats(
+    f0_split = split_feats(
         fea=f0_norm,
-        fea_dir=f0_dir,
         trunk_len=192,
-        spk_dir=spk_dir,
-        filename=filename,
     )
+    tmpdir = f"{wav_dir}/orig_vad/{spk_dir}/"
+    os.makedirs(tmpdir, exist_ok=True)
+    torchaudio.save(
+        uri=tmpdir + f"{os.path.splitext(filename)[0]}.wav",
+        src=wav.unsqueeze(dim=0),
+        sample_rate=sample_rate,
+    )
+    for idx, (wav_mono_i, spmel_i, f0_i) in enumerate(
+        zip(wav_mono_split, spmel_split, f0_split)
+    ):
+        fname = f"{os.path.splitext(filename)[0]}_{idx}.pt"
+        bad: bool = False
+        bad |= wav_mono_i.max().item() < 1e-06
+        bad |= spmel_i.max().item() < 1e-06
+        bad |= f0_i.max().item() < 1e-06
+        if bad:
+            continue
+        torch.save(wav_mono_i, f"{wav_dir}/{spk_dir}/" + fname)
+        torch.save(spmel_i, f"{spmel_dir}/{spk_dir}/" + fname)
+        torch.save(f0_i, f"{f0_dir}/{spk_dir}/" + fname)
 
 
 def make_spect_f0(config: Config) -> None:
@@ -108,9 +107,7 @@ def make_spect_f0(config: Config) -> None:
         __import__("meta_dicts"),
         config.options.dataset_name,
     )
-    print(f"config.paths.raw_wavs: {config.paths.raw_wavs}")
     dir_name, spk_dir_list, _ = next(os.walk(config.paths.raw_wavs))
-    print(f"dir_name: {dir_name}")
     [
         make_sf_item(spk_dir, config, spk_meta, dir_name, fs)  # type: ignore [func-returns-value]
         for spk_dir in sorted(spk_dir_list)
@@ -125,11 +122,13 @@ def make_sf_item(
     dir_name: str,
     fs: int,
 ) -> None:
+    f0s: List[torch.Tensor] = []
+    sps: List[torch.Tensor] = []
+    aps: List[torch.Tensor] = []
     Logger().info(f"Generating features for speaker {spk_dir}")
     for fea_dir in [config.paths.monowavs, config.paths.spmels, config.paths.freqs]:
         if not os.path.exists(os.path.join(fea_dir, spk_dir)):
             os.makedirs(os.path.join(fea_dir, spk_dir))
-
     _, _, file_list = next(os.walk(os.path.join(dir_name, spk_dir)))
 
     if spk_meta[spk_dir][1] == "M":
@@ -139,13 +138,9 @@ def make_sf_item(
     else:
         raise ValueError
 
-    wav_names: List[Tuple[torch.Tensor, str]] = []
-    f0s: List[torch.Tensor] = []
-    sps: List[torch.Tensor] = []
-    aps: List[torch.Tensor] = []
-
     def getraw(fname: str) -> torch.Tensor:
-        x: torch.Tensor = clean_audio(
+        x: torch.Tensor
+        x = clean_audio(
             torchaudio.load(
                 f"{dir_name}/{spk_dir}/{fname}",
                 channels_first=True,
@@ -162,15 +157,13 @@ def make_sf_item(
             )
         return x
 
-    wav_names = [
-        (filter_wav(getraw(filename)), filename) for filename in sorted(file_list)
-    ]
     wavs: List[torch.Tensor] = []
     fnames: List[str] = []
-    for wav, fname in wav_names:
+    for fname in sorted(file_list):
+        wav = filter_wav(getraw(fname))
         if has_content(wav):
-            wavs.append(wav)
             fnames.append(fname)
+            wavs.append(wav)
             f0, sp, ap = get_world_params(wav, fs)
             f0s.append(f0)
             sps.append(sp)
@@ -207,9 +200,10 @@ def process_item(
     dir_name: str,
 ) -> List[Tuple[str, torch.Tensor, str]]:
     spk_id: str
+    spk_emb: torch.Tensor
+    filepaths: List[str]
     spk_id, _, _ = spk_meta[spk_dir]
-    # may use generalized speaker embedding for zero-shot conversion
-    spk_emb: torch.Tensor = torch.zeros(
+    spk_emb = torch.zeros(
         (config.model.dim_spk_emb,),
         dtype=torch.float32,
     )
@@ -222,9 +216,7 @@ def process_item(
             )
         )
     )
-    filepaths: List[str] = [
-        str(os.path.join(spk_dir, filename)) for filename in sorted(file_list)
-    ]
+    filepaths = [str(os.path.join(spk_dir, filename)) for filename in sorted(file_list)]
     return [
         (
             spk_dir,
@@ -239,9 +231,10 @@ def make_metadata(
     config: Config,
     meta_file: str,
 ) -> None:
+    spk_meta: MetaDictType
     # use wav directory simply because all inputs have the same filename
     dir_name, spk_dir_list, _ = next(os.walk(config.paths.monowavs))
-    spk_meta: MetaDictType = getattr(
+    spk_meta = getattr(
         __import__("meta_dicts"),
         config.options.dataset_name,
     )
@@ -299,4 +292,4 @@ def clean_audio(audio: torch.Tensor, fname: str):
 
 
 def has_content(audio: torch.Tensor) -> bool:
-    return audio.size(dim=-1) > 1
+    return (audio.size(dim=-1) > 1) and (audio.max().item() > 1e-02)
