@@ -2,8 +2,7 @@ import os
 from typing import Iterable, List, Tuple
 
 import torch
-
-from data_preprocessing import make_metadata
+from data_preprocessing import has_content, make_metadata
 from util.config import Config
 from util.logging import Logger
 from utils import clip, get_spenv, get_spmel, is_nan, vtlp
@@ -81,7 +80,9 @@ class Utterances(torch.utils.data.Dataset):
         make_metadata(config, meta_file)
         metadata = torch.load(meta_file, weights_only=True)
         Logger().info(f"Loading data: {config.options.dataset_name}")
-        self.dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
+        tmp_dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
+        Logger().debug(f"Refining data: {config.options.dataset_name}")
+        self.dataset = [item for item in tmp_dataset if item_works(item)]
         self.num_tokens = len(self.dataset)
 
     def load_item(
@@ -314,3 +315,10 @@ def get_loader(
         collate_fn=collator,
     )
     return data_loader
+
+
+def item_works(item: DataLoadItemType) -> bool:
+    (_, _, (wav_mono, spmel, f0), _) = item
+    if has_content(wav_mono) and has_content(spmel) and has_content(f0):
+        return True
+    return False

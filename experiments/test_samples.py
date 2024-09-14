@@ -2,7 +2,6 @@ import time
 from typing import List, Self
 
 import torch
-
 from experiments.experiment import Experiment
 from util.config import Config
 
@@ -51,7 +50,16 @@ class TestSamples(Experiment):
                         for item in items
                     ]
                 )
-                for items in self.data_loader
+                for (
+                    l_fname,
+                    l_spk_id_org,
+                    l_spmel_gt,
+                    l_rhythm_input,
+                    l_content_input,
+                    l_pitch_input,
+                    l_timbre_input,
+                    l_len_crop,
+                ) in self.data_loader
                 for (
                     fname,
                     spk_id_org,
@@ -61,7 +69,16 @@ class TestSamples(Experiment):
                     pitch_input,
                     timbre_input,
                     len_crop,
-                ) in zip(*items)
+                ) in zip(
+                    l_fname,
+                    l_spk_id_org,
+                    l_spmel_gt,
+                    l_rhythm_input,
+                    l_content_input,
+                    l_pitch_input,
+                    l_timbre_input,
+                    l_len_crop,
+                )
             ]
         )
         [print(line, file=self.logfile) for line in itemlist]
