@@ -114,6 +114,7 @@ class ConfigDataLoader:
     shuffle: bool = True
     num_workers: int = 16
     samplier: int = 16
+    drop_and_pad: bool = True
 
 
 ## Configuration object
@@ -169,13 +170,12 @@ class Config(metaclass=Singleton):
                 "Could not find options.experiment and "
                 + "options.bottleneck in config file"
             )
-        model_name = "{}-{}".format(
-            tomldict["options"]["experiment"],
-            tomldict["options"]["bottleneck"],
-        )
+        model_name = "models/" + tomldict["options"]["bottleneck"]
+        experiment_name = "experiments/" + tomldict["options"]["experiment"]
         model_dict = loadtoml(open(config_str.format(model_name), "rb"))
-        tomldict = self.__merge_dicts(tomldict, model_dict)
-        # self.__print_config(tomldict)
+        experiment_dict = loadtoml(open(config_str.format(experiment_name), "rb"))
+        tomldict = self.__merge_dicts(tomldict, model_dict, experiment_dict)
+        self.__print_config(tomldict)
         for key, subdict in tomldict.items():
             self.__map_categories(
                 key,
@@ -198,7 +198,7 @@ class Config(metaclass=Singleton):
             )
         )
 
-    def __merge_dicts(self, dic1: dict, dic2: dict) -> dict:
+    def __merge_dicts(self, dic1: dict, dic2: dict, dic3: dict) -> dict:
         retval: dict = {}
         for cat in sorted({*dic1.keys(), *dic2.keys()}):
             retval[cat] = dict()
@@ -207,6 +207,9 @@ class Config(metaclass=Singleton):
                     retval[cat][key] = item
             if cat in sorted(dic2.keys()):
                 for key, item in dic2[cat].items():
+                    retval[cat][key] = item
+            if cat in sorted(dic3.keys()):
+                for key, item in dic3[cat].items():
                     retval[cat][key] = item
         return retval
 

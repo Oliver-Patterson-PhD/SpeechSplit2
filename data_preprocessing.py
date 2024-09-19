@@ -3,7 +3,6 @@ from typing import List, Tuple
 
 import torch
 import torchaudio
-
 from meta_dicts import MetaDictType
 from util.config import Config
 from util.logging import Logger
@@ -61,11 +60,12 @@ def process_file(
         wav_mono = get_monotonic_wav(wav, f0, sp, ap, fs)
         spmel = get_spmel(wav)
         f0_norm = extract_f0(wav, fs, lo, hi)
-        assert len(spmel) == len(f0_norm), (
-            f"melspec and f0 lengths do not match for {filename}",
-            f"spmel: {len(spmel)}\n",
-            f"f0_rapt: {len(f0_norm)}\n",
-        )
+        if len(spmel) != len(f0_norm):
+            Logger().fatal(
+                f"melspec and f0 lengths do not match for {filename}"
+                f"spmel: {len(spmel)}\n"
+                f"f0_rapt: {len(f0_norm)}\n"
+            )
         if (has_content(wav_mono)) and (has_content(spmel)) and (has_content(f0_norm)):
             wav_mono_split = split_feats(
                 fea=wav_mono,

@@ -1,15 +1,15 @@
 [options]
 dataset_name = "vctk"
-num_iters = 1
-log_step = 1
-ckpt_save_step = 100000
-train = false
+num_iters = 1600000
+log_step = 100
+ckpt_save_step = 10000
+train = true
 return_latents = false
 regenerate_data = false
 
 [dataloader]
-shuffle = false
-batch_size = 1
+shuffle = true
+batch_size = 32
 num_workers = 24
 samplier = 32
 drop_and_pad = false

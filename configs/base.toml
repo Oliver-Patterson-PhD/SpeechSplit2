@@ -6,7 +6,7 @@ raw_data = "/mnt/datasets/raw"
 run_tests = ["train"]
 trace = false
 bottleneck = "large"
-experiment = "trainrun"
+experiment = "trainmod"
 ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
 
 [log]
