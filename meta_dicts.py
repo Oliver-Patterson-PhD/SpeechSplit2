@@ -24,14 +24,14 @@ class NamedMetaItemType(NamedTuple):
 NamedMetaDictType = Dict[str, NamedMetaItemType]
 
 vctk: MetaDictType = {
-    "p225": ("00", "F", "C"),  # 225  23  F    English          Southern  England
+    "p225": ("00", "F", "C"),  # 225  23  F    English          Southern-England
     "p226": ("01", "M", "C"),  # 226  22  M    English          Surrey
     "p227": ("02", "M", "C"),  # 227  38  M    English          Cumbria
-    "p228": ("03", "F", "C"),  # 228  22  F    English          Southern  England
-    "p229": ("04", "F", "C"),  # 229  23  F    English          Southern  England
+    "p228": ("03", "F", "C"),  # 228  22  F    English          Southern-England
+    "p229": ("04", "F", "C"),  # 229  23  F    English          Southern-England
     "p230": ("05", "F", "C"),  # 230  22  F    English          Stockton-on-tees
-    "p231": ("06", "F", "C"),  # 231  23  F    English          Southern  England
-    "p232": ("07", "M", "C"),  # 232  23  M    English          Southern  England
+    "p231": ("06", "F", "C"),  # 231  23  F    English          Southern-England
+    "p232": ("07", "M", "C"),  # 232  23  M    English          Southern-England
     "p233": ("08", "F", "C"),  # 233  23  F    English          Staffordshire
     "p236": ("10", "F", "C"),  # 236  23  F    English          Manchester
     "p239": ("13", "F", "C"),  # 239  22  F    English          SW  England
@@ -39,12 +39,12 @@ vctk: MetaDictType = {
     "p243": ("16", "M", "C"),  # 243  22  M    English          London
     "p244": ("17", "F", "C"),  # 244  22  F    English          Manchester
     "p245": ("18", "M", "C"),  # 245  25  M    Irish            Dublin
-    "p250": ("23", "F", "C"),  # 250  22  F    English          SE  England
+    "p250": ("23", "F", "C"),  # 250  22  F    English          SE-England
     "p254": ("27", "M", "C"),  # 254  21  M    English          Surrey
     "p256": ("29", "M", "C"),  # 256  24  M    English          Birmingham
-    "p258": ("31", "M", "C"),  # 258  22  M    English          Southern  England
+    "p258": ("31", "M", "C"),  # 258  22  M    English          Southern-England
     "p259": ("32", "M", "C"),  # 259  23  M    English          Nottingham
-    "p261": ("34", "F", "C"),  # 261  26  F    NorthernIrish    Belfast
+    "p261": ("34", "F", "C"),  # 261  26  F    Northern-Irish   Belfast
     "p270": ("43", "M", "C"),  # 270  21  M    English          Yorkshire
     "p273": ("46", "M", "C"),  # 273  23  M    English          Suffolk
     "p363": ("81", "M", "C"),  # 363  22  M    Canadian         Toronto

@@ -2,6 +2,7 @@ import time
 from typing import List, Self
 
 import torch
+
 from experiments.experiment import Experiment
 from util.config import Config
 
@@ -24,7 +25,7 @@ class TestSamples(Experiment):
         ]
         itemlist = [
             "fname"
-            + ", ".join(
+            + "".join(
                 [
                     ", {}, {}, {}, {}".format(
                         f"{item} max",
@@ -39,7 +40,7 @@ class TestSamples(Experiment):
         itemlist.extend(
             [
                 fname
-                + ", ".join(
+                + "".join(
                     [
                         ", {}, {}, {}, {}".format(
                             eval(f"{item}.max()"),

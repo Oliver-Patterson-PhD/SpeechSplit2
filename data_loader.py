@@ -1,7 +1,8 @@
 import os
-from typing import Iterable, List, Tuple
+from typing import Any, Callable, Iterable, List, Tuple
 
 import torch
+
 from data_preprocessing import has_content, make_metadata
 from util.config import Config
 from util.logging import Logger
@@ -155,64 +156,63 @@ class Collator(object):
         self.max_len_seq = config.model.max_len_seq
         self.max_len_pad = config.model.max_len_pad
 
+    def __internal_collate(self, token: DataGetItemType) -> CollaterInternalItemType:
+        (
+            fname,  # Filename
+            dysarthric,  # Single char string Dysarthric
+            perturbed_wav_mono,  # Monotonic waveform with VTLP
+            spk_id_org,  # speaker ID string
+            melspec,  # MelSpectrogram
+            rhythm_input,  # spenv
+            content_input,  # spmel_mono
+            pitch_input,  # f0
+            timbre_input,  # emb_org
+        ) = token
+        len_crop = torch.randint(
+            low=self.min_len_seq, high=self.max_len_seq + 1, size=(1,)
+        )
+        left = torch.randint(low=0, high=len(melspec) - len_crop, size=(1,))
+        spmel_gt = melspec[left : left + len_crop, :]  # [Lc, F]
+        rhythm_input = rhythm_input[left : left + len_crop, :]  # [Lc, F]
+        content_input = content_input[left : left + len_crop, :]  # [Lc, F]
+        pitch_input = pitch_input[left : left + len_crop]  # [Lc, ]
+
+        spmel_gt = torch.nn.functional.pad(
+            clip(spmel_gt, 0, 1),
+            ((0, 0, 0, self.max_len_pad - spmel_gt.shape[0])),
+            "constant",
+        )
+        rhythm_input = torch.nn.functional.pad(
+            clip(rhythm_input, 0, 1),
+            ((0, 0, 0, self.max_len_pad - rhythm_input.shape[0])),
+            "constant",
+        )
+        content_input = torch.nn.functional.pad(
+            clip(content_input, 0, 1),
+            ((0, 0, 0, self.max_len_pad - content_input.shape[0])),
+            "constant",
+        )
+        pitch_input = torch.nn.functional.pad(
+            pitch_input[:, None],
+            ((0, 0, 0, self.max_len_pad - pitch_input.shape[0])),
+            "constant",
+            value=-1e10,
+        )
+        return (
+            fname,
+            spk_id_org,
+            spmel_gt,
+            rhythm_input,
+            content_input,
+            pitch_input,
+            timbre_input,
+            len_crop,
+        )
+
     def __call__(self, batch: Iterable[DataGetItemType]) -> CollaterItemType:
-        new_batch: List[CollaterInternalItemType] = []
-        for token in batch:
-
-            (
-                fname,  # Filename
-                dysarthric,  # Single char string Dysarthric
-                perturbed_wav_mono,  # Monotonic waveform with VTLP
-                spk_id_org,  # speaker ID string
-                melspec,  # MelSpectrogram
-                rhythm_input,  # spenv
-                content_input,  # spmel_mono
-                pitch_input,  # f0
-                timbre_input,  # emb_org
-            ) = token
-            len_crop = torch.randint(
-                low=self.min_len_seq, high=self.max_len_seq + 1, size=(1,)
-            )
-            left = torch.randint(low=0, high=len(melspec) - len_crop, size=(1,))
-            spmel_gt = melspec[left : left + len_crop, :]  # [Lc, F]
-            rhythm_input = rhythm_input[left : left + len_crop, :]  # [Lc, F]
-            content_input = content_input[left : left + len_crop, :]  # [Lc, F]
-            pitch_input = pitch_input[left : left + len_crop]  # [Lc, ]
-
-            spmel_gt = torch.nn.functional.pad(
-                clip(spmel_gt, 0, 1),
-                ((0, 0, 0, self.max_len_pad - spmel_gt.shape[0])),
-                "constant",
-            )
-            rhythm_input = torch.nn.functional.pad(
-                clip(rhythm_input, 0, 1),
-                ((0, 0, 0, self.max_len_pad - rhythm_input.shape[0])),
-                "constant",
-            )
-            content_input = torch.nn.functional.pad(
-                clip(content_input, 0, 1),
-                ((0, 0, 0, self.max_len_pad - content_input.shape[0])),
-                "constant",
-            )
-            pitch_input = torch.nn.functional.pad(
-                pitch_input[:, None],
-                ((0, 0, 0, self.max_len_pad - pitch_input.shape[0])),
-                "constant",
-                value=-1e10,
-            )
-
-            new_batch.append(
-                (
-                    fname,
-                    spk_id_org,
-                    spmel_gt,
-                    rhythm_input,
-                    content_input,
-                    pitch_input,
-                    timbre_input,
-                    len_crop,
-                )
-            )
+        new_batch: List[CollaterInternalItemType] = [
+            self.__internal_collate(token) for token in batch
+        ]
 
         secbatch = new_batch
         (
@@ -227,12 +227,12 @@ class Collator(object):
         ) = zip(*secbatch)
         out_fname: List[str] = list(it_fname)
         out_spk_id_org: List[str] = list(it_spk_id_org)
-        out_spmel_gt = torch.stack(it_spmel_gt, dim=0).float()
-        out_rhythm_input = torch.stack(it_rhythm_input, dim=0).float()
-        out_content_input = torch.stack(it_content_input, dim=0).float()
-        out_pitch_input = torch.stack(it_pitch_input, dim=0).float()
-        out_timbre_input = torch.stack(it_timbre_input, dim=0).float()
-        out_len_crop = torch.stack(it_len_crop, dim=0).double()
+        out_spmel_gt: torch.Tensor = torch.stack(it_spmel_gt, dim=0).float()
+        out_rhythm_input: torch.Tensor = torch.stack(it_rhythm_input, dim=0).float()
+        out_content_input: torch.Tensor = torch.stack(it_content_input, dim=0).float()
+        out_pitch_input: torch.Tensor = torch.stack(it_pitch_input, dim=0).float()
+        out_timbre_input: torch.Tensor = torch.stack(it_timbre_input, dim=0).float()
+        out_len_crop: torch.Tensor = torch.stack(it_len_crop, dim=0).double()
 
         return (
             out_fname,
@@ -243,6 +243,67 @@ class Collator(object):
             out_pitch_input.to("cpu"),
             out_timbre_input.to("cpu"),
             out_len_crop.to("cpu"),
+        )
+
+
+class SingleItemCollator(object):
+    def __init__(
+        self,
+        config: Config,
+    ) -> None:
+        return
+
+    def __call__(self, batch: Iterable[DataGetItemType]) -> CollaterItemType:
+        new_batch: List[CollaterInternalItemType] = [
+            (
+                fname,
+                spk_id_org,
+                melspec,
+                rhythm_input,
+                content_input,
+                pitch_input,
+                timbre_input,
+                torch.tensor([0]),
+            )
+            for (
+                fname,
+                dysarthric,
+                perturbed_wav_mono,
+                spk_id_org,
+                melspec,
+                rhythm_input,
+                content_input,
+                pitch_input,
+                timbre_input,
+            ) in batch
+        ]
+        (
+            it_fname,
+            it_spk_id_org,
+            it_spmel_gt,
+            it_rhythm_input,
+            it_content_input,
+            it_pitch_input,
+            it_timbre_input,
+            it_len_crop,
+        ) = zip(*new_batch)
+        fname: List[str] = list(it_fname)
+        spk_id_org: List[str] = list(it_spk_id_org)
+        spmel_gt: torch.Tensor = torch.stack(it_spmel_gt, dim=0).float()
+        rhythm_input: torch.Tensor = torch.stack(it_rhythm_input, dim=0).float()
+        content_input: torch.Tensor = torch.stack(it_content_input, dim=0).float()
+        pitch_input: torch.Tensor = torch.stack(it_pitch_input, dim=0).float()
+        timbre_input: torch.Tensor = torch.stack(it_timbre_input, dim=0).float()
+        len_crop: torch.Tensor = torch.stack(it_len_crop, dim=0).double()
+        return (
+            fname,
+            spk_id_org,
+            spmel_gt.to("cpu"),
+            rhythm_input.to("cpu"),
+            content_input.to("cpu"),
+            pitch_input.to("cpu"),
+            timbre_input.to("cpu"),
+            len_crop.to("cpu"),
         )
 
 
@@ -290,19 +351,21 @@ def get_loader(
     singleitem: bool = False,
 ) -> torch.utils.data.DataLoader:
     dataset = Utterances(config)
-    collator = Collator(config)
     sampler: torch.utils.data.sampler.Sampler
+    collator: Callable[[list[Any]], Any] | None
     if singleitem:
+        collator = SingleItemCollator(config)
         sampler = torch.utils.data.SequentialSampler(dataset)
     else:
+        collator = Collator(config)
         sampler = MultiSampler(
             len(dataset),
             config.dataloader.samplier,
             shuffle=config.dataloader.shuffle,
         )
     batch = 1
-    workers = config.num_workers
-    prefetch = None if config.num_workers == 0 else config.num_workers
+    workers = 0 if singleitem else config.num_workers
+    prefetch = None if workers == 0 else workers
     data_loader = torch.utils.data.DataLoader(
         dataset=dataset,
         batch_size=batch,

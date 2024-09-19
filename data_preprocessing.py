@@ -11,6 +11,7 @@ from utils import (average_f0s, extract_f0, filter_wav, get_monotonic_wav,
                    get_spmel, get_world_params, norm_audio)
 
 sample_rate = 16000
+new_epsilon = 1e-10
 
 
 def split_feats(
@@ -37,7 +38,8 @@ def split_feats(
                 )
             else:
                 raise ValueError
-        split_list.append(fea_trunk.to(torch.float32))
+        if has_content(fea_trunk):
+            split_list.append(fea_trunk.to(torch.float32))
     return split_list
 
 
@@ -55,50 +57,47 @@ def process_file(
     spk_dir: str,
     spmel_dir: str,
 ) -> None:
-    if not has_content(wav):
-        return
-    wav_mono = get_monotonic_wav(wav, f0, sp, ap, fs)
-    spmel = get_spmel(wav)
-    f0_norm = extract_f0(wav, fs, lo, hi)
-    assert len(spmel) == len(f0_norm), (
-        f"melspec and f0 lengths do not match for {filename}",
-        f"spmel: {len(spmel)}\n",
-        f"f0_rapt: {len(f0_norm)}\n",
-    )
-    if wav_mono.max() < 1e-06 or spmel.max() < 1e-06 or f0_norm.max() < 1e-06:
-        return
-    wav_mono_split = split_feats(
-        fea=wav_mono,
-        trunk_len=49151,
-    )
-    spmel_split = split_feats(
-        fea=spmel,
-        trunk_len=192,
-    )
-    f0_split = split_feats(
-        fea=f0_norm,
-        trunk_len=192,
-    )
-    tmpdir = f"{wav_dir}/orig_vad/{spk_dir}/"
-    os.makedirs(tmpdir, exist_ok=True)
-    torchaudio.save(
-        uri=tmpdir + f"{os.path.splitext(filename)[0]}.wav",
-        src=wav.unsqueeze(dim=0),
-        sample_rate=sample_rate,
-    )
-    for idx, (wav_mono_i, spmel_i, f0_i) in enumerate(
-        zip(wav_mono_split, spmel_split, f0_split)
-    ):
-        fname = f"{os.path.splitext(filename)[0]}_{idx}.pt"
-        bad: bool = False
-        bad |= wav_mono_i.max().item() < 1e-06
-        bad |= spmel_i.max().item() < 1e-06
-        bad |= f0_i.max().item() < 1e-06
-        if bad:
-            continue
-        torch.save(wav_mono_i, f"{wav_dir}/{spk_dir}/" + fname)
-        torch.save(spmel_i, f"{spmel_dir}/{spk_dir}/" + fname)
-        torch.save(f0_i, f"{f0_dir}/{spk_dir}/" + fname)
+    if has_content(wav):
+        wav_mono = get_monotonic_wav(wav, f0, sp, ap, fs)
+        spmel = get_spmel(wav)
+        f0_norm = extract_f0(wav, fs, lo, hi)
+        assert len(spmel) == len(f0_norm), (
+            f"melspec and f0 lengths do not match for {filename}",
+            f"spmel: {len(spmel)}\n",
+            f"f0_rapt: {len(f0_norm)}\n",
+        )
+        if (has_content(wav_mono)) and (has_content(spmel)) and (has_content(f0_norm)):
+            wav_mono_split = split_feats(
+                fea=wav_mono,
+                trunk_len=49151,
+            )
+            spmel_split = split_feats(
+                fea=spmel,
+                trunk_len=192,
+            )
+            f0_split = split_feats(
+                fea=f0_norm,
+                trunk_len=192,
+            )
+            tmpdir = f"{wav_dir}/orig_vad/{spk_dir}/"
+            os.makedirs(tmpdir, exist_ok=True)
+            torchaudio.save(
+                uri=tmpdir + f"{os.path.splitext(filename)[0]}.wav",
+                src=wav.unsqueeze(dim=0),
+                sample_rate=sample_rate,
+            )
+            for idx, (wav_mono_i, spmel_i, f0_i) in enumerate(
+                zip(wav_mono_split, spmel_split, f0_split)
+            ):
+                fname = f"{os.path.splitext(filename)[0]}_{idx}.pt"
+                good: bool = True
+                good &= has_content(wav_mono_i)
+                good &= has_content(spmel_i)
+                good &= has_content(f0_i)
+                if good:
+                    torch.save(wav_mono_i, f"{wav_dir}/{spk_dir}/" + fname)
+                    torch.save(spmel_i, f"{spmel_dir}/{spk_dir}/" + fname)
+                    torch.save(f0_i, f"{f0_dir}/{spk_dir}/" + fname)
 
 
 def make_spect_f0(config: Config) -> None:
@@ -151,7 +150,7 @@ def make_sf_item(
             x = torch.cat(
                 (
                     x,
-                    torch.tensor([1e-06], device=x.device),
+                    torch.tensor([new_epsilon], device=x.device),
                 ),
                 dim=0,
             )
@@ -292,4 +291,4 @@ def clean_audio(audio: torch.Tensor, fname: str):
 
 
 def has_content(audio: torch.Tensor) -> bool:
-    return (audio.size(dim=-1) > 1) and (audio.max().item() > 1e-02)
+    return (audio.size(dim=-1) > 1) and (audio.max().item() > 1e-03)
