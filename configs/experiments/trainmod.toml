@@ -9,8 +9,8 @@ regenerate_data = false
 
 [dataloader]
 shuffle = true
-batch_size = 32
-num_workers = 24
+batch_size = 64
+num_workers = 32
 samplier = 32
 drop_and_pad = false
 
