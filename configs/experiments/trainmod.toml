@@ -1,4 +1,5 @@
 [options]
+run_tests = ["train"]
 dataset_name = "vctk"
 num_iters = 1600000
 log_step = 100
@@ -10,7 +11,7 @@ regenerate_data = false
 [dataloader]
 shuffle = true
 batch_size = 64
-num_workers = 32
+num_workers = 24
 samplier = 32
 drop_and_pad = false
 

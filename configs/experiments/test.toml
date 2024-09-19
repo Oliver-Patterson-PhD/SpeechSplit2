@@ -1,4 +1,5 @@
 [options]
+run_tests = ["test"]
 dataset_name = "vctk"
 num_iters = 1
 log_step = 1

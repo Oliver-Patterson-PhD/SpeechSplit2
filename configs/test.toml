@@ -3,7 +3,6 @@ proc_data = "/mnt/datasets/processed/SpeechSplit2"
 raw_data = "/mnt/datasets/raw"
 
 [options]
-run_tests = ["test"]
 trace = false
 bottleneck = "large"
 experiment = "test_samples"
