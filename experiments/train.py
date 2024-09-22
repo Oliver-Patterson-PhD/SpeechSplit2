@@ -133,6 +133,7 @@ class Train(Experiment):
 
             loss_mask = spmel_gt != 0
             self.logger.trace_tensor(loss_mask)
+            self.logger.trace(str(loss_mask))
             self.logger.trace_tensor(spmel_gt)
             self.logger.trace_tensor(spmel_output)
             self.logger.trace_tensor(loss_id)
