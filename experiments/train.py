@@ -129,14 +129,9 @@ class Train(Experiment):
                     timbre_input,
                 )
 
-            self.logger.trace_tensor(spmel_gt)
-            self.logger.trace_tensor(spmel_output)
-            loss_mask = spmel_gt != 0
+            loss_mask = spmel_gt != 0.0
             masked_output = spmel_output.masked_select(loss_mask).view(1, -1, 80)
             masked_gt = spmel_gt.masked_select(loss_mask).view(1, -1, 80)
-            self.logger.trace_tensor(masked_gt)
-            self.logger.trace_tensor(masked_output)
-            self.logger.trace_tensor(loss_mask)
 
             loss_id: torch.Tensor = loss_fn(masked_output, masked_gt)
             # Backward and optimize.
@@ -175,6 +170,11 @@ class Train(Experiment):
                     self.log_training_step(i, train_loss_id)
                     self.logger.error("Step has NaN loss")
                     self.logger.error(f"filename: {fname}")
+                    self.tb_add_melspec(name="loss_mask", tensor=loss_mask, step=i)
+                    self.tb_add_melspec(name="full_gt", tensor=spmel_gt, step=i)
+                    self.tb_add_melspec(name="full_output", tensor=spmel_output, step=i)
+                    self.tb_add_melspec(name="masked_gt", tensor=masked_gt, step=i)
+                    self.tb_add_melspec(name="masked_output", tensor=masked_output, step=i)
                     self.writer.flush()
                     raise NanError(f"{fname}")
 
