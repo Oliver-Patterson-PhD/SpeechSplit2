@@ -2,7 +2,6 @@ import time
 from typing import Self
 
 import torch
-
 from experiments.experiment import Experiment
 from util.exception import NanError
 from utils import quantize_f0_torch
@@ -129,9 +128,10 @@ class Train(Experiment):
                     timbre_input,
                 )
 
+            loss_mask = spmel_gt != 0.0
             loss_id: torch.Tensor = torch.torch.nn.functional.mse_loss(
                 spmel_output, spmel_gt
-            )
+            ).masked_select(loss_mask)
 
             # Backward and optimize.
             loss: torch.Tensor = loss_id
