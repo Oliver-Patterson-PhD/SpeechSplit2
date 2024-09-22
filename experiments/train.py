@@ -33,6 +33,7 @@ class Train(Experiment):
         self.start_time = time.time()
         self.model = self.model.train()
         self.intrp = self.intrp.train()
+        self.loss_fn = torch.nn.MSELoss(reduction="sum")
 
         i = start_iters
         while i <= self.config.options.num_iters:
@@ -128,11 +129,15 @@ class Train(Experiment):
                     timbre_input,
                 )
 
-            loss_mask = spmel_gt != 0.0
-            loss_id: torch.Tensor = torch.torch.nn.functional.mse_loss(
-                spmel_output.masked_select(loss_mask), spmel_gt.masked_select(loss_mask)
-            )
+            loss_id: torch.Tensor = self.loss_fn(spmel_output, spmel_gt)
 
+            loss_mask = spmel_gt != 0
+            self.logger.trace_tensor(loss_mask)
+            self.logger.trace_tensor(spmel_gt)
+            self.logger.trace_tensor(spmel_output)
+            self.logger.trace_tensor(loss_id)
+
+            exit(0)
             # Backward and optimize.
             loss: torch.Tensor = loss_id
             self.optimizer.zero_grad()
