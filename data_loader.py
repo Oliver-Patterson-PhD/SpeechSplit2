@@ -326,9 +326,7 @@ def item_works(item: DataLoadItemType) -> bool:
     wa_nonzero = wav_mono != 0.0
     sp_nonzero = spmel != 0.0
     f0_nonzero = f0 != 0.0
-    is_nonzero: bool = (
-        wa_nonzero.any() and sp_nonzero.any() and f0_nonzero.any()
-    ).item() != 0
+    is_nonzero: bool = wa_nonzero.any() and sp_nonzero.any() and f0_nonzero.any()
     if has_content(wav_mono) and has_content(spmel) and has_content(f0) and is_nonzero:
         return True
     return False
