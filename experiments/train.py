@@ -170,7 +170,7 @@ class Train(Experiment):
                     self.log_training_step(i, train_loss_id)
                     self.logger.error("Step has NaN loss")
                     self.logger.error(f"filename: {fname}")
-                    self.logger.error(f"tensor: {spmel_gt}")
+                    self.logger.error(f"tensor: {spmel_gt.any()}")
                     self.tb_add_melspec(name="loss_mask", tensor=loss_mask, step=i)
                     self.tb_add_melspec(name="full_gt", tensor=spmel_gt, step=i)
                     self.tb_add_melspec(name="full_output", tensor=spmel_output, step=i)
