@@ -129,8 +129,6 @@ class Train(Experiment):
                     timbre_input,
                 )
 
-            loss_id: torch.Tensor = loss_fn(spmel_output, spmel_gt)
-
             self.logger.trace_tensor(spmel_gt)
             self.logger.trace_tensor(spmel_output)
             loss_mask = spmel_gt != 0
@@ -140,13 +138,7 @@ class Train(Experiment):
             self.logger.trace_tensor(masked_output)
             self.logger.trace_tensor(loss_mask)
 
-            self.tb_add_melspec(name="loss_mask", tensor=loss_mask, step=i)
-            self.tb_add_melspec(name="spmel_gt", tensor=spmel_gt, step=i)
-            self.tb_add_melspec(name="spmel_output", tensor=spmel_output, step=i)
-            self.tb_add_melspec(name="masked_gt", tensor=masked_gt, step=i)
-            self.tb_add_melspec(name="masked_output", tensor=masked_output, step=i)
-            self.writer.flush()
-            exit(0)
+            loss_id: torch.Tensor = loss_fn(masked_output, masked_gt)
             # Backward and optimize.
             loss: torch.Tensor = loss_id
             self.optimizer.zero_grad()
