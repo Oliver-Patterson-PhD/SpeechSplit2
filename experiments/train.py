@@ -134,8 +134,8 @@ class Train(Experiment):
             self.logger.trace_tensor(spmel_gt)
             self.logger.trace_tensor(spmel_output)
             loss_mask = spmel_gt != 0
-            masked_output = spmel_output.masked_select(loss_mask).view(1, 192, -1)
-            masked_gt = spmel_gt.masked_select(loss_mask).view(1, 192, -1)
+            masked_output = spmel_output.masked_select(loss_mask).view(1, -1, 80)
+            masked_gt = spmel_gt.masked_select(loss_mask).view(1, -1, 80)
             self.logger.trace_tensor(masked_gt)
             self.logger.trace_tensor(masked_output)
             self.logger.trace_tensor(loss_mask)
