@@ -291,4 +291,6 @@ def clean_audio(audio: torch.Tensor, fname: str):
 
 
 def has_content(audio: torch.Tensor) -> bool:
-    return (audio.size(dim=-1) > 1) and (audio.max().item() > 1e-03)
+    return (
+        (audio.size(dim=-1) > 1) and (audio.max().item() > 1e-03) and (audio != 0).any()
+    )
