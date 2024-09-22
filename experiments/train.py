@@ -147,6 +147,34 @@ class Train(Experiment):
             #                   3. Logging and saving checkpoints             #
             # =============================================================== #
 
+            # Save model checkpoints
+            if i % self.config.options.ckpt_save_step == 0:
+                self.save_checkpoint(i)
+                self.writer.add_graph(
+                    model=self.model,
+                    input_to_model=(
+                        content_pitch_input,
+                        rhythm_input,
+                        timbre_input,
+                    ),
+                )
+                self.writer.flush()
+
+            # Add loss to tensorboard
+            self.tb_add_scalar(name="train_loss_id", value=train_loss_id, step=i)
+            self.tb_add_melspec(name="loss_mask", tensor=loss_mask, step=i)
+            self.tb_add_melspec(name="full_gt", tensor=spmel_gt, step=i)
+            self.tb_add_melspec(name="full_output", tensor=spmel_output, step=i)
+
+            # Print out training information.
+            if i % self.config.options.log_step == 0:
+                self.log_training_step(
+                    step=i,
+                    loss=train_loss_id,
+                    orig=spmel_gt,
+                    proc=spmel_output,
+                )
+
             if __debug__:
                 found_nan = False
                 found_nan |= self.logger.log_if_nan_ret(loss)
@@ -171,37 +199,5 @@ class Train(Experiment):
                     self.logger.error("Step has NaN loss")
                     self.logger.error(f"filename: {fname}")
                     self.logger.error(f"tensor: {spmel_gt.any()}")
-                    self.tb_add_melspec(name="loss_mask", tensor=loss_mask, step=i)
-                    self.tb_add_melspec(name="full_gt", tensor=spmel_gt, step=i)
-                    self.tb_add_melspec(name="full_output", tensor=spmel_output, step=i)
                     self.writer.flush()
                     raise NanError(f"{fname}")
-
-            # =============================================================== #
-            #                   3. Logging and saving checkpoints             #
-            # =============================================================== #
-
-            # Add loss to tensorboard
-            self.tb_add_scalar(name="train_loss_id", value=train_loss_id, step=i)
-
-            # Print out training information.
-            if i % self.config.options.log_step == 0:
-                self.log_training_step(
-                    step=i,
-                    loss=train_loss_id,
-                    orig=spmel_gt,
-                    proc=spmel_output,
-                )
-
-            # Save model checkpoints
-            if i % self.config.options.ckpt_save_step == 0:
-                self.save_checkpoint(i)
-                self.writer.add_graph(
-                    model=self.model,
-                    input_to_model=(
-                        content_pitch_input,
-                        rhythm_input,
-                        timbre_input,
-                    ),
-                )
-                self.writer.flush()
