@@ -132,23 +132,20 @@ class Train(Experiment):
             loss_id: torch.Tensor = loss_fn(spmel_output, spmel_gt)
 
             loss_mask = spmel_gt != 0
-            masked_loss = loss_fn(
-                spmel_output.sparse_mask(loss_mask),
-                spmel_gt.sparse_mask(loss_mask),
-            )
             self.logger.trace_tensor(loss_mask)
-            self.logger.trace(str(loss_mask))
             self.logger.trace_tensor(spmel_gt)
             self.logger.trace_tensor(spmel_output)
             self.logger.trace_tensor(loss_id)
-            self.logger.trace(str(loss_id))
-
-            self.logger.trace_tensor(masked_loss)
-            self.logger.trace(str(masked_loss))
+            masked_output = spmel_output.sparse_mask(loss_mask)
+            masked_gt = spmel_gt.sparse_mask(loss_mask)
+            self.logger.trace_tensor(masked_gt)
+            self.logger.trace_tensor(masked_output)
 
             self.tb_add_melspec(name="loss_mask", tensor=loss_mask, step=i)
             self.tb_add_melspec(name="spmel_gt", tensor=spmel_gt, step=i)
             self.tb_add_melspec(name="spmel_output", tensor=spmel_output, step=i)
+            self.tb_add_melspec(name="masked_gt", tensor=masked_gt, step=i)
+            self.tb_add_melspec(name="masked_output", tensor=masked_output, step=i)
             self.writer.flush()
             exit(0)
             # Backward and optimize.
