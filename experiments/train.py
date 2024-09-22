@@ -130,8 +130,8 @@ class Train(Experiment):
 
             loss_mask = spmel_gt != 0.0
             loss_id: torch.Tensor = torch.torch.nn.functional.mse_loss(
-                spmel_output, spmel_gt
-            ).masked_select(loss_mask)
+                spmel_output.masked_select(loss_mask), spmel_gt.masked_select(loss_mask)
+            )
 
             # Backward and optimize.
             loss: torch.Tensor = loss_id
