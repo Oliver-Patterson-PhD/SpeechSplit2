@@ -159,6 +159,8 @@ class Train(Experiment):
                 )
                 self.writer.flush()
 
+            self.tb_add_scalar(name="train_loss_id", value=train_loss_id, step=i)
+
             # Print out training information.
             if i % self.config.options.log_step == 0:
                 self.log_training_step(
