@@ -9,5 +9,5 @@ ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
 trace = false
 
 [log]
-level = "TRACE"
+level = "DEBUG"
 file = true
