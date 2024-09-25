@@ -34,8 +34,8 @@ vctk: MetaDictType = {
     "p232": ("07", "M", "C"),  # 232  23  M    English          Southern-England
     "p233": ("08", "F", "C"),  # 233  23  F    English          Staffordshire
     "p236": ("10", "F", "C"),  # 236  23  F    English          Manchester
-    "p239": ("13", "F", "C"),  # 239  22  F    English          SW  England
-    "p240": ("14", "F", "C"),  # 240  21  F    English          Southern  England
+    "p239": ("13", "F", "C"),  # 239  22  F    English          SW-England
+    "p240": ("14", "F", "C"),  # 240  21  F    English          Southern-England
     "p243": ("16", "M", "C"),  # 243  22  M    English          London
     "p244": ("17", "F", "C"),  # 244  22  F    English          Manchester
     "p245": ("18", "M", "C"),  # 245  25  M    Irish            Dublin
@@ -51,6 +51,7 @@ vctk: MetaDictType = {
 }
 
 uaspeech: MetaDictType = {
+    # fmt: off
     "CM01": ("00", "M", "C"),
     "CF02": ("01", "F", "C"),
     "CF03": ("02", "F", "C"),
@@ -64,21 +65,22 @@ uaspeech: MetaDictType = {
     "CM10": ("10", "M", "C"),
     "CM12": ("11", "M", "C"),
     "CM13": ("12", "M", "C"),
-    "M01": ("13", "M", "D"),
-    "F02": ("14", "F", "D"),
-    "F03": ("15", "F", "D"),
-    "F04": ("16", "F", "D"),
-    "M04": ("17", "M", "D"),
-    "F05": ("18", "F", "D"),
-    "M05": ("19", "M", "D"),
-    "M07": ("20", "M", "D"),
-    "M08": ("21", "M", "D"),
-    "M09": ("22", "M", "D"),
-    "M10": ("23", "M", "D"),
-    "M11": ("24", "M", "D"),
-    "M12": ("25", "M", "D"),
-    "M14": ("26", "M", "D"),
-    "M16": ("27", "M", "D"),
+     "M01": ("13", "M", "D"),  # noqa
+     "F02": ("14", "F", "D"),
+     "F03": ("15", "F", "D"),
+     "F04": ("16", "F", "D"),
+     "M04": ("17", "M", "D"),
+     "F05": ("18", "F", "D"),
+     "M05": ("19", "M", "D"),
+     "M07": ("20", "M", "D"),
+     "M08": ("21", "M", "D"),
+     "M09": ("22", "M", "D"),
+     "M10": ("23", "M", "D"),
+     "M11": ("24", "M", "D"),
+     "M12": ("25", "M", "D"),
+     "M14": ("26", "M", "D"),
+     "M16": ("27", "M", "D"),
+    # fmt: on
 }
 
 smolspeech: MetaDictType = {

@@ -2,9 +2,10 @@ import time
 from typing import Self
 
 import torch
+
 from experiments.experiment import Experiment
 from util.exception import NanError
-from utils import quantize_f0_torch
+from utils import masked_mse, quantize_f0_torch
 
 
 ## Solver for training
@@ -31,9 +32,10 @@ class Train(Experiment):
         self.intrp.train()
         self.logger.info("Start training...")
         self.start_time = time.time()
-        self.model = self.model.train()
-        self.intrp = self.intrp.train()
-        loss_fn = torch.nn.MSELoss(reduction="mean")
+        if self.config.training.mask_loss:
+            self.loss_fn = masked_mse
+        else:
+            self.loss_fn = torch.nn.MSELoss(reduction="mean")
 
         i = start_iters
         while i <= self.config.options.num_iters:
@@ -86,7 +88,6 @@ class Train(Experiment):
             # =============================================================== #
             #                   2. Train the model                            #
             # =============================================================== #
-
             # Move data to GPU if available
             spmel_gt = spmel_gt.to(self.compute.device())
             rhythm_input = rhythm_input.to(self.compute.device())
@@ -129,11 +130,9 @@ class Train(Experiment):
                     timbre_input,
                 )
 
-            loss_mask = spmel_gt != 0.0
-            masked_output = spmel_output.masked_select(loss_mask).view(1, -1, 80)
-            masked_gt = spmel_gt.masked_select(loss_mask).view(1, -1, 80)
+            loss_id: torch.Tensor
+            loss_id = self.loss_fn(spmel_output, spmel_gt)
 
-            loss_id: torch.Tensor = loss_fn(masked_output, masked_gt)
             # Backward and optimize.
             loss: torch.Tensor = loss_id
             self.optimizer.zero_grad()
@@ -159,12 +158,6 @@ class Train(Experiment):
                     ),
                 )
                 self.writer.flush()
-
-            # Add loss to tensorboard
-            self.tb_add_scalar(name="train_loss_id", value=train_loss_id, step=i)
-            self.tb_add_melspec(name="loss_mask", tensor=loss_mask, step=i)
-            self.tb_add_melspec(name="full_gt", tensor=spmel_gt, step=i)
-            self.tb_add_melspec(name="full_output", tensor=spmel_output, step=i)
 
             # Print out training information.
             if i % self.config.options.log_step == 0:

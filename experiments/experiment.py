@@ -13,6 +13,7 @@ from model import InterpLnr
 from util.compute import Compute
 from util.config import Config
 from util.logging import Logger
+from utils import save_tensor
 
 
 class Experiment(object):
@@ -156,3 +157,14 @@ class Experiment(object):
 
     def load_data(self: Self, singleitem: bool = False) -> None:
         self.data_loader = get_loader(self.config, singleitem=singleitem)
+
+    def save_tensor(self: Self, tensor: torch.Tensor, fname: str) -> None:
+        save_tensor(
+            tensor,
+            "{}/{}/{}".format(
+                self.config.paths.artefacts,
+                self.config.options.experiment,
+                fname,
+            ),
+        )
+        return

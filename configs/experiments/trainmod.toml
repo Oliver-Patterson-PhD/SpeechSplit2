@@ -16,6 +16,7 @@ samplier = 32
 drop_and_pad = false
 
 [training]
+mask_loss = false
 lr = 0.001
 beta1 = 0.9
 beta2 = 0.999

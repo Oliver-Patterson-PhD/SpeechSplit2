@@ -99,6 +99,7 @@ class Logger(metaclass=Singleton):
         level: LogLevel,
         caller: str,
         message: str,
+        end: str = "\n",
     ) -> None:
         if self.__file is not None or level >= self.__level:
             fullmsg = self.__format_msg(
@@ -109,14 +110,14 @@ class Logger(metaclass=Singleton):
             if level >= self.__level:
                 print(
                     fullmsg,
-                    end="\n",
+                    end=end,
                     file=self.__stream,
                     flush=self.__flush,
                 )
             if self.__file is not None:
                 print(
                     fullmsg,
-                    end="\n",
+                    end=end,
                     file=self.__file,
                     flush=self.__flush,
                 )
@@ -213,46 +214,52 @@ class Logger(metaclass=Singleton):
         else:
             return default
 
-    def trace(self: Self, message: str, depth: int = 1) -> None:
+    def trace(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
         self.__log(
             level=LogLevel.TRACE,
             caller=self.__get_caller(depth),
             message=message,
+            end=end,
         )
 
-    def debug(self: Self, message: str, depth: int = 1) -> None:
+    def debug(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
         self.__log(
             level=LogLevel.DEBUG,
             caller=self.__get_caller(depth),
             message=message,
+            end=end,
         )
 
-    def info(self: Self, message: str, depth: int = 1) -> None:
+    def info(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
         self.__log(
             level=LogLevel.INFO,
             caller=self.__get_caller(depth),
             message=message,
+            end=end,
         )
 
-    def warn(self: Self, message: str, depth: int = 1) -> None:
+    def warn(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
         self.__log(
             level=LogLevel.WARN,
             caller=self.__get_caller(depth),
             message=message,
+            end=end,
         )
 
-    def error(self: Self, message: str, depth: int = 1) -> None:
+    def error(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
         self.__log(
             level=LogLevel.ERROR,
             caller=self.__get_caller(depth),
             message=message,
+            end=end,
         )
 
-    def fatal(self: Self, message: str, depth: int = 1) -> None:
+    def fatal(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
         self.__log(
             level=LogLevel.FATAL,
             caller=self.__get_caller(depth),
             message=message,
+            end=end,
         )
         raise LoggedException(message)
 

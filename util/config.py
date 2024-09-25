@@ -104,6 +104,7 @@ class ConfigOptions:
 
 
 class ConfigTraining:
+    mask_loss: bool = False
     lr: float = 0.0001
     beta1: float = 0.9
     beta2: float = 0.999
@@ -121,7 +122,7 @@ class ConfigDataLoader:
 # The Config object is a Singleton,
 # The config file is generally only read once at the beginning of execution
 class Config(metaclass=Singleton):
-    current_time: str
+    start_time: str
     logfile: Optional[str] = None
     original_config: str
 
@@ -162,6 +163,7 @@ class Config(metaclass=Singleton):
         if not path.exists(config_file):
             Logger().fatal(f"Could not find file: {config_file}")
         tomldict = loadtoml(open(config_file, "rb"))
+
         if (
             "experiment" not in tomldict["options"].keys()
             and "bottleneck" not in tomldict["options"].keys()
@@ -170,11 +172,16 @@ class Config(metaclass=Singleton):
                 "Could not find options.experiment and "
                 + "options.bottleneck in config file"
             )
-        model_name = "models/" + tomldict["options"]["bottleneck"]
-        experiment_name = "experiments/" + tomldict["options"]["experiment"]
-        model_dict = loadtoml(open(config_str.format(model_name), "rb"))
-        experiment_dict = loadtoml(open(config_str.format(experiment_name), "rb"))
-        tomldict = self.__merge_dicts(tomldict, model_dict, experiment_dict)
+        elif config_name == "scratch":
+            model_name = "models/" + tomldict["options"]["bottleneck"]
+            model_dict = loadtoml(open(config_str.format(model_name), "rb"))
+            tomldict = self.__merge_dicts(tomldict, model_dict, {})
+        else:
+            model_name = "models/" + tomldict["options"]["bottleneck"]
+            model_dict = loadtoml(open(config_str.format(model_name), "rb"))
+            experiment_name = "experiments/" + tomldict["options"]["experiment"]
+            experiment_dict = loadtoml(open(config_str.format(experiment_name), "rb"))
+            tomldict = self.__merge_dicts(tomldict, model_dict, experiment_dict)
         self.__print_config(tomldict)
         for key, subdict in tomldict.items():
             self.__map_categories(
@@ -246,7 +253,7 @@ class Config(metaclass=Singleton):
                     subdict["run_tests"] = self.__set_runtypes(subdict["run_tests"])
                 self.options.__dict__.update(subdict)
                 if not subdict.keys() >= {"experiment"}:
-                    self.options.experiment = self.current_time
+                    self.options.experiment = self.start_time
             case _:
                 self.__dict__.update(subdict)
         return

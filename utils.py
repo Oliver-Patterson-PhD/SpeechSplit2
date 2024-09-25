@@ -5,6 +5,7 @@ import torch
 import torchaudio
 import torchvision
 from pysptk.sptk import rapt
+
 from util.logging import Logger
 
 n_fft = 1024
@@ -365,3 +366,18 @@ def try_image(tensor: torch.Tensor) -> torch.Tensor | None:
 
 def norm_audio(x: torch.Tensor) -> torch.Tensor:
     return (((x - x.min()) / (x.max() - x.min())) * 2) - 1
+
+
+def masked_mse(prediction: torch.Tensor, ground_t: torch.Tensor) -> torch.Tensor:
+    prediction = prediction.flatten()
+    ground_t = ground_t.flatten()
+    mask: torch.Tensor = ground_t != 0.0
+    loss = (
+        torch.nn.functional.mse_loss(
+            prediction,
+            ground_t,
+            reduction="sum",
+        )
+        / mask.sum()
+    )
+    return loss
