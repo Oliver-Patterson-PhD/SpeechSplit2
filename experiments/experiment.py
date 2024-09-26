@@ -89,7 +89,7 @@ class Experiment(object):
             f"Loading the trained models from step {resume_iters}...",
             depth=2,
         )
-        ckpt_name = "{}-{}-{}{}.ckpt".format(
+        ckpt_name = "{0}/{1}/{0}-{1}-{2}-{3}.ckpt".format(
             self.config.options.experiment,
             self.config.options.bottleneck,
             self.config.options.model_type,
@@ -114,6 +114,26 @@ class Experiment(object):
             self.model.load_state_dict(new_state_dict)
         self.config.training.lr = self.optimizer.param_groups[0]["lr"]
 
+    def save_checkpoint(self: Self, i: int) -> None:
+        os.makedirs(self.config.paths.models, exist_ok=True)
+        self.logger.info(
+            f"Saving model checkpoint into {self.config.paths.models}...",
+            depth=2,
+        )
+        ckpt_name = "{0}/{1}/{0}-{1}-{2}-{3}.ckpt".format(
+            self.config.options.experiment,
+            self.config.options.bottleneck,
+            self.config.options.model_type,
+            i,
+        )
+        torch.save(
+            {
+                "model": self.model.state_dict(),
+                "optimizer": self.optimizer.state_dict(),
+            },
+            os.path.join(self.config.paths.models, ckpt_name),
+        )
+
     def log_training_step(
         self: Self,
         step: int,
@@ -134,26 +154,6 @@ class Experiment(object):
             self.tb_add_melspec(name="orig", tensor=orig, step=step)
             self.tb_add_melspec(name="proc", tensor=proc, step=step)
             self.writer.flush()
-
-    def save_checkpoint(self: Self, i: int) -> None:
-        os.makedirs(self.config.paths.models, exist_ok=True)
-        self.logger.info(
-            f"Saving model checkpoint into {self.config.paths.models}...",
-            depth=2,
-        )
-        ckpt_name = "{}-{}-{}-{}.ckpt".format(
-            self.config.options.experiment,
-            self.config.options.bottleneck,
-            self.config.options.model_type,
-            i,
-        )
-        torch.save(
-            {
-                "model": self.model.state_dict(),
-                "optimizer": self.optimizer.state_dict(),
-            },
-            os.path.join(self.config.paths.models, ckpt_name),
-        )
 
     def load_data(self: Self, singleitem: bool = False) -> None:
         self.data_loader = get_loader(self.config, singleitem=singleitem)
