@@ -84,20 +84,21 @@ class Experiment(object):
         self.logger.info(self.config.options.model_type, depth=2)
         self.logger.info("The number of parameters: {}".format(num_params), depth=2)
 
-    def restore_model(self: Self, resume_iters: Optional[int]) -> None:
+    def restore_model(self: Self, resume_iters: int = 0) -> None:
         self.logger.info(
             f"Loading the trained models from step {resume_iters}...",
             depth=2,
         )
-        ckpt_name = "{0}/{1}/{0}-{1}-{2}-{3}.ckpt".format(
+        ckpt_name = "{2}-{1}/{0}/{0}-{1}-{2}-{3}-{4}.ckpt".format(
             self.config.options.experiment,
             self.config.options.bottleneck,
             self.config.options.model_type,
-            f"-{resume_iters}" if resume_iters is not None else "",
+            self.config.options.resume_iters,
+            self.config.start_time,
         )
         save_dir = (
             self.config.paths.models
-            if resume_iters is not None
+            if self.config.options.resume_iters != 0
             else self.config.paths.trained_models
         )
         ckpt = torch.load(
@@ -114,17 +115,18 @@ class Experiment(object):
             self.model.load_state_dict(new_state_dict)
         self.config.training.lr = self.optimizer.param_groups[0]["lr"]
 
-    def save_checkpoint(self: Self, i: int) -> None:
+    def save_checkpoint(self: Self, save_iters: int) -> None:
         os.makedirs(self.config.paths.models, exist_ok=True)
         self.logger.info(
             f"Saving model checkpoint into {self.config.paths.models}...",
             depth=2,
         )
-        ckpt_name = "{0}/{1}/{0}-{1}-{2}-{3}.ckpt".format(
+        ckpt_name = "{2}-{1}/{0}/{0}-{1}-{2}-{3}-{4}.ckpt".format(
             self.config.options.experiment,
             self.config.options.bottleneck,
             self.config.options.model_type,
-            i,
+            save_iters,
+            self.config.start_time,
         )
         ckpt_file = os.path.join(self.config.paths.models, ckpt_name)
         os.makedirs(os.path.dirname(ckpt_file), exist_ok=True)
