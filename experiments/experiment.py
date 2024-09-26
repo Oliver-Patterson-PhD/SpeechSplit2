@@ -126,12 +126,14 @@ class Experiment(object):
             self.config.options.model_type,
             i,
         )
+        ckpt_file = os.path.join(self.config.paths.models, ckpt_name)
+        os.makedirs(os.path.dirname(ckpt_file), exist_ok=True)
         torch.save(
             {
                 "model": self.model.state_dict(),
                 "optimizer": self.optimizer.state_dict(),
             },
-            os.path.join(self.config.paths.models, ckpt_name),
+            ckpt_file,
         )
 
     def log_training_step(
