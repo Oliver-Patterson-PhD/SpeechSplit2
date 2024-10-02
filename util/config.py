@@ -277,7 +277,7 @@ class Config(metaclass=Singleton):
         self.__set_data_and_feat()
         self.__set_artefact_paths()
         if self.__logging.file == "SET_ME":
-            self.__logging.file = f"{self.paths.logging}/{self.start_time}.log"
+            self.__logging.file = f"{self.paths.logging}/{self.start_time}-{self.options.experiment}.log"
             Logger().set_file(self.__logging.file)
 
     def __set_artefact_paths(self) -> None:
