@@ -276,8 +276,6 @@ class TextDecoder(torch.nn.Module):
 
 class Whisper(torch.nn.Module):
     detect_language = detect_language_function
-    transcribe = transcribe_function
-    decode = decode_function
 
     def __init__(self, dims: ModelDimensions):
         super().__init__()
