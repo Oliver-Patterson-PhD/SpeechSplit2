@@ -368,16 +368,16 @@ def norm_audio(x: torch.Tensor) -> torch.Tensor:
     return (((x - x.min()) / (x.max() - x.min())) * 2) - 1
 
 
-def masked_mse(prediction: torch.Tensor, ground_t: torch.Tensor) -> torch.Tensor:
+def masked_mse(
+    prediction: torch.FloatTensor,
+    ground_t: torch.FloatTensor,
+) -> torch.Tensor:
     prediction = prediction.flatten()
     ground_t = ground_t.flatten()
-    mask: torch.Tensor = ground_t != 0.0
-    loss = (
-        torch.nn.functional.mse_loss(
-            prediction,
-            ground_t,
-            reduction="sum",
-        )
-        / mask.sum()
+    mask: torch.BoolTensor = ground_t != 0.0
+    sum: torch.FloatTensor = torch.nn.functional.mse_loss(
+        prediction,
+        ground_t,
+        reduction="sum",
     )
-    return loss
+    return sum / mask.sum()

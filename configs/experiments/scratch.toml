@@ -1,22 +1,22 @@
 [options]
-run_tests = ["test"]
+
 dataset_name = "vctk"
 num_iters = 1
 log_step = 1
-ckpt_save_step = 100000
+ckpt_save_step = 10000
 train = false
 return_latents = false
 regenerate_data = false
 
 [dataloader]
 shuffle = false
-batch_size = 1
+batch_size = 32
 num_workers = 24
 samplier = 32
 drop_and_pad = false
 
 [training]
-mask_loss = false
+mask_loss = true
 lr = 0.001
 beta1 = 0.9
 beta2 = 0.999

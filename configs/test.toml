@@ -3,10 +3,10 @@ proc_data = "/mnt/datasets/processed/SpeechSplit2"
 raw_data = "/mnt/datasets/raw"
 
 [options]
-trace = false
 bottleneck = "large"
 experiment = "test_samples"
 ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
+trace = false
 
 [log]
 level = "DEBUG"
