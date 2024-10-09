@@ -1,14 +1,34 @@
 [paths]
-proc_data = "/mnt/datasets/processed/SpeechSplit2"
+proc_data = "/mnt/datasets/processed/Whisper"
 raw_data = "/mnt/datasets/raw"
-artefacts = "artefacts/scratch"
+
+[log]
+level = "TRACE"
+file = true
 
 [options]
 bottleneck = "large"
 experiment = "scratch"
 ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
 trace = false
+dataset_name = "vctk"
+num_iters = 1
+log_step = 1
+ckpt_save_step = 10000
+train = false
+return_latents = false
+regenerate_data = false
+whisper_name = "tiny.en"
 
-[log]
-level = "TRACE"
-file = true
+[dataloader]
+shuffle = false
+batch_size = 32
+num_workers = 24
+samplier = 32
+drop_and_pad = false
+
+[training]
+mask_loss = true
+lr = 0.001
+beta1 = 0.9
+beta2 = 0.999

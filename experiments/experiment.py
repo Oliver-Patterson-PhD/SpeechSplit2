@@ -26,6 +26,7 @@ class Experiment(object):
     start_time: float
     writer: SummaryWriter
     tb_prefix: str
+    experiment_dir: str
 
     def __init__(self: Self, config: Config, currtime: int = int(time.time())) -> None:
         self.config = config
@@ -51,6 +52,10 @@ class Experiment(object):
         self.tb_prefix = (
             self.config.options.experiment + "/" + self.config.options.model_type
         )
+        self.experiment_dir = (
+            self.config.paths.artefacts + "/" + self.config.options.experiment
+        )
+        os.makedirs(self.experiment_dir, exist_ok=True)
 
     def tb_add_scalar(
         self: Self,
@@ -99,7 +104,7 @@ class Experiment(object):
         save_dir = (
             self.config.paths.models
             if self.config.options.resume_iters != 0
-            else self.config.paths.trained_models
+            else self.config.paths.full_models
         )
         ckpt = torch.load(
             os.path.join(save_dir, ckpt_name),
@@ -165,9 +170,8 @@ class Experiment(object):
     def save_tensor(self: Self, tensor: torch.Tensor, fname: str) -> None:
         save_tensor(
             tensor,
-            "{}/{}/{}".format(
-                self.config.paths.artefacts,
-                self.config.options.experiment,
+            "{}/{}".format(
+                self.experiment_dir,
                 fname,
             ),
         )

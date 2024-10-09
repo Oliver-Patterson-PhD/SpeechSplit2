@@ -8,6 +8,11 @@ from pysptk.sptk import rapt
 
 from util.logging import Logger
 
+whispercheck = True
+
+if whispercheck:
+    from transcribers.whisper.audio import N_SAMPLES, log_mel_spectrogram
+
 n_fft = 1024
 hop_length = 256
 dim_freq = 80
@@ -108,7 +113,15 @@ def quantize_f0_torch(
 def get_spmel(
     wav: torch.Tensor,
 ) -> torch.Tensor:
-    return torch_melbasis(torch_stft(wav)).T
+    if whispercheck:
+        return log_mel_spectrogram(
+            wav,
+            80,
+            N_SAMPLES,
+            wav.device,
+        )
+    else:
+        return torch_melbasis(torch_stft(wav)).T
 
 
 def get_spenv(
@@ -369,13 +382,13 @@ def norm_audio(x: torch.Tensor) -> torch.Tensor:
 
 
 def masked_mse(
-    prediction: torch.FloatTensor,
-    ground_t: torch.FloatTensor,
+    prediction: torch.Tensor,
+    ground_t: torch.Tensor,
 ) -> torch.Tensor:
     prediction = prediction.flatten()
     ground_t = ground_t.flatten()
-    mask: torch.BoolTensor = ground_t != 0.0
-    sum: torch.FloatTensor = torch.nn.functional.mse_loss(
+    mask: torch.Tensor = ground_t != 0.0
+    sum: torch.Tensor = torch.nn.functional.mse_loss(
         prediction,
         ground_t,
         reduction="sum",

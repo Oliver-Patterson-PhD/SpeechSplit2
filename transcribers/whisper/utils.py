@@ -93,15 +93,11 @@ class ResultWriter:
     def __call__(
         self,
         result: dict,
-        audio_path: str,
+        name: str,
         options: Optional[dict] = None,
         **kwargs,
     ) -> None:
-        audio_basename = os.path.basename(audio_path)
-        audio_basename = os.path.splitext(audio_basename)[0]
-        output_path = os.path.join(
-            self.output_dir, audio_basename + "." + self.extension
-        )
+        output_path = os.path.join(self.output_dir, name + "." + self.extension)
 
         with open(output_path, "w", encoding="utf-8") as f:
             self.write_result(result, file=f, options=options, **kwargs)
@@ -277,15 +273,6 @@ class WriteSRT(SubtitlesWriter):
 
 
 class WriteTSV(ResultWriter):
-    """
-    Write a transcript to a file in TSV (tab-separated values) format containing lines like:
-    <start time in integer milliseconds>\t<end time in integer milliseconds>\t<transcript text>
-
-    Using integer milliseconds as start and end times means there's no chance of interference from
-    an environment setting a language encoding that causes the decimal in a floating point number
-    to appear as a comma; also is faster and more efficient to parse & store, e.g., in C++.
-    """
-
     extension: str = "tsv"
 
     def write_result(

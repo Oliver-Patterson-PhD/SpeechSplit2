@@ -18,7 +18,7 @@ class WavenetSynthesizer(Synthesizer):
 
     def __init__(self, device: torch.device, config: Config) -> None:
         self.config = config
-        data_dir = self.config.paths.trained_models
+        data_dir = self.config.paths.full_models
         config_file = f"{data_dir}/{self.model_name}.toml"
         self.configtoml = loadtoml(open(config_file, "rb"))
         self.model = getattr(builder, "wavenet")(

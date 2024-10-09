@@ -3,6 +3,7 @@ from typing import List, Tuple
 
 import torch
 import torchaudio
+
 from meta_dicts import MetaDictType
 from util.config import Config
 from util.logging import Logger
@@ -143,8 +144,7 @@ def make_sf_item(
             torchaudio.load(
                 f"{dir_name}/{spk_dir}/{fname}",
                 channels_first=True,
-            )[0],
-            fname,
+            )[0]
         )
         if x.shape[0] % 256 == 0:
             x = torch.cat(
@@ -277,7 +277,7 @@ vad_transform = torchaudio.transforms.Vad(
 )
 
 
-def clean_audio(audio: torch.Tensor, fname: str):
+def clean_audio(audio: torch.Tensor):
     retval = torchaudio.sox_effects.apply_effects_tensor(
         vad_transform(
             torchaudio.sox_effects.apply_effects_tensor(

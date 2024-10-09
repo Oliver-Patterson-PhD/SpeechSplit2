@@ -130,8 +130,6 @@ TO_LANGUAGE_CODE = {
 
 @dataclass
 class Tokenizer:
-    """A thin wrapper around `tiktoken` providing quick access to special tokens"""
-
     encoding: tiktoken.Encoding
     num_languages: int
     sot_sequence: Tuple[int, ...] = ()
@@ -166,10 +164,6 @@ class Tokenizer:
         return self.encoding.decode(token_ids, **kwargs)
 
     def decode_with_timestamps(self, token_ids: List[int], **kwargs) -> str:
-        """
-        Timestamp tokens are above other special tokens' id range and are ignored by `decode()`.
-        This method decodes given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
-        """
         return self.encoding.decode(token_ids, **kwargs)
 
     @cached_property
@@ -210,10 +204,8 @@ class Tokenizer:
 
     @cached_property
     def language_token(self) -> int:
-        """Returns the token id corresponding to the value of the `language` field"""
         if self.language is None:
             raise ValueError("This tokenizer does not have language token configured")
-
         return self.to_language_token(self.language)
 
     def to_language_token(self, language) -> int:
@@ -240,16 +232,6 @@ class Tokenizer:
 
     @cached_property
     def non_speech_tokens(self) -> Tuple[int, ...]:
-        """
-        Returns the list of tokens to suppress in order to avoid any speaker tags or non-speech
-        annotations, to prevent sampling texts that are not actually spoken in the audio, e.g.
-
-        - ♪♪♪
-        - ( SPEAKING FOREIGN LANGUAGE )
-        - [DAVID] Hey there,
-
-        keeping basic punctuations like commas, periods, question marks, exclamation points, etc.
-        """
         symbols = list('"#()*+/:;<=>@[\\]^_`{|}~「」『』')
         symbols += (
             "<< >> <<< >>> -- --- -( -[ (' (\" (( )) ((( ))) [[ ]] {{ }} ♪♪ ♪♪♪".split()

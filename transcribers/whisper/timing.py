@@ -1,6 +1,4 @@
 import itertools
-import subprocess
-import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List
 
@@ -17,40 +15,20 @@ if TYPE_CHECKING:
 
 
 def median_filter(x: torch.Tensor, filter_width: int):
-    """Apply a median filter of width `filter_width` along the last dimension of `x`"""
     pad_width = filter_width // 2
     if x.shape[-1] <= pad_width:
-        # F.pad requires the padding width to be smaller than the input dimension
         return x
-
     if (ndim := x.ndim) <= 2:
-        # `F.pad` does not support 1D or 2D inputs for reflect padding but supports 3D and 4D
         x = x[None, None, :]
 
     assert (
         filter_width > 0 and filter_width % 2 == 1
     ), "`filter_width` should be an odd number"
 
-    result = None
     x = F.pad(x, (filter_width // 2, filter_width // 2, 0, 0), mode="reflect")
-    if x.is_cuda:
-        try:
-            from .triton_ops import median_filter_cuda
-
-            result = median_filter_cuda(x, filter_width)
-        except (RuntimeError, subprocess.CalledProcessError):
-            warnings.warn(
-                "Failed to launch Triton kernels, likely due to missing CUDA toolkit; "
-                "falling back to a slower median kernel implementation..."
-            )
-
-    if result is None:
-        # sort() is faster than torch.median (https://github.com/pytorch/pytorch/issues/51450)
-        result = x.unfold(-1, filter_width, 1).sort()[0][..., filter_width // 2]
-
+    result = x.unfold(-1, filter_width, 1).sort()[0][..., filter_width // 2]
     if ndim <= 2:
         result = result[0, 0]
-
     return result
 
 
@@ -105,49 +83,7 @@ def dtw_cpu(x: np.ndarray):
     return backtrace(trace)
 
 
-def dtw_cuda(x, BLOCK_SIZE=1024):
-    from .triton_ops import dtw_kernel
-
-    M, N = x.shape
-    assert M < BLOCK_SIZE, f"M should be smaller than {BLOCK_SIZE=}"
-
-    x_skew = (
-        F.pad(x, (0, M + 1), value=np.inf).flatten()[: M * (N + M)].reshape(M, N + M)
-    )
-    x_skew = x_skew.T.contiguous()
-    cost = torch.ones(N + M + 2, M + 2) * np.inf
-    cost[0, 0] = 0
-    cost = cost.cuda()
-    trace = torch.zeros_like(cost, dtype=torch.int32)
-
-    dtw_kernel[(1,)](
-        cost,
-        trace,
-        x_skew,
-        x_skew.stride(0),
-        cost.stride(0),
-        trace.stride(0),
-        N,
-        M,
-        BLOCK_SIZE=BLOCK_SIZE,
-    )
-
-    trace = trace.T.flatten()[: (M + 1) * (M + N + 3)].reshape(M + 1, M + N + 3)[
-        :, : N + 1
-    ]
-    return backtrace(trace.cpu().numpy())
-
-
 def dtw(x: torch.Tensor) -> np.ndarray:
-    if x.is_cuda:
-        try:
-            return dtw_cuda(x)
-        except (RuntimeError, subprocess.CalledProcessError):
-            warnings.warn(
-                "Failed to launch Triton kernels, likely due to missing CUDA toolkit; "
-                "falling back to a slower DTW implementation..."
-            )
-
     return dtw_cpu(x.double().cpu().numpy())
 
 

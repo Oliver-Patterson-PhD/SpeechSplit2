@@ -21,7 +21,7 @@ class ConfigPaths:
     spmels: str
     monowavs: str
 
-    trained_models: str
+    full_models: str
     models: str
     tensorboard: str
     latents: str
@@ -87,6 +87,7 @@ class RunTests(Flag):
 class ConfigOptions:
     bottleneck: str = "large"
     model_type: str = "SpeechSplit2"
+    whisper_type: str = "large-v3-turbo"
     ntfy_url: str
     experiment: str
     dataset_name: str
@@ -277,14 +278,16 @@ class Config(metaclass=Singleton):
         self.__set_data_and_feat()
         self.__set_artefact_paths()
         if self.__logging.file == "SET_ME":
-            self.__logging.file = f"{self.paths.logging}/{self.start_time}-{self.options.experiment}.log"
+            self.__logging.file = (
+                f"{self.paths.logging}/{self.start_time}-{self.options.experiment}.log"
+            )
             Logger().set_file(self.__logging.file)
 
     def __set_artefact_paths(self) -> None:
         if not hasattr(self.paths, "logging"):
             self.paths.logging = f"{self.paths.artefacts}/logs"
-        if not hasattr(self.paths, "trained_models"):
-            self.paths.trained_models = f"{self.paths.artefacts}/trained_models"
+        if not hasattr(self.paths, "full_models"):
+            self.paths.full_models = f"{self.paths.artefacts}/full_models"
         if not hasattr(self.paths, "tensorboard"):
             self.paths.tensorboard = f"{self.paths.artefacts}/tensorboard"
         if not hasattr(self.paths, "models"):

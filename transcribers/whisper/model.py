@@ -6,18 +6,13 @@ from typing import Dict, Iterable, Optional, Tuple
 
 import numpy as np
 import torch
+from torch.nn.functional import scaled_dot_product_attention
 
 from .decoding import decode as decode_function
 from .decoding import detect_language as detect_language_function
 from .transcribe import transcribe as transcribe_function
 
-try:
-    from torch.nn.functional import scaled_dot_product_attention
-
-    SDPA_AVAILABLE = True
-except (ImportError, RuntimeError, OSError):
-    scaled_dot_product_attention = None
-    SDPA_AVAILABLE = False
+SDPA_AVAILABLE = True
 
 
 @dataclass
@@ -65,7 +60,6 @@ def sinusoids(
     channels,
     max_timescale=10000,
 ) -> torch.Tensor:
-    """Returns sinusoids for positional embedding"""
     assert channels % 2 == 0
     log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
     inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
@@ -184,6 +178,7 @@ class ResidualAttentionBlock(torch.nn.Module):
     ):
         x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)[0]
         if self.cross_attn:
+            assert self.cross_attn_ln is not None
             x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)[0]
         x = x + self.mlp(self.mlp_ln(x))
         return x
@@ -209,10 +204,6 @@ class AudioEncoder(torch.nn.Module):
         self.ln_post = LayerNorm(n_state)
 
     def forward(self, x: torch.Tensor):
-        """
-        x : torch.Tensor, shape = (batch_size, n_mels, n_ctx)
-            the mel spectrogram of the audio
-        """
         x = torch.nn.functional.gelu(self.conv1(x))
         x = torch.nn.functional.gelu(self.conv2(x))
         x = x.permute(0, 2, 1)
@@ -250,12 +241,6 @@ class TextDecoder(torch.nn.Module):
     def forward(
         self, x: torch.Tensor, xa: torch.Tensor, kv_cache: Optional[dict] = None
     ):
-        """
-        x : torch.LongTensor, shape = (batch_size, <= n_ctx)
-            the text tokens
-        xa : torch.Tensor, shape = (batch_size, n_audio_ctx, n_audio_state)
-            the encoded audio features to be attended on
-        """
         offset = next(iter(kv_cache.values())).shape[1] if kv_cache else 0
         x = (
             self.token_embedding(x)
@@ -276,6 +261,8 @@ class TextDecoder(torch.nn.Module):
 
 class Whisper(torch.nn.Module):
     detect_language = detect_language_function
+    transcribe = transcribe_function
+    decode = decode_function
 
     def __init__(self, dims: ModelDimensions):
         super().__init__()
@@ -335,19 +322,6 @@ class Whisper(torch.nn.Module):
         return self.dims.n_vocab - 51765 - int(self.is_multilingual)
 
     def install_kv_cache_hooks(self, cache: Optional[dict] = None):
-        """
-        The `MultiHeadAttention` module optionally accepts `kv_cache` which stores the key and value
-        tensors calculated for the previous positions. This method returns a dictionary that stores
-        all caches, and the necessary hooks for the key and value projection modules that save the
-        intermediate tensors to be reused during later calculations.
-
-        Returns
-        -------
-        cache : Dict[torch.nn.Module, torch.Tensor]
-            A dictionary object mapping the key/value projection modules to its cache
-        hooks : List[RemovableHandle]
-            List of PyTorch RemovableHandle objects to stop the hooks to be called
-        """
         cache = {**cache} if cache is not None else {}
         hooks = []
 

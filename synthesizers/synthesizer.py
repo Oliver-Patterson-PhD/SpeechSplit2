@@ -21,8 +21,8 @@ class Synthesizer(object):
         self.device = device
         self.model_name = model_name
         self.config = config
-        config_file = f"{self.config.paths.trained_models}/{self.model_name}.toml"
-        pickle_file = f"{self.config.paths.trained_models}/{self.model_name}.pkl"
+        config_file = f"{self.config.paths.full_models}/{self.model_name}.toml"
+        pickle_file = f"{self.config.paths.full_models}/{self.model_name}.pkl"
 
         tomlconfig = loadtoml(open(config_file, "rb"))
         state_dict = torch.load(pickle_file, map_location="cpu")
