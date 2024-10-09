@@ -1,5 +1,5 @@
 import os
-# import time
+import time
 from typing import List, Self
 
 import torch
