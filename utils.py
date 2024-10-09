@@ -10,15 +10,17 @@ from util.logging import Logger
 
 whispercheck = True
 
-if whispercheck:
-    from transcribers.whisper.audio import N_SAMPLES, log_mel_spectrogram
-
 n_fft = 1024
 hop_length = 256
 dim_freq = 80
 f_min = 90
 f_max = 7600
 sample_rate = 16000
+
+if whispercheck:
+    from transcribers.whisper.audio import N_SAMPLES, log_mel_spectrogram
+    n_fft = 400
+    hop_length = 160
 
 torch_stft = torchaudio.transforms.Spectrogram(
     n_fft=n_fft,
@@ -119,7 +121,7 @@ def get_spmel(
             80,
             N_SAMPLES,
             wav.device,
-        )
+        ).T
     else:
         return torch_melbasis(torch_stft(wav)).T
 

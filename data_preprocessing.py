@@ -63,7 +63,7 @@ def process_file(
         f0_norm = extract_f0(wav, fs, lo, hi)
         if len(spmel) != len(f0_norm):
             Logger().fatal(
-                f"melspec and f0 lengths do not match for {filename}"
+                f"melspec and f0 lengths do not match for {filename}\n"
                 f"spmel: {len(spmel)}\n"
                 f"f0_rapt: {len(f0_norm)}\n"
             )
