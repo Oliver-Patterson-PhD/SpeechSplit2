@@ -37,6 +37,21 @@ class Scratchpad(Experiment):
                 if spk_dir in spk_meta:
                     for root, _, files in os.walk(os.path.join(dir_name, spk_dir)):
                         self.proc(root, files)
+        else:
+            self.process()
+
+    @torch.no_grad()
+    def get_real_text(self: Self, fname: str):
+        if self.config.options.dataset_name == "vctk":
+            fname = os.path.splitext(fname)[0]
+            spcode = fname[0:2]
+            fullpath = "{}/VCTK-Corpus/txt/{}/{}.txt".format(
+                self.paths.raw_data, spcode, fname
+            )
+            with open(fullpath, "rb") as txtfile:
+                return txtfile.read().replace("\n", "")
+        else:
+            raise NotImplementedError
 
     @torch.no_grad()
     def proc(self: Self, root: str, files: List[str]) -> None:

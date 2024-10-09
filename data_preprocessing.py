@@ -62,11 +62,14 @@ def process_file(
         spmel = get_spmel(wav)
         f0_norm = extract_f0(wav, fs, lo, hi)
         if len(spmel) != len(f0_norm):
-            Logger().fatal(
-                f"melspec and f0 lengths do not match for {filename}\n"
-                f"spmel: {len(spmel)}\n"
-                f"f0_rapt: {len(f0_norm)}\n"
-            )
+            if (len(spmel) - 1) == len(f0_norm):
+                spmel = spmel[:-1]
+            else:
+                Logger().fatal(
+                    f"melspec and f0 lengths do not match for {filename}\n"
+                    f"spmel: {len(spmel)}\n"
+                    f"f0_norm: {len(f0_norm)}\n"
+                )
         if (has_content(wav_mono)) and (has_content(spmel)) and (has_content(f0_norm)):
             wav_mono_split = split_feats(
                 fea=wav_mono,
@@ -231,7 +234,6 @@ def make_metadata(
     meta_file: str,
 ) -> None:
     spk_meta: MetaDictType
-    # use wav directory simply because all inputs have the same filename
     dir_name, spk_dir_list, _ = next(os.walk(config.paths.monowavs))
     spk_meta = getattr(
         __import__("meta_dicts"),

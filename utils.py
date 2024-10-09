@@ -18,9 +18,25 @@ f_max = 7600
 sample_rate = 16000
 
 if whispercheck:
-    from transcribers.whisper.audio import N_SAMPLES, log_mel_spectrogram
-    n_fft = 400
-    hop_length = 160
+
+    def exact_div(x, y):
+        assert x % y == 0
+        return x // y
+
+    from transcribers.whisper.audio import log_mel_spectrogram
+
+    SAMPLE_RATE = 16000
+    N_FFT = 400
+    HOP_LENGTH = 160
+    CHUNK_LENGTH = 30
+    N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE
+    N_FRAMES = exact_div(N_SAMPLES, HOP_LENGTH)
+    N_SAMPLES_PER_TOKEN = HOP_LENGTH * 2
+    FRAMES_PER_SECOND = exact_div(SAMPLE_RATE, HOP_LENGTH)
+    TOKENS_PER_SECOND = exact_div(SAMPLE_RATE, N_SAMPLES_PER_TOKEN)
+    test_spmel = True
+    n_fft = N_FFT
+    hop_length = HOP_LENGTH
 
 torch_stft = torchaudio.transforms.Spectrogram(
     n_fft=n_fft,
@@ -39,7 +55,7 @@ torch_melbasis = torchaudio.transforms.MelScale(
     norm=None,
 )
 min_level = torch.exp(-100 / 20 * torch.log(torch.tensor(10)))
-vtlp_window = torch.hann_window(2048)
+vtlp_window = torch.hann_window(n_fft * 2)
 
 
 class MelSpec:
@@ -115,13 +131,16 @@ def quantize_f0_torch(
 def get_spmel(
     wav: torch.Tensor,
 ) -> torch.Tensor:
-    if whispercheck:
-        return log_mel_spectrogram(
-            wav,
-            80,
-            N_SAMPLES,
-            wav.device,
-        ).T
+    if test_spmel:
+        return torch.nn.functional.pad(
+            log_mel_spectrogram(
+                wav,
+                dim_freq,
+                0,
+                wav.device,
+            ).T,
+            (0, 0, 0, 1),
+        )
     else:
         return torch_melbasis(torch_stft(wav)).T
 
@@ -165,13 +184,15 @@ def extract_f0(
         rapt(
             wav.cpu().numpy() * 32768,
             fs,
-            256,
+            hop_length,
             min=lo,
             max=hi,
             otype=2,
         ),
         device=wav.device,
     )
+    if not normalise:
+        return f0_rapt
     index_nonzero = f0_rapt != -1e10
     nonzero_rapt = f0_rapt[index_nonzero]
     if len(index_nonzero) == 0 or len(nonzero_rapt) == 0:
@@ -185,7 +206,7 @@ def extract_f0(
         mean_f0,
         std_f0,
     )
-    return f0_norm if normalise else f0_rapt
+    return f0_norm
 
 
 def zero_one_norm(
