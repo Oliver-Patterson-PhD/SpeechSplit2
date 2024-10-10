@@ -5,10 +5,10 @@ from typing import List, Self
 import torch
 import torchaudio
 
-from data_preprocessing import clean_audio, new_epsilon
+from data_preprocessing import clean_audio, NEW_EPSILON
 from experiments.experiment import Experiment
 from transcribers.whisper import WhisperTranscriber
-from transcribers.whisper.audio import N_SAMPLES, log_mel_spectrogram
+from transcribers.whisper.audio import N_FRAMES, N_SAMPLES, log_mel_spectrogram
 from utils import filter_wav, get_spmel, quantize_f0_torch
 
 
@@ -17,7 +17,7 @@ class Scratchpad(Experiment):
     def run(self: Self) -> None:
         run_loop = True
         if run_loop:
-            self.load_data()
+            self.load_data(True)
             self.model.eval()
             self.start_time = time.time()
             self.batch_size = self.config.dataloader.batch_size
@@ -62,7 +62,7 @@ class Scratchpad(Experiment):
             x = clean_audio(loaded)
             if x.shape[0] % 256 == 0:
                 x = torch.cat(
-                    (x, torch.tensor([new_epsilon], device=x.device)),
+                    (x, torch.tensor([NEW_EPSILON], device=x.device)),
                     dim=0,
                 )
             wav = filter_wav(x)
@@ -72,7 +72,7 @@ class Scratchpad(Experiment):
                 N_SAMPLES,
                 self.compute.device(),
             )
-            my_spmel = get_spmel(wav)
+            my_spmel = torch.nn.functional.pad(get_spmel(wav), (0, 0, 0, N_FRAMES)).T
             fname = os.path.basename(fname)
             fname = os.path.splitext(fname)[0]
             self.logger.trace_tensor(spmel)

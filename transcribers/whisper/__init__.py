@@ -3,6 +3,7 @@ from typing import Self
 import torch
 
 from transcribers.transcriber import Transcriber
+from transcribers.whisper.audio import N_FRAMES
 from util.config import Config
 from util.logging import Logger
 
@@ -67,9 +68,21 @@ class WhisperTranscriber(Transcriber):
         melspec: torch.Tensor,
         name: str,
     ) -> None:
+        padding: int = max(
+            int((N_FRAMES - melspec.size(-1))),
+            int(melspec.size(-1)),
+        )
+        padded_melspec = torch.nn.functional.pad(
+            melspec.squeeze(),
+            (0, 0, 0, padding),
+        )
+        logger = Logger()
+        logger.trace_var(padding)
+        logger.trace_tensor(melspec)
+        logger.trace_tensor(padded_melspec)
         result = transcribe(
             self.model,
-            mel=melspec,
+            mel=padded_melspec,
             **self.model_args,
         )
         if len(result["text"]) > 0:

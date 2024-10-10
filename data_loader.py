@@ -2,6 +2,7 @@ import os
 from typing import Any, Callable, Iterable, List, Tuple
 
 import torch
+
 from data_preprocessing import has_content, make_metadata
 from util.config import Config
 from util.logging import Logger
@@ -67,6 +68,7 @@ class Utterances(torch.utils.data.Dataset):
 
     ## Initialize and preprocess the Utterances dataset.
     def __init__(self, config: Config) -> None:
+        self.config = config
         self.feat_dir = config.paths.features
         self.wav_dir = config.paths.monowavs
         self.spmel_dir = config.paths.spmels
@@ -123,7 +125,7 @@ class Utterances(torch.utils.data.Dataset):
         alpha: float = 0.2 * torch.rand(1).item() + 0.9
         perturbed_wav_mono: torch.Tensor = vtlp(wav_mono, 16000, alpha)
         spenv: torch.Tensor = get_spenv(perturbed_wav_mono)
-        spmel_mono: torch.Tensor = get_spmel(perturbed_wav_mono)
+        spmel_mono: torch.Tensor = get_spmel(perturbed_wav_mono, False)
         assert not is_nan(perturbed_wav_mono), f"{list_uttrs[3]} has NaNs"
         assert not is_nan(spmel), f"{list_uttrs[3]} has NaNs"
         assert not is_nan(spenv), f"{list_uttrs[3]} has NaNs"

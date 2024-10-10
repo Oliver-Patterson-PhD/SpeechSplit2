@@ -42,30 +42,46 @@ class ConfigPaths:
     dataset_smolspeech: str
 
 
+class ConfigAudioProcessing:
+    n_fft: int = 1024
+    vtlp_fft: int = 1024 * 2
+    hop_len: int = 256
+    freq_min: int = 90
+    freq_max: int = 7600
+    sample_rate: int = 16000
+    max_len_pad = 192
+    m_lo: int = 50
+    m_hi: int = 250
+    f_lo: int = 100
+    f_hi: int = 600
+    hi_pass_cutoff: int = 30
+
+
 class ConfigModel:
-    dim_con: int = 80
-    dim_dec: int = 512
-    dim_enc_1: int = 512
-    dim_enc_2: int = 128
-    dim_enc_3: int = 256
-    dim_f0: int = 257
-    dim_freq: int = 80
-    dim_neck_1: int = 32
-    dim_neck_2: int = 32
-    dim_neck_3: int = 32
-    dim_pit: int = 257
-    dim_rhy: int = 80
-    dim_spk_emb: int = 82
+    freq_1: int
+    freq_2: int
+    freq_3: int
+    dim_neck_1: int
+    dim_neck_2: int
+    dim_neck_3: int  # 32
+
+    dim_con: int = 80  # N_MELS
+    dim_dec: int = 512  # HOP_LENGTH * 2
+    dim_enc_1: int = 512  # HOP_LENGTH * 2
+    dim_enc_2: int = 128  # HOP_LENGTH / 2
+    dim_enc_3: int = 256  # HOP_LENGTH
+    dim_f0: int = 257  # HOP_LENGTH + 1
+    dim_freq: int = 80  # N_MELS
+    dim_pit: int = 257  # HOP_LENGTH + 1
+    dim_rhy: int = 80  # N_MELS
+    dim_spk_emb: int = 82  # N_MELS + 2
 
     chs_grp: int = 16
     dropout: float = 0.2
-    freq_1: int = 1
-    freq_2: int = 1
-    freq_3: int = 1
-    len_raw: int = 128
+    len_raw: int = 128  # HOP_LENGTH / 2
     max_len_pad: int = 192
     max_len_seg: int = 32
-    max_len_seq: int = 128
+    max_len_seq: int = 128  # HOP_LENGTH / 2
     min_len_seg: int = 19
     min_len_seq: int = 64
 

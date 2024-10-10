@@ -6,56 +6,37 @@ import torchaudio
 import torchvision
 from pysptk.sptk import rapt
 
+from transcribers.whisper.audio import log_mel_spectrogram
 from util.logging import Logger
 
-whispercheck = True
+N_FFT: int = 1024
+HOP_LENGTH: int = 256
+DIM_FREQ: int = 80
+FREQ_MIN: int = 90
+FREQ_MAX: int = 7600
+SAMPLE_RATE: int = 16000
+HI_PASS_CUTOFF: int = 30
 
-n_fft = 1024
-hop_length = 256
-dim_freq = 80
-f_min = 90
-f_max = 7600
-sample_rate = 16000
 
-if whispercheck:
-
-    def exact_div(x, y):
-        assert x % y == 0
-        return x // y
-
-    from transcribers.whisper.audio import log_mel_spectrogram
-
-    SAMPLE_RATE = 16000
-    N_FFT = 400
-    HOP_LENGTH = 160
-    CHUNK_LENGTH = 30
-    N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE
-    N_FRAMES = exact_div(N_SAMPLES, HOP_LENGTH)
-    N_SAMPLES_PER_TOKEN = HOP_LENGTH * 2
-    FRAMES_PER_SECOND = exact_div(SAMPLE_RATE, HOP_LENGTH)
-    TOKENS_PER_SECOND = exact_div(SAMPLE_RATE, N_SAMPLES_PER_TOKEN)
-    test_spmel = True
-    n_fft = N_FFT
-    hop_length = HOP_LENGTH
-
+vtlp_fft: int = N_FFT * 2
 torch_stft = torchaudio.transforms.Spectrogram(
-    n_fft=n_fft,
-    win_length=n_fft,
-    hop_length=hop_length,
+    n_fft=N_FFT,
+    win_length=N_FFT,
+    hop_length=HOP_LENGTH,
     window_fn=torch.hann_window,
     power=1,
 )
 torch_melbasis = torchaudio.transforms.MelScale(
-    n_stft=n_fft // 2 + 1,
-    n_mels=dim_freq,
-    sample_rate=sample_rate,
-    f_min=f_min,
-    f_max=f_max,
+    n_stft=N_FFT // 2 + 1,
+    n_mels=DIM_FREQ,
+    sample_rate=SAMPLE_RATE,
+    f_min=FREQ_MIN,
+    f_max=FREQ_MAX,
     mel_scale="htk",
     norm=None,
 )
 min_level = torch.exp(-100 / 20 * torch.log(torch.tensor(10)))
-vtlp_window = torch.hann_window(n_fft * 2)
+vtlp_window = torch.hann_window(vtlp_fft)
 
 
 class MelSpec:
@@ -93,7 +74,7 @@ def any_nans(
 def filter_wav(
     x: torch.Tensor,
 ) -> torch.Tensor:
-    return torchaudio.functional.highpass_biquad(x, sample_rate, 30)
+    return torchaudio.functional.highpass_biquad(x, SAMPLE_RATE, HI_PASS_CUTOFF)
 
 
 def speaker_normalization(
@@ -128,14 +109,12 @@ def quantize_f0_torch(
     return enc.view(B, -1, num_bins + 1)
 
 
-def get_spmel(
-    wav: torch.Tensor,
-) -> torch.Tensor:
-    if test_spmel:
+def get_spmel(wav: torch.Tensor, whispercheck: bool = True) -> torch.Tensor:
+    if whispercheck:
         return torch.nn.functional.pad(
             log_mel_spectrogram(
                 wav,
-                dim_freq,
+                DIM_FREQ,
                 0,
                 wav.device,
             ).T,
@@ -161,7 +140,7 @@ def get_spenv(
     retval = torchaudio.functional.resample(
         env,
         orig_freq=env.size(dim=-1),
-        new_freq=dim_freq,
+        new_freq=DIM_FREQ,
     )
     if __debug__ and is_nan(retval):
         Logger().error("Tensors with Nans: ")
@@ -184,7 +163,7 @@ def extract_f0(
         rapt(
             wav.cpu().numpy() * 32768,
             fs,
-            hop_length,
+            HOP_LENGTH,
             min=lo,
             max=hi,
             otype=2,
@@ -321,7 +300,7 @@ def vtlp(
         alpha = 0.2 * torch.rand(1).item() + 0.9
     vtlp_stft = torch.stft(
         x,
-        n_fft=2048,
+        n_fft=vtlp_fft,
         window=vtlp_window,
         return_complex=True,
     ).T
@@ -350,7 +329,7 @@ def vtlp(
             new_S[:, pos + 1] += warp_up * vtlp_stft[:, k]
     y = torch.istft(
         new_S.T,
-        n_fft=2048,
+        n_fft=vtlp_fft,
         window=vtlp_window,
     )
     if len(x) <= len(y):

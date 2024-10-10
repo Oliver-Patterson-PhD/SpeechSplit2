@@ -7,11 +7,16 @@ import torchaudio
 from meta_dicts import MetaDictType
 from util.config import Config
 from util.logging import Logger
-from utils import (average_f0s, extract_f0, filter_wav, get_monotonic_wav,
-                   get_spmel, get_world_params, norm_audio)
+from utils import (HOP_LENGTH, SAMPLE_RATE, average_f0s, extract_f0,
+                   filter_wav, get_monotonic_wav, get_spmel, get_world_params,
+                   norm_audio)
 
-sample_rate = 16000
-new_epsilon = 1e-10
+NEW_EPSILON = 1e-10
+MAX_LEN_PAD = 192
+M_LO = 50
+M_HI = 250
+F_LO = 100
+F_HI = 600
 
 
 def split_feats(
@@ -73,22 +78,22 @@ def process_file(
         if (has_content(wav_mono)) and (has_content(spmel)) and (has_content(f0_norm)):
             wav_mono_split = split_feats(
                 fea=wav_mono,
-                trunk_len=49151,
+                trunk_len=MAX_LEN_PAD * (HOP_LENGTH - 1),
             )
             spmel_split = split_feats(
                 fea=spmel,
-                trunk_len=192,
+                trunk_len=MAX_LEN_PAD,
             )
             f0_split = split_feats(
                 fea=f0_norm,
-                trunk_len=192,
+                trunk_len=MAX_LEN_PAD,
             )
             tmpdir = f"{wav_dir}/orig_vad/{spk_dir}/"
             os.makedirs(tmpdir, exist_ok=True)
             torchaudio.save(
                 uri=tmpdir + f"{os.path.splitext(filename)[0]}.wav",
                 src=wav.unsqueeze(dim=0),
-                sample_rate=sample_rate,
+                sample_rate=SAMPLE_RATE,
             )
             for idx, (wav_mono_i, spmel_i, f0_i) in enumerate(
                 zip(wav_mono_split, spmel_split, f0_split)
@@ -105,14 +110,13 @@ def process_file(
 
 
 def make_spect_f0(config: Config) -> None:
-    fs = 16000
     spk_meta: MetaDictType = getattr(
         __import__("meta_dicts"),
         config.options.dataset_name,
     )
     dir_name, spk_dir_list, _ = next(os.walk(config.paths.raw_wavs))
     [
-        make_sf_item(spk_dir, config, spk_meta, dir_name, fs)  # type: ignore [func-returns-value]
+        make_sf_item(spk_dir, config, spk_meta, dir_name, SAMPLE_RATE)  # type: ignore [func-returns-value]
         for spk_dir in sorted(spk_dir_list)
         if spk_dir in spk_meta
     ]
@@ -135,9 +139,9 @@ def make_sf_item(
     _, _, file_list = next(os.walk(os.path.join(dir_name, spk_dir)))
 
     if spk_meta[spk_dir][1] == "M":
-        lo, hi = 50, 250
+        lo, hi = M_LO, M_HI
     elif spk_meta[spk_dir][1] == "F":
-        lo, hi = 100, 600
+        lo, hi = F_LO, F_HI
     else:
         raise ValueError
 
@@ -149,11 +153,11 @@ def make_sf_item(
                 channels_first=True,
             )[0]
         )
-        if x.shape[0] % 256 == 0:
+        if x.shape[0] % HOP_LENGTH == 0:
             x = torch.cat(
                 (
                     x,
-                    torch.tensor([new_epsilon], device=x.device),
+                    torch.tensor([NEW_EPSILON], device=x.device),
                 ),
                 dim=0,
             )
@@ -275,7 +279,7 @@ def preprocess_data(
 
 
 vad_transform = torchaudio.transforms.Vad(
-    sample_rate=sample_rate,
+    sample_rate=SAMPLE_RATE,
 )
 
 
@@ -283,10 +287,10 @@ def clean_audio(audio: torch.Tensor):
     retval = torchaudio.sox_effects.apply_effects_tensor(
         vad_transform(
             torchaudio.sox_effects.apply_effects_tensor(
-                vad_transform(norm_audio(audio)), sample_rate, [["reverse"]]
+                vad_transform(norm_audio(audio)), SAMPLE_RATE, [["reverse"]]
             )[0]
         ),
-        sample_rate,
+        SAMPLE_RATE,
         [["reverse"]],
     )[0]
     return retval.squeeze()
