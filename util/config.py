@@ -222,20 +222,11 @@ class Config(metaclass=Singleton):
             )
         )
 
-    def __merge_dicts(self, dic1: dict, dic2: dict, dic3: dict) -> dict:
-        retval: dict = {}
-        for cat in sorted({*dic1.keys(), *dic2.keys()}):
-            retval[cat] = dict()
-            if cat in sorted(dic1.keys()):
-                for key, item in dic1[cat].items():
-                    retval[cat][key] = item
-            if cat in sorted(dic2.keys()):
-                for key, item in dic2[cat].items():
-                    retval[cat][key] = item
-            if cat in sorted(dic3.keys()):
-                for key, item in dic3[cat].items():
-                    retval[cat][key] = item
-        return retval
+    def __merge_dicts(self, *dict_args) -> dict:
+        result = {}
+        for dictionary in dict_args:
+            result.update(dictionary)
+        return result
 
     def __map_categories(
         self,

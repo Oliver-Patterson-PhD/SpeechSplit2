@@ -9,6 +9,7 @@ from time import gmtime, strftime
 from typing import Any, List, Optional, Self, TextIO, overload
 
 from torch import Tensor
+from tqdm import tqdm
 
 from util.patterns import Singleton
 
@@ -324,3 +325,10 @@ class Logger(metaclass=Singleton):
             return True
         else:
             return False
+
+    def process_bar(
+        self: Self,
+        *args,
+        **kwargs,
+    ):
+        return tqdm(*args, **kwargs)

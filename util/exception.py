@@ -1,6 +1,2 @@
-class NotifyError(RuntimeError):
-    pass
-
-
-class NanError(NotifyError):
+class NanError(RuntimeError):
     pass
