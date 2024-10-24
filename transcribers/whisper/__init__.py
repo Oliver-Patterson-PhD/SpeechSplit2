@@ -3,12 +3,14 @@ from typing import Self
 import torch
 
 from transcribers.transcriber import Transcriber
-from transcribers.whisper.audio import N_FRAMES
 from util.config import Config
 from util.logging import Logger
 
+from .audio import N_FRAMES
 from .loader import load_model
+from .model import Whisper
 from .transcribe import transcribe
+from .utils import ResultWriter
 
 
 class WhisperTranscriber(Transcriber):
@@ -39,6 +41,8 @@ class WhisperTranscriber(Transcriber):
         "max_line_width": None,
         "max_words_per_line": 1,
     }
+    writer: ResultWriter
+    model: Whisper
 
     def __init__(
         self: Self,
@@ -67,30 +71,37 @@ class WhisperTranscriber(Transcriber):
         self: Self,
         melspec: torch.Tensor,
         name: str,
-    ) -> None:
-        padding: int = max(
-            int((N_FRAMES - melspec.size(-1))),
-            int(melspec.size(-1)),
-        )
+    ):
+        if melspec.shape[-1] == self.model.dims.n_mels:
+            melspec = melspec.mT
+        bigsize: int = max(melspec.size())
+        padding: int = max(((2 * N_FRAMES) - bigsize), bigsize)
         padded_melspec = torch.nn.functional.pad(
             melspec.squeeze(),
-            (0, 0, 0, padding),
+            (0, padding),
         )
         logger = Logger()
-        logger.trace_var(padding)
-        logger.trace_tensor(melspec)
-        logger.trace_tensor(padded_melspec)
         result = transcribe(
             self.model,
             mel=padded_melspec,
             **self.model_args,
         )
         if len(result["text"]) > 0:
-            Logger().trace(f"Text: {result["text"]}")
+            logger.trace(
+                f"Text ({tuple(padded_melspec.shape)}) {name}: {result["text"]}"
+            )
             self.writer(
                 result=result,
                 name=name,
                 **self.writer_args,
             )
         else:
-            Logger().trace("Unable to transcribe")
+            logger.trace(f"Unable to transcribe: {tuple(padded_melspec.shape)}, {name}")
+
+        out_str = ""
+        for segment in result["segments"]:
+            out_str = out_str + segment["text"].strip() + " "
+        out_tok = []
+        for segment in result["segments"]:
+            out_tok.extend(segment["tokens"])
+        return out_str, out_tok

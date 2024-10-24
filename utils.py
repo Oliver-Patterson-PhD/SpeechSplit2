@@ -18,7 +18,7 @@ SAMPLE_RATE: int = 16000
 HI_PASS_CUTOFF: int = 30
 
 
-vtlp_fft: int = N_FFT * 2
+VTLP_FFT: int = N_FFT * 2
 torch_stft = torchaudio.transforms.Spectrogram(
     n_fft=N_FFT,
     win_length=N_FFT,
@@ -36,7 +36,7 @@ torch_melbasis = torchaudio.transforms.MelScale(
     norm=None,
 )
 min_level = torch.exp(-100 / 20 * torch.log(torch.tensor(10)))
-vtlp_window = torch.hann_window(vtlp_fft)
+vtlp_window = torch.hann_window(VTLP_FFT)
 
 
 class MelSpec:
@@ -109,19 +109,22 @@ def quantize_f0_torch(
     return enc.view(B, -1, num_bins + 1)
 
 
-def get_spmel(wav: torch.Tensor, whispercheck: bool = True) -> torch.Tensor:
+def get_spmel(
+    wav: torch.Tensor,
+    whispercheck: bool = False,
+) -> torch.Tensor:
     if whispercheck:
         return torch.nn.functional.pad(
             log_mel_spectrogram(
-                wav,
-                DIM_FREQ,
-                0,
-                wav.device,
-            ).T,
-            (0, 0, 0, 1),
-        )
+                audio=wav.float(),
+                n_mels=DIM_FREQ,
+                padding=0,
+                device=wav.device,
+            ),
+            (0, 1),
+        ).T
     else:
-        return torch_melbasis(torch_stft(wav)).T
+        return torch_melbasis(torch_stft(wav.float())).T
 
 
 def get_spenv(
@@ -300,7 +303,7 @@ def vtlp(
         alpha = 0.2 * torch.rand(1).item() + 0.9
     vtlp_stft = torch.stft(
         x,
-        n_fft=vtlp_fft,
+        n_fft=VTLP_FFT,
         window=vtlp_window,
         return_complex=True,
     ).T
@@ -329,7 +332,7 @@ def vtlp(
             new_S[:, pos + 1] += warp_up * vtlp_stft[:, k]
     y = torch.istft(
         new_S.T,
-        n_fft=vtlp_fft,
+        n_fft=VTLP_FFT,
         window=vtlp_window,
     )
     if len(x) <= len(y):

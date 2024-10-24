@@ -2,7 +2,7 @@ import base64
 import gzip
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, Optional, Tuple, Self
 
 import numpy as np
 import torch
@@ -30,12 +30,12 @@ class ModelDimensions:
 
 
 class LayerNorm(torch.nn.LayerNorm):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self: Self, x: torch.Tensor) -> torch.Tensor:
         return super().forward(x.float()).type(x.dtype)
 
 
 class Linear(torch.nn.Linear):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self: Self, x: torch.Tensor) -> torch.Tensor:
         return torch.nn.functional.linear(
             x,
             self.weight.to(x.dtype),
@@ -45,7 +45,7 @@ class Linear(torch.nn.Linear):
 
 class Conv1d(torch.nn.Conv1d):
     def _conv_forward(
-        self,
+        self: Self,
         x: torch.Tensor,
         weight: torch.Tensor,
         bias: Optional[torch.Tensor],
@@ -81,7 +81,7 @@ class MultiHeadAttention(torch.nn.Module):
     use_sdpa = True
 
     def __init__(
-        self,
+        self: Self,
         n_state: int,
         n_head: int,
     ) -> None:
@@ -93,12 +93,12 @@ class MultiHeadAttention(torch.nn.Module):
         self.out = Linear(n_state, n_state)
 
     def forward(
-        self,
+        self: Self,
         x: torch.Tensor,
         xa: Optional[torch.Tensor] = None,
         mask: Optional[torch.Tensor] = None,
         kv_cache: Optional[dict] = None,
-    ):
+    ) -> torch.Tensor:
         q = self.query(x)
 
         if kv_cache is None or xa is None or self.key not in kv_cache:
@@ -115,7 +115,7 @@ class MultiHeadAttention(torch.nn.Module):
         return self.out(wv), qk
 
     def qkv_attention(
-        self,
+        self: Self,
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
@@ -148,7 +148,7 @@ class MultiHeadAttention(torch.nn.Module):
 
 class ResidualAttentionBlock(torch.nn.Module):
     def __init__(
-        self,
+        self: Self,
         n_state: int,
         n_head: int,
         cross_attention: bool = False,
@@ -170,12 +170,12 @@ class ResidualAttentionBlock(torch.nn.Module):
         self.mlp_ln = LayerNorm(n_state)
 
     def forward(
-        self,
+        self: Self,
         x: torch.Tensor,
         xa: Optional[torch.Tensor] = None,
         mask: Optional[torch.Tensor] = None,
         kv_cache: Optional[dict] = None,
-    ):
+    ) -> torch.Tensor:
         x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)[0]
         if self.cross_attn:
             assert self.cross_attn_ln is not None
@@ -186,13 +186,13 @@ class ResidualAttentionBlock(torch.nn.Module):
 
 class AudioEncoder(torch.nn.Module):
     def __init__(
-        self,
+        self: Self,
         n_mels: int,
         n_ctx: int,
         n_state: int,
         n_head: int,
         n_layer: int,
-    ):
+    ) -> None:
         super().__init__()
         self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)
         self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
@@ -203,7 +203,7 @@ class AudioEncoder(torch.nn.Module):
         )
         self.ln_post = LayerNorm(n_state)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self: Self, x: torch.Tensor) -> torch.Tensor:
         x = torch.nn.functional.gelu(self.conv1(x))
         x = torch.nn.functional.gelu(self.conv2(x))
         x = x.permute(0, 2, 1)
@@ -220,8 +220,8 @@ class AudioEncoder(torch.nn.Module):
 
 class TextDecoder(torch.nn.Module):
     def __init__(
-        self, n_vocab: int, n_ctx: int, n_state: int, n_head: int, n_layer: int
-    ):
+        self: Self, n_vocab: int, n_ctx: int, n_state: int, n_head: int, n_layer: int
+    ) -> None:
         super().__init__()
 
         self.token_embedding = torch.nn.Embedding(n_vocab, n_state)
@@ -239,8 +239,8 @@ class TextDecoder(torch.nn.Module):
         self.register_buffer("mask", mask, persistent=False)
 
     def forward(
-        self, x: torch.Tensor, xa: torch.Tensor, kv_cache: Optional[dict] = None
-    ):
+        self: Self, x: torch.Tensor, xa: torch.Tensor, kv_cache: Optional[dict] = None
+    ) -> torch.Tensor:
         offset = next(iter(kv_cache.values())).shape[1] if kv_cache else 0
         x = (
             self.token_embedding(x)
@@ -264,7 +264,7 @@ class Whisper(torch.nn.Module):
     transcribe = transcribe_function
     decode = decode_function
 
-    def __init__(self, dims: ModelDimensions):
+    def __init__(self: Self, dims: ModelDimensions) -> None:
         super().__init__()
         self.dims = dims
         self.encoder = AudioEncoder(
@@ -289,7 +289,7 @@ class Whisper(torch.nn.Module):
         all_heads[self.dims.n_text_layer // 2 :] = True
         self.register_buffer("alignment_heads", all_heads.to_sparse(), persistent=False)
 
-    def set_alignment_heads(self, dump: bytes):
+    def set_alignment_heads(self: Self, dump: bytes):
         array = np.frombuffer(
             gzip.decompress(base64.b85decode(dump)), dtype=bool
         ).copy()
@@ -298,30 +298,32 @@ class Whisper(torch.nn.Module):
         )
         self.register_buffer("alignment_heads", mask.to_sparse(), persistent=False)
 
-    def embed_audio(self, mel: torch.Tensor):
+    def embed_audio(self: Self, mel: torch.Tensor):
         return self.encoder(mel)
 
-    def logits(self, tokens: torch.Tensor, audio_features: torch.Tensor):
+    def logits(
+        self: Self, tokens: torch.Tensor, audio_features: torch.Tensor
+    ) -> torch.Tensor:
         return self.decoder(tokens, audio_features)
 
     def forward(
-        self, mel: torch.Tensor, tokens: torch.Tensor
+        self: Self, mel: torch.Tensor, tokens: torch.Tensor
     ) -> Dict[str, torch.Tensor]:
         return self.decoder(tokens, self.encoder(mel))
 
     @property
-    def device(self):
+    def device(self) -> torch.device:
         return next(self.parameters()).device
 
     @property
-    def is_multilingual(self):
+    def is_multilingual(self) -> bool:
         return self.dims.n_vocab >= 51865
 
     @property
-    def num_languages(self):
+    def num_languages(self) -> int:
         return self.dims.n_vocab - 51765 - int(self.is_multilingual)
 
-    def install_kv_cache_hooks(self, cache: Optional[dict] = None):
+    def install_kv_cache_hooks(self: Self, cache: Optional[dict] = None):
         cache = {**cache} if cache is not None else {}
         hooks = []
 

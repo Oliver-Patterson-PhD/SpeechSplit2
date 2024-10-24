@@ -1,6 +1,6 @@
 import itertools
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Tuple
 
 import numba
 import numpy as np
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .model import Whisper
 
 
-def median_filter(x: torch.Tensor, filter_width: int):
+def median_filter(x: torch.Tensor, filter_width: int) -> torch.Tensor:
     pad_width = filter_width // 2
     if x.shape[-1] <= pad_width:
         return x
@@ -33,7 +33,7 @@ def median_filter(x: torch.Tensor, filter_width: int):
 
 
 @numba.jit(nopython=True)
-def backtrace(trace: np.ndarray):
+def backtrace(trace: np.ndarray) -> np.ndarray:
     i = trace.shape[0] - 1
     j = trace.shape[1] - 1
     trace[0, :] = 2
@@ -53,12 +53,12 @@ def backtrace(trace: np.ndarray):
         else:
             raise ValueError("Unexpected trace[i, j]")
 
-    result = np.array(result)
-    return result[::-1, :].T
+    arr_result = np.array(result)
+    return arr_result[::-1, :].T
 
 
 @numba.jit(nopython=True, parallel=True)
-def dtw_cpu(x: np.ndarray):
+def dtw_cpu(x: np.ndarray) -> np.ndarray:
     N, M = x.shape
     cost = np.ones((N + 1, M + 1), dtype=np.float32) * np.inf
     trace = -np.ones((N + 1, M + 1), dtype=np.float32)
@@ -125,6 +125,7 @@ def find_alignment(
             lambda _, ins, outs, index=i: QKs.__setitem__(index, outs[-1][0])
         )
         for i, block in enumerate(model.decoder.blocks)
+        if block.cross_attn is not None
     ]
 
     from .model import disable_sdpa
@@ -147,7 +148,7 @@ def find_alignment(
     weights = (weights - mean) / std
     weights = median_filter(weights, medfilt_width)
 
-    matrix = weights.mean(axis=0)
+    matrix = weights.mean(dim=0)
     matrix = matrix[len(tokenizer.sot_sequence) : -1]
     text_indices, time_indices = dtw(-matrix)
 
@@ -280,45 +281,56 @@ def add_word_timestamps(
         # hack: truncate long words at segment boundaries.
         # a better segmentation algorithm based on VAD should be able to replace this.
         if len(words) > 0:
-            # ensure the first and second word after a pause is not longer than
-            # twice the median word duration.
-            if words[0]["end"] - last_speech_timestamp > median_duration * 4 and (
-                words[0]["end"] - words[0]["start"] > max_duration
-                or (
-                    len(words) > 1
-                    and words[1]["end"] - words[0]["start"] > max_duration * 2
-                )
-            ):
-                if (
-                    len(words) > 1
-                    and words[1]["end"] - words[1]["start"] > max_duration
-                ):
-                    boundary = max(words[1]["end"] / 2, words[1]["end"] - max_duration)
-                    words[0]["end"] = words[1]["start"] = boundary
-                words[0]["start"] = max(0, words[0]["end"] - max_duration)
-
-            # prefer the segment-level start timestamp if the first word is too long.
-            if (
-                segment["start"] < words[0]["end"]
-                and segment["start"] - 0.5 > words[0]["start"]
-            ):
-                words[0]["start"] = max(
-                    0, min(words[0]["end"] - median_duration, segment["start"])
-                )
-            else:
-                segment["start"] = words[0]["start"]
-
-            # prefer the segment-level end timestamp if the last word is too long.
-            if (
-                segment["end"] > words[-1]["start"]
-                and segment["end"] + 0.5 < words[-1]["end"]
-            ):
-                words[-1]["end"] = max(
-                    words[-1]["start"] + median_duration, segment["end"]
-                )
-            else:
-                segment["end"] = words[-1]["end"]
-
-            last_speech_timestamp = segment["end"]
+            (
+                words,
+                last_speech_timestamp,
+                median_duration,
+                max_duration,
+                segment,
+            ) = truncate_at_segments(
+                words,
+                last_speech_timestamp,
+                median_duration,
+                max_duration,
+                segment,
+            )
 
         segment["words"] = words
+
+
+def truncate_at_segments(
+    words: List[dict],
+    last_speech_timestamp: float,
+    median_duration: float,
+    max_duration: float,
+    segment: dict,
+) -> Tuple[List[dict], float, float, float, dict]:
+    # ensure the first and second word after a pause is not longer than twice the median word duration.
+    if words[0]["end"] - last_speech_timestamp > median_duration * 4 and (
+        words[0]["end"] - words[0]["start"] > max_duration
+        or (len(words) > 1 and words[1]["end"] - words[0]["start"] > max_duration * 2)
+    ):
+        if len(words) > 1 and words[1]["end"] - words[1]["start"] > max_duration:
+            boundary = max(words[1]["end"] / 2, words[1]["end"] - max_duration)
+            words[0]["end"] = words[1]["start"] = boundary
+        words[0]["start"] = max(0, words[0]["end"] - max_duration)
+
+    # prefer the segment-level start timestamp if the first word is too long.
+    if (
+        segment["start"] < words[0]["end"]
+        and segment["start"] - 0.5 > words[0]["start"]
+    ):
+        words[0]["start"] = max(
+            0, min(words[0]["end"] - median_duration, segment["start"])
+        )
+    else:
+        segment["start"] = words[0]["start"]
+
+    # prefer the segment-level end timestamp if the last word is too long.
+    if segment["end"] > words[-1]["start"] and segment["end"] + 0.5 < words[-1]["end"]:
+        words[-1]["end"] = max(words[-1]["start"] + median_duration, segment["end"])
+    else:
+        segment["end"] = words[-1]["end"]
+
+    last_speech_timestamp = segment["end"]
+    return words, last_speech_timestamp, median_duration, max_duration, segment

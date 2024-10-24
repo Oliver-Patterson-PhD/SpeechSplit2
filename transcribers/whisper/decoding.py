@@ -4,7 +4,6 @@ from typing import (TYPE_CHECKING, Dict, Iterable, List, Optional, Sequence,
 
 import numpy as np
 import torch
-from torch.distributions import Categorical
 
 from .audio import CHUNK_LENGTH
 from .tokenizer import Tokenizer, get_tokenizer
@@ -130,6 +129,9 @@ class Inference:
 
 
 class PyTorchInference(Inference):
+    kv_cache: dict
+    hooks: list
+
     def __init__(self, model: "Whisper", initial_token_length: int):
         self.model: "Whisper" = model
         self.initial_token_length = initial_token_length
@@ -220,7 +222,9 @@ class GreedyDecoder(TokenDecoder):
         if self.temperature == 0:
             next_tokens = logits.argmax(dim=-1)
         else:
-            next_tokens = Categorical(logits=logits / self.temperature).sample()
+            next_tokens = torch.distributions.Categorical(
+                logits=logits / self.temperature
+            ).sample()
 
         logprobs = torch.nn.functional.log_softmax(logits.float(), dim=-1)
         current_logprobs = logprobs[torch.arange(logprobs.shape[0]), next_tokens]
@@ -239,6 +243,8 @@ class GreedyDecoder(TokenDecoder):
 
 
 class BeamSearchDecoder(TokenDecoder):
+    finished_sequences: Optional[List[dict]]
+
     def __init__(
         self,
         beam_size: int,
@@ -272,7 +278,9 @@ class BeamSearchDecoder(TokenDecoder):
         assert self.finished_sequences is not None
 
         logprobs = torch.nn.functional.log_softmax(logits.float(), dim=-1)
-        next_tokens, source_indices, finished_sequences = [], [], []
+        next_tokens = []
+        source_indices = []
+        finished_sequences = []
         for i in range(n_audio):
             scores, sources, finished = {}, {}, {}
 
@@ -549,7 +557,7 @@ class DecodingTask:
         if isinstance(suppress_tokens, str):
             suppress_tokens = [int(t) for t in suppress_tokens.split(",")]
 
-        if -1 in suppress_tokens:
+        if suppress_tokens is not None and -1 in suppress_tokens:
             suppress_tokens = [t for t in suppress_tokens if t >= 0]
             suppress_tokens.extend(self.tokenizer.non_speech_tokens)
         elif suppress_tokens is None or len(suppress_tokens) == 0:

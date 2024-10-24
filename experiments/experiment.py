@@ -13,7 +13,7 @@ from model import InterpLnr
 from util.compute import Compute
 from util.config import Config
 from util.logging import Logger
-from utils import save_tensor
+from utils import quantize_f0_torch, save_tensor
 
 
 class Experiment(object):
@@ -89,7 +89,13 @@ class Experiment(object):
         self.logger.info(self.config.options.model_type, depth=2)
         self.logger.info("The number of parameters: {}".format(num_params), depth=2)
 
-    def restore_model(self: Self, resume_iters: int = 0) -> None:
+    def restore_model(
+        self: Self,
+        resume_iters: int = 0,
+        model_name: Optional[str] = None,
+    ) -> None:
+        if resume_iters == 0:
+            resume_iters = self.config.options.resume_iters
         self.logger.info(
             f"Loading the trained models from step {resume_iters}...",
             depth=2,
@@ -98,16 +104,16 @@ class Experiment(object):
             self.config.options.experiment,
             self.config.options.bottleneck,
             self.config.options.model_type,
-            self.config.options.resume_iters,
+            resume_iters,
             self.config.start_time,
         )
         save_dir = (
             self.config.paths.models
-            if self.config.options.resume_iters != 0
+            if resume_iters != 0
             else self.config.paths.full_models
         )
         ckpt = torch.load(
-            os.path.join(save_dir, ckpt_name),
+            os.path.join(save_dir, ckpt_name) if model_name is None else model_name,
             map_location=lambda storage, loc: storage,
             weights_only=True,
         )
@@ -164,8 +170,8 @@ class Experiment(object):
             self.tb_add_melspec(name="proc", tensor=proc, step=step)
             self.writer.flush()
 
-    def load_data(self: Self, singleitem: bool = False) -> None:
-        self.data_loader = get_loader(self.config, singleitem=singleitem)
+    def load_data(self: Self, **kwargs) -> None:
+        self.data_loader = get_loader(self.config, **kwargs)
 
     def save_tensor(self: Self, tensor: torch.Tensor, fname: str) -> None:
         save_tensor(
@@ -176,3 +182,25 @@ class Experiment(object):
             ),
         )
         return
+
+    def prepare_input(
+        self: Self,
+        content_input: torch.Tensor,
+        pitch_input: torch.Tensor,
+        len_crop: torch.Tensor,
+    ) -> torch.Tensor:
+        content_pitch_input = torch.cat(
+            (content_input, pitch_input), dim=-1
+        )  # [B, T, F+1]
+        content_pitch_input_intrp = self.intrp(
+            content_pitch_input, len_crop
+        )  # [B, T, F+1]
+        pitch_input_intrp = quantize_f0_torch(
+            content_pitch_input_intrp[:, :, -1],
+        )  # [B, T, 257]
+        content_pitch_input_intrp_2 = torch.cat(
+            # [B, T, F+257]
+            (content_pitch_input_intrp[:, :, :-1], pitch_input_intrp),
+            dim=-1,
+        )
+        return content_pitch_input_intrp_2

@@ -26,5 +26,5 @@ class Transcriber:
         self: Self,
         melspec: torch.Tensor,
         name: str,
-    ) -> None:
+    ):
         raise NotImplementedError()

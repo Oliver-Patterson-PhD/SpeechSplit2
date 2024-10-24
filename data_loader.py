@@ -1,9 +1,10 @@
 import os
-from typing import Any, Callable, Iterable, List, Tuple
+from typing import Any, Callable, Iterable, List, Self, Tuple
 
 import torch
 
-from data_preprocessing import has_content, make_metadata
+from data_preprocessing import filter_wav, getraw, has_content, make_metadata
+from meta_dicts import MetaDictType
 from util.config import Config
 from util.logging import Logger
 from utils import clip, get_spenv, get_spmel, is_nan, vtlp
@@ -54,66 +55,19 @@ CollaterItemType = Tuple[
 ]
 
 
-## Dataset class for the Utterances dataset.
-class Utterances(torch.utils.data.Dataset):
+class AudioDataset(torch.utils.data.Dataset):
     dataset: List[DataLoadItemType]
     dataset_name: str
     experiment: str
-    f0_dir: str
-    feat_dir: str
-    model_type: str
     num_tokens: int
-    spmel_dir: str
-    wav_dir: str
+    whispercheck: bool = False
 
-    ## Initialize and preprocess the Utterances dataset.
-    def __init__(self, config: Config) -> None:
+    def __init__(self: Self, config: Config) -> None:
         self.config = config
-        self.feat_dir = config.paths.features
-        self.wav_dir = config.paths.monowavs
-        self.spmel_dir = config.paths.spmels
-        self.f0_dir = config.paths.freqs
         self.experiment = config.options.experiment
         self.dataset_name = config.options.dataset_name
-        self.model_type = "SpeechSplit2"
-        meta_file = os.path.join(self.feat_dir, "metadata.pkl")
-        if os.path.exists(meta_file):
-            os.remove(meta_file)
-        make_metadata(config, meta_file)
-        metadata = torch.load(meta_file, weights_only=True)
-        Logger().info(f"Loading data: {config.options.dataset_name}")
-        tmp_dataset = [self.load_item(sbmt=sbmt) for sbmt in metadata]
-        Logger().debug(f"Refining data: {config.options.dataset_name}")
-        self.dataset = [item for item in tmp_dataset if item_works(item)]
-        self.num_tokens = len(self.dataset)
 
-    def load_item(
-        self,
-        sbmt: Tuple[str, torch.Tensor, str],
-    ) -> DataLoadItemType:
-        wav_mono: torch.Tensor = torch.load(
-            os.path.join(self.wav_dir, sbmt[2]),
-            weights_only=True,
-        )
-        spmel: torch.Tensor = torch.load(
-            os.path.join(self.spmel_dir, sbmt[2]),
-            weights_only=True,
-        )
-        f0: torch.Tensor = torch.load(
-            os.path.join(self.f0_dir, sbmt[2]),
-            weights_only=True,
-        )
-        assert not is_nan(wav_mono), f"wav has NaNs: {sbmt[2]}"
-        assert not is_nan(spmel), f"spmel has NaNs: {sbmt[2]}"
-        assert not is_nan(f0), f"f0 has NaNs: {sbmt[2]}"
-        return (
-            sbmt[0],
-            sbmt[1],
-            (wav_mono, spmel, f0),
-            sbmt[2],
-        )
-
-    def __getitem__(self, index: int) -> DataGetItemType:
+    def __getitem__(self: Self, index: int) -> DataGetItemType:
         list_uttrs = self.dataset[index]
         spk_id_org: str = list_uttrs[0]
         emb_org: torch.Tensor = list_uttrs[1]
@@ -125,7 +79,7 @@ class Utterances(torch.utils.data.Dataset):
         alpha: float = 0.2 * torch.rand(1).item() + 0.9
         perturbed_wav_mono: torch.Tensor = vtlp(wav_mono, 16000, alpha)
         spenv: torch.Tensor = get_spenv(perturbed_wav_mono)
-        spmel_mono: torch.Tensor = get_spmel(perturbed_wav_mono, False)
+        spmel_mono: torch.Tensor = get_spmel(perturbed_wav_mono)
         assert not is_nan(perturbed_wav_mono), f"{list_uttrs[3]} has NaNs"
         assert not is_nan(spmel), f"{list_uttrs[3]} has NaNs"
         assert not is_nan(spenv), f"{list_uttrs[3]} has NaNs"
@@ -144,13 +98,173 @@ class Utterances(torch.utils.data.Dataset):
             emb_org,  # timbre_input
         )
 
-    def __len__(self):
+    def __len__(self: Self):
         return self.num_tokens
+
+
+## Dataset class for the Utterances dataset.
+class Utterances(AudioDataset):
+    ## Initialize and preprocess the Utterances dataset.
+    def __init__(self: Self, config: Config) -> None:
+        super(type(self), self).__init__(config)
+        meta_file = os.path.join(config.paths.features, "metadata.pkl")
+        if os.path.exists(meta_file):
+            os.remove(meta_file)
+        make_metadata(config, meta_file)
+        metadata = torch.load(meta_file, weights_only=True)
+        Logger().info(f"Loading data: {config.options.dataset_name}")
+        tmp_dataset = [self.load_item(sbmt=sbmt, config=config) for sbmt in metadata]
+        Logger().debug(f"Refining data: {config.options.dataset_name}")
+        self.dataset = [item for item in tmp_dataset if item_works(item)]
+        self.num_tokens = len(self.dataset)
+
+    def load_item(
+        self: Self, sbmt: Tuple[str, torch.Tensor, str], config: Config
+    ) -> DataLoadItemType:
+        wav_mono: torch.Tensor = torch.load(
+            os.path.join(config.paths.monowavs, sbmt[2]),
+            weights_only=True,
+        )
+        spmel: torch.Tensor = torch.load(
+            os.path.join(config.paths.spmels, sbmt[2]),
+            weights_only=True,
+        )
+        f0: torch.Tensor = torch.load(
+            os.path.join(config.paths.freqs, sbmt[2]),
+            weights_only=True,
+        )
+        assert not is_nan(wav_mono), f"wav has NaNs: {sbmt[2]}"
+        assert not is_nan(spmel), f"spmel has NaNs: {sbmt[2]}"
+        assert not is_nan(f0), f"f0 has NaNs: {sbmt[2]}"
+        return (
+            sbmt[0],
+            sbmt[1],
+            (wav_mono, spmel, f0),
+            sbmt[2],
+        )
+
+
+class FullAudios(AudioDataset):
+    ## Initialize and preprocess the Utterances dataset.
+    def __init__(self: Self, config: Config) -> None:
+        super(type(self), self).__init__(config)
+        self.min_len_seq = config.model.min_len_seq
+        self.max_len_seq = config.model.max_len_seq
+        self.max_len_pad = config.model.max_len_pad
+        self.drop_and_pad = config.dataloader.drop_and_pad
+
+        self.whispercheck = True
+        self.load_dataset(config)
+        self.num_tokens = len(self.dataset)
+
+    def load_dataset(self: Self, config: Config):
+        base_wav_dir, spk_dir_list, _ = next(os.walk(config.paths.raw_wavs))
+        spk_meta: MetaDictType = getattr(
+            __import__("meta_dicts"),
+            config.options.dataset_name,
+        )
+        spk_dirs = [
+            spk_dir for spk_dir in sorted(spk_dir_list) if spk_dir in spk_meta.keys()
+        ]
+        tmp_dataset = []
+        Logger().info(
+            "Loading data: {} ({} speakers)".format(
+                config.options.dataset_name,
+                len(spk_dir_list) - 1,
+            )
+        )
+        for spk_dir in spk_dirs:
+            tmp_dataset.extend(
+                self.load_speaker_items(
+                    dim_spk_emb=config.model.dim_spk_emb,
+                    spk_meta=spk_meta,
+                    dir_name=base_wav_dir,
+                    spk_dir=spk_dir,
+                )
+            )
+        from tqdm import tqdm
+
+        self.dataset = [
+            item
+            for item in tqdm(
+                tmp_dataset,
+                desc=f"Refining {config.options.dataset_name}",
+            )
+            if item_works(item)
+        ]
+
+    def load_speaker_items(
+        self: Self,
+        dim_spk_emb: int,
+        spk_meta: MetaDictType,
+        dir_name: str,
+        spk_dir: str,
+    ) -> List[DataLoadItemType]:
+        from tqdm import tqdm
+
+        from data_preprocessing import F_HI, F_LO, M_HI, M_LO
+
+        _, _, file_list = next(os.walk(os.path.join(dir_name, spk_dir)))
+        if spk_meta[spk_dir][1] == "M":
+            lo, hi = M_LO, M_HI
+        elif spk_meta[spk_dir][1] == "F":
+            lo, hi = F_LO, F_HI
+        else:
+            raise ValueError
+
+        spk_id, _, _ = spk_meta[spk_dir]
+        spk_emb = torch.zeros(
+            (dim_spk_emb,),
+            dtype=torch.float32,
+        )
+        spk_emb[int(spk_id)] = 1.0
+        return [
+            self.load_item(
+                dir_name=dir_name,
+                spk_dir=spk_dir,
+                fname=fname,
+                spk_meta=spk_meta,
+                spk_emb=spk_emb,
+                lo=lo,
+                hi=hi,
+            )
+            for fname in tqdm(sorted(file_list), desc=f"Processing: {spk_dir:>4}")
+        ]
+
+    def load_item(
+        self: Self,
+        dir_name: str,
+        spk_dir: str,
+        fname: str,
+        spk_meta: MetaDictType,
+        spk_emb: torch.Tensor,
+        lo: int,
+        hi: int,
+    ) -> DataLoadItemType:
+        from data_preprocessing import SAMPLE_RATE
+        from utils import extract_f0, get_monotonic_wav, get_world_params
+
+        full_fname = os.path.join(dir_name, spk_dir, fname)
+        wav = filter_wav(getraw(full_fname))
+        f0, sp, ap = get_world_params(wav, SAMPLE_RATE)
+        wav_mono = get_monotonic_wav(wav, f0, sp, ap, SAMPLE_RATE)
+        spmel = get_spmel(wav, whispercheck=True)
+        f0_norm = extract_f0(wav, SAMPLE_RATE, lo, hi)
+
+        assert not is_nan(wav_mono), f"wav has NaNs: {fname}"
+        assert not is_nan(spmel), f"spmel has NaNs: {fname}"
+        assert not is_nan(f0_norm), f"f0 has NaNs: {fname}"
+        return (
+            spk_dir,
+            spk_emb,
+            (wav_mono, spmel, f0_norm),
+            fname,
+        )
 
 
 class Collator(object):
     def __init__(
-        self,
+        self: Self,
         config: Config,
     ) -> None:
         self.min_len_seq = config.model.min_len_seq
@@ -158,11 +272,14 @@ class Collator(object):
         self.max_len_pad = config.model.max_len_pad
         self.drop_and_pad = config.dataloader.drop_and_pad
 
-    def __internal_collate(self, token: DataGetItemType) -> CollaterInternalItemType:
+    def __internal_collate(
+        self: Self,
+        token: DataGetItemType,
+    ) -> CollaterInternalItemType:
         (
             fname,  # Filename
             dysarthric,  # Single char string Dysarthric
-            perturbed_wav_mono,  # Monotonic waveform with VTLP
+            perturbeCustomizabled_wav_mono,  # Monotonic waveform with VTLP
             spk_id_org,  # speaker ID string
             melspec,  # MelSpectrogram
             rhythm_input,  # spenv
@@ -215,7 +332,7 @@ class Collator(object):
             len_crop,
         )
 
-    def __call__(self, batch: Iterable[DataGetItemType]) -> CollaterItemType:
+    def __call__(self: Self, batch: Iterable[DataGetItemType]) -> CollaterItemType:
         new_batch: List[CollaterInternalItemType] = [
             self.__internal_collate(token) for token in batch
         ]
@@ -255,7 +372,7 @@ class Collator(object):
 ## Samples elements more than once in a single pass through the data
 class MultiSampler(torch.utils.data.sampler.Sampler):
     def __init__(
-        self,
+        self: Self,
         num_samples: int,
         n_repeats: int,
         shuffle: bool = False,
@@ -264,7 +381,7 @@ class MultiSampler(torch.utils.data.sampler.Sampler):
         self.n_repeats = n_repeats
         self.shuffle = shuffle
 
-    def gen_sample_array(self) -> torch.Tensor:
+    def gen_sample_array(self: Self) -> torch.Tensor:
         self.sample_idx_array = torch.arange(
             self.num_samples,
             dtype=torch.int64,
@@ -277,10 +394,10 @@ class MultiSampler(torch.utils.data.sampler.Sampler):
             ]
         return self.sample_idx_array
 
-    def __iter__(self):
+    def __iter__(self: Self):
         return iter(self.gen_sample_array())
 
-    def __len__(self) -> int:
+    def __len__(self: Self) -> int:
         return len(self.sample_idx_array)
 
 
@@ -294,10 +411,13 @@ def worker_init_fn(x):
 def get_loader(
     config: Config,
     singleitem: bool = False,
+    full_process: bool = False,
 ) -> torch.utils.data.DataLoader:
-    dataset = Utterances(config)
+    data_loader: torch.utils.data.DataLoader
+    dataset: AudioDataset
     sampler: torch.utils.data.sampler.Sampler
     collator: Callable[[list[Any]], Any] = Collator(config)
+    dataset = FullAudios(config) if full_process else Utterances(config)
     if singleitem:
         sampler = torch.utils.data.SequentialSampler(dataset)
     else:

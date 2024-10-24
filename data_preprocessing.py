@@ -88,10 +88,10 @@ def process_file(
                 fea=f0_norm,
                 trunk_len=MAX_LEN_PAD,
             )
-            tmpdir = f"{wav_dir}/orig_vad/{spk_dir}/"
+            tmpdir = os.path.join(wav_dir, os.pardir, "orig_vad", spk_dir)
             os.makedirs(tmpdir, exist_ok=True)
             torchaudio.save(
-                uri=tmpdir + f"{os.path.splitext(filename)[0]}.wav",
+                uri=os.path.join(tmpdir, f"{os.path.splitext(filename)[0]}.wav"),
                 src=wav.unsqueeze(dim=0),
                 sample_rate=SAMPLE_RATE,
             )
@@ -122,6 +122,22 @@ def make_spect_f0(config: Config) -> None:
     ]
 
 
+def getraw(full_fname: str | os.PathLike) -> torch.Tensor:
+    x: torch.Tensor
+    inaud, sr = torchaudio.load(full_fname, channels_first=True)
+    assert sr == SAMPLE_RATE
+    try:
+        x = clean_audio(inaud)
+    except Exception:
+        Logger().fatal(f"failed to load: {full_fname}")
+    if x.shape[0] % HOP_LENGTH == 0:
+        x = torch.cat(
+            (x, torch.tensor([NEW_EPSILON], device=x.device)),
+            dim=0,
+        )
+    return x
+
+
 def make_sf_item(
     spk_dir: str,
     config: Config,
@@ -145,28 +161,11 @@ def make_sf_item(
     else:
         raise ValueError
 
-    def getraw(fname: str) -> torch.Tensor:
-        x: torch.Tensor
-        x = clean_audio(
-            torchaudio.load(
-                f"{dir_name}/{spk_dir}/{fname}",
-                channels_first=True,
-            )[0]
-        )
-        if x.shape[0] % HOP_LENGTH == 0:
-            x = torch.cat(
-                (
-                    x,
-                    torch.tensor([NEW_EPSILON], device=x.device),
-                ),
-                dim=0,
-            )
-        return x
-
     wavs: List[torch.Tensor] = []
     fnames: List[str] = []
     for fname in sorted(file_list):
-        wav = filter_wav(getraw(fname))
+        full_fname = os.path.join(dir_name, spk_dir, fname)
+        wav = filter_wav(getraw(full_fname))
         if has_content(wav):
             fnames.append(fname)
             wavs.append(wav)
@@ -202,7 +201,7 @@ def make_sf_item(
 def process_item(
     spk_dir: str,
     spk_meta: MetaDictType,
-    config: Config,
+    dim_spk_emb: int,
     dir_name: str,
 ) -> List[Tuple[str, torch.Tensor, str]]:
     spk_id: str
@@ -210,7 +209,7 @@ def process_item(
     filepaths: List[str]
     spk_id, _, _ = spk_meta[spk_dir]
     spk_emb = torch.zeros(
-        (config.model.dim_spk_emb,),
+        (dim_spk_emb,),
         dtype=torch.float32,
     )
     spk_emb[int(spk_id)] = 1.0
@@ -245,12 +244,13 @@ def make_metadata(
     )
     dataset = []
 
+    dim_spk_emb = config.model.dim_spk_emb
     [
         dataset.extend(
             process_item(
                 spk_dir,
                 spk_meta,
-                config,
+                dim_spk_emb,
                 dir_name,
             )
         )  # type: ignore [func-returns-value]
@@ -297,6 +297,6 @@ def clean_audio(audio: torch.Tensor):
 
 
 def has_content(audio: torch.Tensor) -> bool:
-    return (
+    return bool(
         (audio.size(dim=-1) > 1) and (audio.max().item() > 1e-03) and (audio != 0).any()
     )

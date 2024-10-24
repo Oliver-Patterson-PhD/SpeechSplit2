@@ -3,7 +3,7 @@ import os
 import string
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Self, Tuple, Any
 
 import tiktoken
 
@@ -156,18 +156,18 @@ class Tokenizer:
 
         self.sot_sequence = tuple(sot_sequence)
 
-    def encode(self, text, **kwargs):
+    def encode(self: Self, text: str, **kwargs: Any) -> list[int]:
         return self.encoding.encode(text, **kwargs)
 
-    def decode(self, token_ids: List[int], **kwargs) -> str:
+    def decode(self: Self, token_ids: List[int], **kwargs: Any) -> str:
         token_ids = [t for t in token_ids if t < self.timestamp_begin]
         return self.encoding.decode(token_ids, **kwargs)
 
-    def decode_with_timestamps(self, token_ids: List[int], **kwargs) -> str:
+    def decode_with_timestamps(self: Self, token_ids: List[int], **kwargs: Any) -> str:
         return self.encoding.decode(token_ids, **kwargs)
 
     @cached_property
-    def eot(self) -> int:
+    def eot(self: Self) -> int:
         return self.encoding.eot_token
 
     @cached_property
@@ -315,7 +315,7 @@ class Tokenizer:
 
 
 @lru_cache(maxsize=None)
-def get_encoding(name: str = "gpt2", num_languages: int = 99):
+def get_encoding(name: str = "gpt2", num_languages: int = 99) -> tiktoken.Encoding:
     vocab_path = os.path.join(os.path.dirname(__file__), "assets", f"{name}.tiktoken")
     ranks = {
         base64.b64decode(token): int(rank)

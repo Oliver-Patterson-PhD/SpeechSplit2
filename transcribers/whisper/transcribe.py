@@ -1,7 +1,6 @@
 import warnings
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import tqdm
 
@@ -18,7 +17,7 @@ if TYPE_CHECKING:
 
 def transcribe(
     model: "Whisper",
-    mel: Union[np.ndarray, torch.Tensor],
+    mel: torch.Tensor,
     *,
     verbose: Optional[bool] = None,
     temperature: Union[float, Tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
@@ -106,6 +105,7 @@ def transcribe(
 
             options = DecodingOptions(**kwargs, temperature=t)
             decode_result = model.decode(segment, options)
+            assert isinstance(decode_result, DecodingResult)
 
             needs_fallback = False
             if (
@@ -126,6 +126,7 @@ def transcribe(
             if not needs_fallback:
                 break
 
+        assert isinstance(decode_result, DecodingResult)
         return decode_result
 
     clip_idx = 0
@@ -137,7 +138,7 @@ def transcribe(
         input_stride * HOP_LENGTH / SAMPLE_RATE
     )  # time per output token: 0.02 (seconds)
     all_tokens = []
-    all_segments = []
+    all_segments: List[list] = []
     prompt_reset_since = 0
 
     if initial_prompt is not None:
@@ -148,15 +149,15 @@ def transcribe(
 
     def new_segment(
         *, start: float, end: float, tokens: torch.Tensor, result: DecodingResult
-    ):
-        tokens = tokens.tolist()
-        text_tokens = [token for token in tokens if token < tokenizer.eot]
+    ) -> dict:
+        tok_list = tokens.tolist()
+        text_tokens = [token for token in tok_list if token < tokenizer.eot]
         return {
             "seek": seek,
             "start": start,
             "end": end,
             "text": tokenizer.decode(text_tokens),
-            "tokens": tokens,
+            "tokens": tok_list,
             "temperature": result.temperature,
             "avg_logprob": result.avg_logprob,
             "compression_ratio": result.compression_ratio,
