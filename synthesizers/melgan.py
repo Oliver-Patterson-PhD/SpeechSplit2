@@ -12,3 +12,9 @@ class MelGanSynthesizer(Synthesizer):
             model_name="lj_melgan-4M",
             config=config,
         )
+
+    @torch.no_grad()
+    def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
+        self.model.eval()
+        outwav = self.model.inference(c=spect.to(self.device)).view(-1)
+        return outwav

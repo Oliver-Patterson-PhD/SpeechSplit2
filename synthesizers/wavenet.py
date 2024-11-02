@@ -4,7 +4,6 @@ import torch
 from synthesizers.synthesizer import Synthesizer
 from tqdm import tqdm
 from util.config import Config
-from util.logging import Logger
 from wavenet_vocoder import builder
 
 

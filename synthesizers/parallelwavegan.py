@@ -4,7 +4,7 @@ from synthesizers.synthesizer import Synthesizer
 from util.config import Config
 
 
-class ParallelWaveGanSynthesizer(Synthesizer):
+class ParallelWaveGan(Synthesizer):
     def __init__(self, device: torch.device, config: Config) -> None:
         super().__init__(
             device=device,
@@ -12,3 +12,9 @@ class ParallelWaveGanSynthesizer(Synthesizer):
             model_name="lj_parallelwavegan-3M",
             config=config,
         )
+
+    @torch.no_grad()
+    def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
+        self.model.eval()
+        outwav = self.model.inference(c=spect.to(self.device)).view(-1)
+        return outwav

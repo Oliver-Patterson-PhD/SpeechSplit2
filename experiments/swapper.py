@@ -10,53 +10,12 @@ from data_loader import CollaterItemType, get_loader
 from data_preprocessing import MetaDictType
 from experiments.experiment import Experiment
 from meta_dicts import NamedMetaDictType
+from synthesizers.griffinlim import GriffinLim
 from synthesizers.melgan import MelGanSynthesizer as MelGan
-from synthesizers.parallelwavegan import \
-    ParallelWaveGanSynthesizer as ParWavGan
+from synthesizers.parallelwavegan import ParallelWaveGan as ParWavGan
 from synthesizers.synthesizer import Synthesizer
 from synthesizers.wavenet import WavenetSynthesizer as Wavenet
-from util.config import Config
 from utils import norm_audio, quantize_f0_torch, save_tensor
-
-
-class GriffinLim(Synthesizer):
-    n_fft = 1024
-    hop_length = 256
-    dim_freq = 80
-    f_min = 90
-    f_max = 7600
-    power = 1
-    sample_rate = 16000
-    n_iter = 64
-
-    def __init__(
-        self,
-        device: torch.device,
-        config: Config,
-    ) -> None:
-        self.demel = torchaudio.transforms.InverseMelScale(
-            n_stft=self.n_fft // 2 + 1,
-            n_mels=self.dim_freq,
-            sample_rate=self.sample_rate,
-            f_min=self.f_min,
-            f_max=self.f_max,
-            norm=None,
-            mel_scale="htk",
-            driver="gels",
-        )
-        self.glim = torchaudio.transforms.GriffinLim(
-            n_fft=self.n_fft,
-            n_iter=self.n_iter,
-            win_length=self.n_fft,
-            hop_length=self.hop_length,
-            window_fn=torch.hann_window,
-            power=self.power,
-        )
-
-    @torch.no_grad()
-    def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
-        tspec = spect.T
-        return self.glim(self.demel(tspec))
 
 
 class Swapper(Experiment):
@@ -156,9 +115,17 @@ class Swapper(Experiment):
         if os.path.exists(f"{self.config.paths.latents}/out_spec"):
             return
 
+        if "smol" in self.config.options.dataset_name:
+            if self.config.options.dataset_name == "smolspeech":
+                dataset_name = "uaspeech"
+            if self.config.options.dataset_name == "smolvctk":
+                raise NotImplementedError()
+        else:
+            dataset_name = self.config.options.dataset_name
+
         speaker_data: NamedMetaDictType = getattr(
             __import__("meta_dicts"),
-            f"named{self.config.options.dataset_name}",
+            f"named{dataset_name}",
         )
         meta_file = os.path.join(self.config.paths.features, "metadata.pkl")
         metadata: MetaDictType = torch.load(meta_file, weights_only=True)
@@ -237,25 +204,32 @@ class Swapper(Experiment):
         [self.spec_image(file, "orig") for file in ofilelist]
         [self.spec_image(file, "full") for file in filelist]
 
-        # if self.use_synth_griffinlim:
-        #     self.synthesizer = GriffinLim(self.device, config=self.config)
-        #     [self.orig_save(file, "griffinlim") for file in ofilelist]
-        #     [self.single_spmel_to_audio(file, "griffinlim") for file in filelist]
+        if self.use_synth_griffinlim:
+            self.synthesizer = GriffinLim(self.device, config=self.config)
+            [self.orig_save(file, "griffinlim") for file in ofilelist]
+            [self.single_spmel_to_audio(file, "griffinlim") for file in filelist]
 
+        self.compute.set_gpu()
         if self.use_synth_melgan:
             self.synthesizer = MelGan(self.compute.device(), config=self.config)
             [self.orig_save(file, "melgan") for file in ofilelist]
             [self.single_spmel_to_audio(file, "melgan") for file in filelist]
 
+        self.compute.set_gpu()
         if self.use_synth_parallelwavegan:
             self.synthesizer = ParWavGan(self.compute.device(), config=self.config)
             [self.orig_save(file, "parallelwavegan") for file in ofilelist]
             [self.single_spmel_to_audio(file, "parallelwavegan") for file in filelist]
 
+        self.compute.set_gpu()
         if self.use_synth_wavenet:
             self.synthesizer = Wavenet(self.compute.device(), config=self.config)
             [self.orig_save(file, "wavenet") for file in ofilelist]
-            [self.single_spmel_to_audio(file, "wavenet") for file in filelist]
+            [
+                self.single_spmel_to_audio(file, "wavenet")
+                for i, file in enumerate(filelist)
+                if i < 5
+            ]
 
         return
 
