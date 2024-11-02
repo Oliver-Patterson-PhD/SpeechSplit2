@@ -1,5 +1,5 @@
 import torch
-from parallel_wavegan.parallel_wavegan import ParallelWaveGANGenerator
+from synthesizers.parallel_wavegan.parallel_wavegan import ParallelWaveGANGenerator
 from synthesizers.synthesizer import Synthesizer
 from util.config import Config
 
