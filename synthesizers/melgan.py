@@ -1,20 +1,31 @@
+from typing import Self
+
 import torch
-from parallel_wavegan.melgan import MelGANGenerator
-from synthesizers.synthesizer import Synthesizer
-from util.config import Config
+
+from util import Config
+
+from .parallel_wavegan.melgan import MelGANGenerator
+from .synthesizer import Synthesizer
 
 
-class MelGanSynthesizer(Synthesizer):
-    def __init__(self, device: torch.device, config: Config) -> None:
+class MelGan(Synthesizer):
+    def __init__(
+        self: Self,
+        device: torch.device,
+        config: Config,
+    ) -> None:
         super().__init__(
             device=device,
             model=MelGANGenerator,
-            model_name="lj_melgan-4M",
+            model_name="melgan-4M",
             config=config,
         )
 
     @torch.no_grad()
-    def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
+    def spect2wav(
+        self: Self,
+        spect: torch.Tensor,
+    ) -> torch.Tensor:
         self.model.eval()
         outwav = self.model.inference(c=spect.to(self.device)).view(-1)
         return outwav

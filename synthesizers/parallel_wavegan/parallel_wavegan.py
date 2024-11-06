@@ -191,7 +191,7 @@ class ParallelWaveGANGenerator(torch.nn.Module):
 
         def _apply_weight_norm(m):
             if isinstance(m, torch.nn.Conv1d) or isinstance(m, torch.nn.Conv2d):
-                torch.nn.utils.weight_norm(m)
+                torch.nn.utils.parametrizations.weight_norm(m)
                 logging.debug(f"Weight norm is applied to {m}.")
 
         self.apply(_apply_weight_norm)

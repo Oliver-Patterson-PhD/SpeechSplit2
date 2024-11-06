@@ -3,8 +3,7 @@ from typing import Self
 import torch
 
 from transcribers.transcriber import Transcriber
-from util.config import Config
-from util.logging import Logger
+from util import Config, Logger
 
 from .audio import N_FRAMES
 from .loader import load_model
@@ -49,7 +48,6 @@ class WhisperTranscriber(Transcriber):
         device: torch.device,
         model_name: str,
         config: Config,
-        output_dir: str,
     ):
         super(WhisperTranscriber, self).__init__(
             device=device,
@@ -61,11 +59,6 @@ class WhisperTranscriber(Transcriber):
             device=self.device,
             download_root=f"{self.config.paths.full_models}/whisper",
         )
-        from .utils import get_writer
-
-        output_format = "txt"  # txt, vtt, srt, tsv, json, all
-        self.output_dir = output_dir
-        self.writer = get_writer(output_format, self.output_dir)
 
     def transcribe(
         self: Self,
@@ -86,16 +79,7 @@ class WhisperTranscriber(Transcriber):
             mel=padded_melspec,
             **self.model_args,
         )
-        if len(result["text"]) > 0:
-            logger.trace(
-                f"Text ({tuple(padded_melspec.shape)}) {name}: {result["text"]}"
-            )
-            self.writer(
-                result=result,
-                name=name,
-                **self.writer_args,
-            )
-        else:
+        if len(result["text"]) == 0:
             logger.trace(f"Unable to transcribe: {tuple(padded_melspec.shape)}, {name}")
 
         out_str = ""

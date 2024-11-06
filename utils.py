@@ -7,7 +7,7 @@ import torchvision
 from pysptk.sptk import rapt
 
 from transcribers.whisper.audio import log_mel_spectrogram
-from util.logging import Logger
+from util import Logger
 
 N_FFT: int = 1024
 HOP_LENGTH: int = 256
@@ -357,7 +357,10 @@ def clip(
     return x
 
 
-def save_tensor(tensor: torch.Tensor, save_path: str) -> None:
+def save_tensor(
+    tensor: torch.Tensor,
+    save_path: str,
+) -> None:
     image = try_image(tensor)
     if image is not None:
         im_min = image.min()
@@ -369,7 +372,9 @@ def save_tensor(tensor: torch.Tensor, save_path: str) -> None:
     return
 
 
-def try_image(tensor: torch.Tensor) -> torch.Tensor | None:
+def try_image(
+    tensor: torch.Tensor,
+) -> torch.Tensor | None:
     if tensor is None:
         return None
     elif tensor.dim() == 2:

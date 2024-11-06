@@ -3,9 +3,10 @@ from typing import Self
 
 import torch
 
-from experiments.experiment import Experiment
 from util.exception import NanError
 from utils import masked_mse, quantize_f0_torch
+
+from .experiment import Experiment
 
 
 ## Solver for training

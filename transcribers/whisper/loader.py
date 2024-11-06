@@ -6,7 +6,7 @@ from typing import List, Union
 import torch
 from tqdm import tqdm
 
-from util.logging import Logger
+from util import Logger
 
 from .model import ModelDimensions, Whisper
 

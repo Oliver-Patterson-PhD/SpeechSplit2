@@ -2,7 +2,7 @@ from typing import Self
 
 import torch
 
-from util.config import Config
+from util import Config
 
 
 class Transcriber:

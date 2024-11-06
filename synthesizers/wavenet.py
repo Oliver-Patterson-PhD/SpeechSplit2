@@ -1,21 +1,28 @@
 from tomllib import load as loadtoml
+from typing import Self
 
 import torch
-from synthesizers.synthesizer import Synthesizer
 from tqdm import tqdm
-from util.config import Config
 from wavenet_vocoder import builder
 
+from util.config import Config
 
-class WavenetSynthesizer(Synthesizer):
+from .synthesizer import Synthesizer
+
+
+class Wavenet(Synthesizer):
     device: torch.device
     model: torch.nn.Module
-    model_name: str = "lj_wavenet_vocoder"
+    model_name: str = "wavenet_vocoder"
     checkpoint_path: str = "full_models"
     configtoml: dict
     config: Config
 
-    def __init__(self, device: torch.device, config: Config) -> None:
+    def __init__(
+        self: Self,
+        device: torch.device,
+        config: Config,
+    ) -> None:
         self.config = config
         data_dir = self.config.paths.full_models
         config_file = f"{data_dir}/{self.model_name}.toml"
@@ -50,7 +57,10 @@ class WavenetSynthesizer(Synthesizer):
         self.model = self.model.to(self.device)
 
     @torch.no_grad()
-    def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
+    def spect2wav(
+        self: Self,
+        spect: torch.Tensor,
+    ) -> torch.Tensor:
         self.model.eval()
         self.model.make_generation_fast_()
         model_out = self.model.incremental_forward(

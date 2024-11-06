@@ -1,8 +1,11 @@
+from typing import Self
+
 import torch
 import torchaudio
 
-from synthesizers.synthesizer import Synthesizer
 from util.config import Config
+
+from .synthesizer import Synthesizer
 
 
 class GriffinLim(Synthesizer):
@@ -16,7 +19,7 @@ class GriffinLim(Synthesizer):
     n_iter = 64
 
     def __init__(
-        self,
+        self: Self,
         device: torch.device,
         config: Config,
     ) -> None:
@@ -40,6 +43,9 @@ class GriffinLim(Synthesizer):
         )
 
     @torch.no_grad()
-    def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
+    def spect2wav(
+        self: Self,
+        spect: torch.Tensor,
+    ) -> torch.Tensor:
         tspec = spect.T
         return self.glim(self.demel(tspec))

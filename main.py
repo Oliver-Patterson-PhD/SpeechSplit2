@@ -1,20 +1,19 @@
-import argparse
+from argparse import ArgumentParser
 
 import torch
 
 from data_preprocessing import preprocess_data
-from experiments.scratchpad import Scratchpad
-from experiments.swapper import Swapper
-from experiments.test_samples import TestSamples
-from experiments.train import Train
-from util.config import Config, RunTests
-from util.logging import Logger
-
-global doscratch
+from experiments import Scratchpad, Swapper, TestSamples, Train
+from util import Config, Logger, RunTests
 
 
-def main(config: Config):
-    global doscratch
+def main() -> None:
+    parser = ArgumentParser()
+    parser.add_argument("--config_name", type=str, default="base")
+    parser.add_argument("--scratch", action="store_true")
+    args = parser.parse_args()
+    config = Config("scratch" if args.scratch else args.config_name)
+    doscratch = args.scratch
     Logger().debug("Starting Main")
     if config.options.run_tests == RunTests.NOTHING and not doscratch:
         return
@@ -50,14 +49,3 @@ def main(config: Config):
         if RunTests.SAVE_AUDIOS in config.options.run_tests:
             swapper.save_audios()
     Logger().debug("Finished main")
-
-
-if __name__ == "__main__":
-    global doscratch
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config_name", type=str, default="base")
-    parser.add_argument("--scratch", action="store_true")
-    args = parser.parse_args()
-    config = Config("scratch" if args.scratch else args.config_name)
-    doscratch = args.scratch
-    main(config=config)

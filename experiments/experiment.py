@@ -8,11 +8,8 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from data_loader import get_loader
-from model import Generator_3 as Generator
-from model import InterpLnr
-from util.compute import Compute
-from util.config import Config
-from util.logging import Logger
+from model import InterpLnr, SpeechSplit
+from util import Compute, Config, Logger
 from utils import quantize_f0_torch, save_tensor
 
 
@@ -21,7 +18,7 @@ class Experiment(object):
     compute: Compute = Compute()
     config: Config
     intrp: InterpLnr
-    model: Generator
+    model: SpeechSplit
     optimizer: torch.optim.Optimizer
     start_time: float
     writer: SummaryWriter
@@ -31,7 +28,7 @@ class Experiment(object):
     def __init__(self: Self, config: Config, currtime: int = int(time.time())) -> None:
         self.config = config
         self.compute.print_compute()
-        self.model = Generator(self.config)
+        self.model = SpeechSplit(self.config)
         self.intrp = InterpLnr(self.config)
         self.model.to(self.compute.device())
         self.intrp.to(self.compute.device())

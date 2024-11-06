@@ -109,7 +109,9 @@ def process_file(
                     torch.save(f0_i, f"{f0_dir}/{spk_dir}/" + fname)
 
 
-def make_spect_f0(config: Config) -> None:
+def make_spect_f0(
+    config: Config,
+) -> None:
     spk_meta: MetaDictType = getattr(
         __import__("meta_dicts"),
         config.options.dataset_name,
@@ -122,7 +124,9 @@ def make_spect_f0(config: Config) -> None:
     ]
 
 
-def getraw(full_fname: str | os.PathLike) -> torch.Tensor:
+def getraw(
+    full_fname: str | os.PathLike,
+) -> torch.Tensor:
     x: torch.Tensor
     inaud, sr = torchaudio.load(full_fname, channels_first=True)
     assert sr == SAMPLE_RATE
@@ -283,7 +287,9 @@ vad_transform = torchaudio.transforms.Vad(
 )
 
 
-def clean_audio(audio: torch.Tensor):
+def clean_audio(
+    audio: torch.Tensor,
+):
     retval = torchaudio.sox_effects.apply_effects_tensor(
         vad_transform(
             torchaudio.sox_effects.apply_effects_tensor(
@@ -296,7 +302,9 @@ def clean_audio(audio: torch.Tensor):
     return retval.squeeze()
 
 
-def has_content(audio: torch.Tensor) -> bool:
+def has_content(
+    audio: torch.Tensor,
+) -> bool:
     return bool(
         (audio.size(dim=-1) > 1) and (audio.max().item() > 1e-03) and (audio != 0).any()
     )

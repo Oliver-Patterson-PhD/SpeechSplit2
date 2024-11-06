@@ -1,8 +1,9 @@
-from typing import Tuple
+from typing import Self, Tuple
 
 import torch
-from util.logging import Logger
-from util.patterns import Singleton
+
+from .logging import Logger
+from .patterns import Singleton
 
 
 ## Compute device handler
@@ -16,7 +17,9 @@ class Compute(metaclass=Singleton):
     __gpu_compute: str
     __gpu_memory: Tuple[float]
 
-    def __init__(self) -> None:
+    def __init__(
+        self: Self,
+    ) -> None:
         self.__logger = Logger()
         if torch.cuda.is_available():
             self.__device = torch.device("cuda")
@@ -32,29 +35,41 @@ class Compute(metaclass=Singleton):
             self.__device = torch.device("cpu")
         return None
 
-    def device(self) -> torch.device:
+    def device(
+        self: Self,
+    ) -> torch.device:
         return self.__current_device
 
-    def id(self) -> int:
+    def id(
+        self: Self,
+    ) -> int:
         return self.__device_id
 
-    def set_cpu(self) -> None:
+    def set_cpu(
+        self: Self,
+    ) -> None:
         self.__logger.info("Explicitly setting CPU for inference.")
         self.__current_device = torch.device("cpu")
         torch.set_default_device("cpu")
         return None
 
-    def set_gpu(self) -> None:
+    def set_gpu(
+        self: Self,
+    ) -> None:
         self.__logger.info("Explicitly setting GPU for inference.")
         self.__current_device = self.__device
         torch.set_default_device(self.__device)
         return None
 
-    def set_default(self) -> None:
+    def set_default(
+        self: Self,
+    ) -> None:
         torch.set_default_device(self.__device)
         return None
 
-    def print_compute(self):
+    def print_compute(
+        self: Self,
+    ) -> None:
         if self.__device.type == "cuda":
             self.__logger.info(
                 "Using GPU {:d} {:s} with {:.1f}Gb total memory.".format(
@@ -65,10 +80,13 @@ class Compute(metaclass=Singleton):
             )
         else:
             self.__logger.info("Using CPU for inference.")
-        return None
 
-    def is_cpu(self) -> bool:
+    def is_cpu(
+        self: Self,
+    ) -> bool:
         return self.__current_device == torch.device("cpu")
 
-    def is_gpu(self) -> bool:
+    def is_gpu(
+        self: Self,
+    ) -> bool:
         return self.__current_device != torch.device("cpu")

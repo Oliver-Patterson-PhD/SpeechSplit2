@@ -1,0 +1,22 @@
+[options]
+run_tests = ["save_latents", "swap_latents", "save_audios"]
+dataset_name = "smolspeech"
+num_iters = 1
+log_step = 1
+ckpt_save_step = 100000
+train = false
+return_latents = true
+regenerate_data = false
+
+[dataloader]
+shuffle = false
+batch_size = 1
+num_workers = 24
+samplier = 32
+drop_and_pad = false
+
+[training]
+mask_loss = false
+lr = 0.001
+beta1 = 0.9
+beta2 = 0.999

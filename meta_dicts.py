@@ -90,7 +90,7 @@ smolspeech: MetaDictType = {
 
 smolvctk: MetaDictType = {
     "p225": vctk["p225"],
-    "p226": vctk["p226"],
+    # "p226": vctk["p226"],
 }
 
 nameduaspeech: NamedMetaDictType = {

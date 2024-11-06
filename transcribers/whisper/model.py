@@ -2,11 +2,10 @@ import base64
 import gzip
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional, Tuple, Self
+from typing import Dict, Iterable, Optional, Self, Tuple
 
 import numpy as np
 import torch
-from torch.nn.functional import scaled_dot_product_attention
 
 from .decoding import decode as decode_function
 from .decoding import detect_language as detect_language_function
@@ -128,7 +127,7 @@ class MultiHeadAttention(torch.nn.Module):
         v = v.view(*v.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
 
         if SDPA_AVAILABLE and MultiHeadAttention.use_sdpa:
-            a = scaled_dot_product_attention(
+            a = torch.nn.functional.scaled_dot_product_attention(
                 q, k, v, is_causal=mask is not None and n_ctx > 1
             )
             out = a.permute(0, 2, 1, 3).flatten(start_dim=2)

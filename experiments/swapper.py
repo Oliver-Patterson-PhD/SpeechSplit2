@@ -8,14 +8,12 @@ import torchaudio
 
 from data_loader import CollaterItemType, get_loader
 from data_preprocessing import MetaDictType
-from experiments.experiment import Experiment
 from meta_dicts import NamedMetaDictType
-from synthesizers.griffinlim import GriffinLim
-from synthesizers.melgan import MelGanSynthesizer as MelGan
-from synthesizers.parallelwavegan import ParallelWaveGan as ParWavGan
-from synthesizers.synthesizer import Synthesizer
-from synthesizers.wavenet import WavenetSynthesizer as Wavenet
+from synthesizers import (GriffinLim, MelGan, ParallelWaveGan, Synthesizer,
+                          Wavenet)
 from utils import norm_audio, quantize_f0_torch, save_tensor
+
+from .experiment import Experiment
 
 
 class Swapper(Experiment):
@@ -204,6 +202,7 @@ class Swapper(Experiment):
         [self.spec_image(file, "orig") for file in ofilelist]
         [self.spec_image(file, "full") for file in filelist]
 
+        self.compute.set_gpu()
         if self.use_synth_griffinlim:
             self.synthesizer = GriffinLim(self.device, config=self.config)
             [self.orig_save(file, "griffinlim") for file in ofilelist]
@@ -217,7 +216,9 @@ class Swapper(Experiment):
 
         self.compute.set_gpu()
         if self.use_synth_parallelwavegan:
-            self.synthesizer = ParWavGan(self.compute.device(), config=self.config)
+            self.synthesizer = ParallelWaveGan(
+                self.compute.device(), config=self.config
+            )
             [self.orig_save(file, "parallelwavegan") for file in ofilelist]
             [self.single_spmel_to_audio(file, "parallelwavegan") for file in filelist]
 

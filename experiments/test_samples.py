@@ -3,8 +3,9 @@ from typing import List, Self
 
 import torch
 
-from experiments.experiment import Experiment
-from util.config import Config
+from util import Config
+
+from .experiment import Experiment
 
 
 class TestSamples(Experiment):
@@ -13,7 +14,7 @@ class TestSamples(Experiment):
 
     @torch.no_grad()
     def test(self: Self) -> None:
-        self.load_data(singleitem=True)
+        self.load_data(singleitem=True, full_process=True)
         self.logger.info("Start eval...")
         self.logfile = open("normlog.csv", "wt")
         items: List[str] = [

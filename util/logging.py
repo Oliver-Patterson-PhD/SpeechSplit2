@@ -11,7 +11,7 @@ from typing import Any, List, Optional, Self, TextIO, overload
 from torch import Tensor
 from tqdm import tqdm
 
-from util.patterns import Singleton
+from .patterns import Singleton
 
 
 class LogLevel(IntEnum):
@@ -74,7 +74,10 @@ class Logger(metaclass=Singleton):
         if flush is not None:
             self.__flush = flush
 
-    def __get_caller(self: Self, depth: int = 1) -> str:
+    def __get_caller(
+        self: Self,
+        depth: int = 1,
+    ) -> str:
         tmp_frame = _getframe(depth).f_back
         assert tmp_frame is not None
         return tmp_frame.f_code.co_qualname
@@ -124,10 +127,15 @@ class Logger(metaclass=Singleton):
                 )
         return None
 
-    def __is_nan(self: Self, x: Tensor) -> bool:
+    def __is_nan(
+        self: Self,
+        x: Tensor,
+    ) -> bool:
         return True if x.isnan().any().item() else False
 
-    def __get_passed_varnames(self: Self) -> List[str]:
+    def __get_passed_varnames(
+        self: Self,
+    ) -> List[str]:
         frame = inspect.currentframe()
         assert frame is not None
         finfo = inspect.getouterframes(frame)[2]
@@ -137,18 +145,29 @@ class Logger(metaclass=Singleton):
         args = string[string.find("(") + 1 : -1].split(",")
         return [i.split("=")[1].strip() if i.find("=") != -1 else i for i in args]
 
-    def get_level(self: Self) -> LogLevel:
+    def get_level(
+        self: Self,
+    ) -> LogLevel:
         return self.__level
 
     @overload
-    def set_level(self: Self, level: str) -> None:
+    def set_level(
+        self: Self,
+        level: str,
+    ) -> None:
         pass
 
     @overload
-    def set_level(self: Self, level: LogLevel) -> None:
+    def set_level(
+        self: Self,
+        level: LogLevel,
+    ) -> None:
         pass
 
-    def set_level(self: Self, level: LogLevel | str) -> None:
+    def set_level(
+        self: Self,
+        level: LogLevel | str,
+    ) -> None:
         if isinstance(level, str):
             self.__level = LogLevel[level]
         elif isinstance(level, int):
@@ -156,16 +175,26 @@ class Logger(metaclass=Singleton):
         else:
             raise ValueError
 
-    def get_stream(self: Self) -> TextIO:
+    def get_stream(
+        self: Self,
+    ) -> TextIO:
         return self.__stream
 
-    def get_file(self: Self) -> Optional[TextIO]:
+    def get_file(
+        self: Self,
+    ) -> Optional[TextIO]:
         return self.__file
 
-    def set_stream(self: Self, stream: TextIO) -> None:
+    def set_stream(
+        self: Self,
+        stream: TextIO,
+    ) -> None:
         self.__stream = stream
 
-    def set_file(self: Self, file: str) -> None:
+    def set_file(
+        self: Self,
+        file: str,
+    ) -> None:
         makedirs(
             dirname(file),
             exist_ok=True,
@@ -215,7 +244,12 @@ class Logger(metaclass=Singleton):
         else:
             return default
 
-    def trace(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
+    def trace(
+        self: Self,
+        message: str,
+        depth: int = 1,
+        end: str = "\n",
+    ) -> None:
         self.__log(
             level=LogLevel.TRACE,
             caller=self.__get_caller(depth),
@@ -223,7 +257,12 @@ class Logger(metaclass=Singleton):
             end=end,
         )
 
-    def debug(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
+    def debug(
+        self: Self,
+        message: str,
+        depth: int = 1,
+        end: str = "\n",
+    ) -> None:
         self.__log(
             level=LogLevel.DEBUG,
             caller=self.__get_caller(depth),
@@ -231,7 +270,12 @@ class Logger(metaclass=Singleton):
             end=end,
         )
 
-    def info(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
+    def info(
+        self: Self,
+        message: str,
+        depth: int = 1,
+        end: str = "\n",
+    ) -> None:
         self.__log(
             level=LogLevel.INFO,
             caller=self.__get_caller(depth),
@@ -239,7 +283,12 @@ class Logger(metaclass=Singleton):
             end=end,
         )
 
-    def warn(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
+    def warn(
+        self: Self,
+        message: str,
+        depth: int = 1,
+        end: str = "\n",
+    ) -> None:
         self.__log(
             level=LogLevel.WARN,
             caller=self.__get_caller(depth),
@@ -247,7 +296,12 @@ class Logger(metaclass=Singleton):
             end=end,
         )
 
-    def error(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
+    def error(
+        self: Self,
+        message: str,
+        depth: int = 1,
+        end: str = "\n",
+    ) -> None:
         self.__log(
             level=LogLevel.ERROR,
             caller=self.__get_caller(depth),
@@ -255,7 +309,12 @@ class Logger(metaclass=Singleton):
             end=end,
         )
 
-    def fatal(self: Self, message: str, depth: int = 1, end: str = "\n") -> None:
+    def fatal(
+        self: Self,
+        message: str,
+        depth: int = 1,
+        end: str = "\n",
+    ) -> None:
         self.__log(
             level=LogLevel.FATAL,
             caller=self.__get_caller(depth),

@@ -3,15 +3,15 @@ proc_data = "/mnt/datasets/processed/Whisper"
 raw_data = "/mnt/datasets/raw"
 
 [log]
-level = "TRACE"
+level = "DEBUG"
 file = true
 
 [options]
 bottleneck = "large"
-experiment = "trainmask"
+experiment = "scratch"
 ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
 trace = false
-dataset_name = "smolspeech"
+dataset_name = "smolvctk"
 num_iters = 1
 log_step = 1
 ckpt_save_step = 10000

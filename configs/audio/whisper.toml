@@ -1,0 +1,15 @@
+[audio-processing]
+sample_rate = 16000
+n_fft = 400
+hop_len = 400
+chunk_length = 30
+
+vtlp_fft = 2048
+freq_min = 90
+freq_max = 7600
+max_len_pad = 192
+f0_m_lo = 50
+f0_m_hi = 250
+f0_f_lo = 100
+f0_f_hi = 600
+hi_pass_cutoff = 30

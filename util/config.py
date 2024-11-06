@@ -6,10 +6,10 @@ from datetime import datetime
 from enum import Flag, auto
 from os import path
 from tomllib import load as loadtoml
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Self
 
-from util.logging import Logger, LogLevel
-from util.patterns import Singleton
+from .logging import Logger, LogLevel
+from .patterns import Singleton
 
 
 class ConfigPaths:
@@ -35,11 +35,13 @@ class ConfigPaths:
     raw_timit: str
     raw_uaspeech: str
     raw_smolspeech: str
+    raw_smolvctk: str
 
     dataset_vctk: str
     dataset_timit: str
     dataset_uaspeech: str
     dataset_smolspeech: str
+    dataset_smolvctk: str
 
 
 class ConfigAudioProcessing:
@@ -157,7 +159,7 @@ class Config(metaclass=Singleton):
     ## Initialise configuration object
     # Reads the config toml file and creates a single object with the values
     def __init__(
-        self,
+        self: Self,
         config_name: Optional[str] = None,
     ) -> None:
         self.start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -172,7 +174,7 @@ class Config(metaclass=Singleton):
     #  Duplicate values will be overwritten, existing config options that not
     #  specified in the loaded files are not removed.
     def load_config(
-        self,
+        self: Self,
         config_name: str,
     ) -> None:
         config_str = "configs/{}.toml"
@@ -180,7 +182,6 @@ class Config(metaclass=Singleton):
         if not path.exists(config_file):
             Logger().fatal(f"Could not find file: {config_file}")
         tomldict = loadtoml(open(config_file, "rb"))
-
         if (
             "experiment" not in tomldict["options"].keys()
             and "bottleneck" not in tomldict["options"].keys()
@@ -207,7 +208,10 @@ class Config(metaclass=Singleton):
             )
         self.__fill_nulls()
 
-    def __print_config(self, config_dict: dict) -> None:
+    def __print_config(
+        self: Self,
+        config_dict: dict,
+    ) -> None:
         Logger().info(
             "config:\n"
             + "\n".join(
@@ -222,14 +226,17 @@ class Config(metaclass=Singleton):
             )
         )
 
-    def __merge_dicts(self, *dict_args) -> dict:
+    def __merge_dicts(
+        self: Self,
+        *dict_args,
+    ) -> dict:
         result = {}
         for dictionary in dict_args:
             result.update(dictionary)
         return result
 
     def __map_categories(
-        self,
+        self: Self,
         key: str,
         subdict: Dict[str, Any],
     ) -> None:
@@ -266,7 +273,10 @@ class Config(metaclass=Singleton):
                 self.__dict__.update(subdict)
         return
 
-    def __set_runtypes(self, runtype_list: List[str]) -> RunTests:
+    def __set_runtypes(
+        self: Self,
+        runtype_list: List[str],
+    ) -> RunTests:
         runtype = RunTests.NOTHING
         for runtype_str in runtype_list:
             runtype_str = runtype_str.upper().strip()
@@ -280,7 +290,9 @@ class Config(metaclass=Singleton):
                 )
         return runtype
 
-    def __fill_nulls(self) -> None:
+    def __fill_nulls(
+        self: Self,
+    ) -> None:
         self.__set_dataset_paths()
         self.__set_data_and_feat()
         self.__set_artefact_paths()
@@ -290,7 +302,9 @@ class Config(metaclass=Singleton):
             )
             Logger().set_file(self.__logging.file)
 
-    def __set_artefact_paths(self) -> None:
+    def __set_artefact_paths(
+        self: Self,
+    ) -> None:
         if not hasattr(self.paths, "logging"):
             self.paths.logging = f"{self.paths.artefacts}/logs"
         if not hasattr(self.paths, "full_models"):
@@ -309,7 +323,9 @@ class Config(metaclass=Singleton):
         if not hasattr(self.paths, "monowavs"):
             self.paths.monowavs = f"{self.paths.features}/monowavs"
 
-    def __set_dataset_paths(self) -> None:
+    def __set_dataset_paths(
+        self: Self,
+    ) -> None:
         if not hasattr(self.paths, "raw_timit"):
             self.paths.raw_timit = f"{self.paths.raw_data}/TIMIT"
         if not hasattr(self.paths, "dataset_timit"):
@@ -320,11 +336,6 @@ class Config(metaclass=Singleton):
         if not hasattr(self.paths, "dataset_vctk"):
             self.paths.dataset_vctk = f"{self.paths.proc_data}/VCTK-Corpus"
 
-        if not hasattr(self.paths, "raw_smolspeech"):
-            self.paths.raw_smolspeech = f"{self.paths.raw_data}/SmolSpeech"
-        if not hasattr(self.paths, "dataset_smolspeech"):
-            self.paths.dataset_smolspeech = f"{self.paths.proc_data}/SmolSpeech"
-
         if not hasattr(self.paths, "raw_uaspeech"):
             self.paths.raw_uaspeech = (
                 f"{self.paths.raw_data}/UASpeech/audio/noisereduce"
@@ -334,19 +345,34 @@ class Config(metaclass=Singleton):
                 f"{self.paths.proc_data}/UASpeech/audio/noisereduce"
             )
 
-    def __set_data_and_feat(self) -> None:
+        if not hasattr(self.paths, "raw_smolspeech"):
+            self.paths.raw_smolspeech = f"{self.paths.raw_data}/SmolSpeech"
+        if not hasattr(self.paths, "dataset_smolspeech"):
+            self.paths.dataset_smolspeech = f"{self.paths.proc_data}/SmolSpeech"
+
+        if not hasattr(self.paths, "raw_smolvctk"):
+            self.paths.raw_smolvctk = f"{self.paths.raw_data}/SmolVCTK"
+        if not hasattr(self.paths, "dataset_smolvctk"):
+            self.paths.dataset_smolvctk = f"{self.paths.proc_data}/SmolVCTK"
+
+    def __set_data_and_feat(
+        self: Self,
+    ) -> None:
         if self.options.dataset_name == "vctk":
             data_dir = self.paths.raw_vctk
             feat_dir = self.paths.dataset_vctk
-        elif self.options.dataset_name == "smolspeech":
-            data_dir = self.paths.raw_smolspeech
-            feat_dir = self.paths.dataset_smolspeech
         elif self.options.dataset_name == "uaspeech":
             data_dir = self.paths.raw_uaspeech
             feat_dir = self.paths.dataset_uaspeech
         elif self.options.dataset_name == "timit":
             data_dir = self.paths.raw_timit
             feat_dir = self.paths.dataset_timit
+        elif self.options.dataset_name == "smolspeech":
+            data_dir = self.paths.raw_smolspeech
+            feat_dir = self.paths.dataset_smolspeech
+        elif self.options.dataset_name == "smolvctk":
+            data_dir = self.paths.raw_smolvctk
+            feat_dir = self.paths.dataset_smolvctk
         else:
             Logger().fatal(
                 "Invalid options.dataset_name in config: {}".format(

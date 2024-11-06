@@ -1,0 +1,13 @@
+[paths]
+proc_data = "/mnt/datasets/processed/SpeechSplit2"
+raw_data = "/mnt/datasets/raw"
+
+[options]
+bottleneck = "large"
+experiment = "swap"
+ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
+trace = false
+
+[log]
+level = "DEBUG"
+file = true
