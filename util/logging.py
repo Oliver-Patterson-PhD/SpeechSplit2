@@ -315,6 +315,7 @@ class Logger(metaclass=Singleton):
         depth: int = 1,
         end: str = "\n",
     ) -> None:
+        self.__flush = True
         self.__log(
             level=LogLevel.FATAL,
             caller=self.__get_caller(depth),
