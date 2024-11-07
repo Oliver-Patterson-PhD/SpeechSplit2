@@ -1,8 +1,9 @@
 [options]
+experiment = "trainmask"
 run_tests = ["train"]
 dataset_name = "vctk"
 num_iters = 1600000
-log_step = 100
+log_step = 1000
 ckpt_save_step = 10000
 train = true
 return_latents = false

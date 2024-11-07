@@ -4,7 +4,6 @@ from typing import List, Self, Tuple
 
 import torch
 import torchaudio
-from tqdm import tqdm
 
 from data_loader import CollaterItemType
 from synthesizers import Synthesizer
@@ -18,19 +17,12 @@ from .experiment import Experiment
 class Scratchpad(Experiment):
     retries: int = 5
     transcriber: Transcriber
-    fold_stride: int
-    fold_pad_len: int
-    fold_div = 2
     synth_list: List[Synthesizer]
 
     @torch.no_grad()
     def run(
         self: Self,
     ) -> None:
-        self.fold_stride = floor((1 / self.fold_div) * self.config.model.max_len_pad)
-        self.fold_pad_len = floor(
-            (1 - (1 / self.fold_div)) * self.config.model.max_len_pad
-        )
         self.transcriber = WhisperTranscriber(
             device=self.compute.device(),
             model_name=self.config.options.whisper_type,
@@ -60,6 +52,10 @@ class Scratchpad(Experiment):
         os.makedirs(self.lossdir, exist_ok=True)
         os.makedirs(self.wavsdir, exist_ok=True)
         os.makedirs(self.spmelsdir, exist_ok=True)
+        self.fold_div = 2
+        self.fold_size = self.config.model.max_len_pad
+        self.fold_step = self.config.model.max_len_pad // self.fold_div
+        self.fold_pad_len = floor((1 - (1 / self.fold_div)) * self.fold_size)
         self.process()
 
     @torch.no_grad()
@@ -167,7 +163,7 @@ class Scratchpad(Experiment):
         spmel_gt = spmel_gt.to(self.compute.device()).unsqueeze(0)
         rhythm_input = rhythm_input.to(self.compute.device()).unsqueeze(0)
         content_input = content_input.to(self.compute.device()).unsqueeze(0)
-        pitch_input = pitch_input.to(self.compute.device()).unsqueeze(-1).unsqueeze(0)
+        pitch_input = pitch_input.to(self.compute.device()).unsqueeze(0)
         timbre_input = timbre_input.to(self.compute.device()).unsqueeze(0)
         len_crop = len_crop.to(self.compute.device())
         content_pitch_input = self.prepare_input(
@@ -233,8 +229,8 @@ class Scratchpad(Experiment):
             [fnamelist[0] for i in range(repeater)],
             [spk_id_org[0] for i in range(repeater)],
             i_spmel_gt,
-            self.repeat_and_pad(rhythm_input, repeater),
-            self.repeat_and_pad(content_input, repeater),
+            self.fold_pad(rhythm_input),
+            self.fold_pad(content_input),
             self.repeat_and_pad(pitch_input, repeater),
             torch.stack([timbre_input.squeeze() for i in range(repeater)]),
             torch.stack([len_crop.squeeze() for i in range(repeater)]),
@@ -246,47 +242,39 @@ class Scratchpad(Experiment):
         item: torch.Tensor,
         dim0: int,
     ) -> torch.Tensor:
-        if item.ndim == 3:
-            paditem = torch.nn.functional.pad(
-                item.squeeze(),
-                (0, 0, 0, self.config.model.max_len_pad - item.size(-2)),
-            )
-            return torch.stack([paditem for i in range(dim0)])
-        elif item.ndim == 2:
-            paditem = torch.nn.functional.pad(
-                item.squeeze(),
-                (0, self.config.model.max_len_pad - item.size(-1)),
-            )
+        pads = (0, self.fold_size - item.size(-1))
+        if item.size(dim=-1) > self.config.model.max_len_pad:
+            paditem = torch.nn.functional.pad(item.squeeze(), pads)
             return torch.stack([paditem for i in range(dim0)])
         else:
-            raise ValueError
+            return torch.nn.functional.pad(item, pads)
 
     @torch.no_grad()
     def fold_pad(
         self: Self,
         item: torch.Tensor,
     ) -> torch.Tensor:
+        pads: Tuple[int, ...]
         if item.size(dim=-2) > self.config.model.max_len_pad:
-            pad_len = floor((1 - (1 / self.fold_div)) * self.config.model.max_len_pad)
-            pad_part = (
-                (item.size(-2) // self.config.model.max_len_pad) + 1
-            ) * self.config.model.max_len_pad
-            pads = (0, 0, pad_len, pad_part - item.size(-2) + pad_len)
-            step = self.config.model.max_len_pad // self.fold_div
-            full_pad = torch.nn.functional.pad(item.squeeze(), pads)
-            ones_mat = torch.ones_like(full_pad).view(full_pad.size())
-            norm_mat = ones_mat.unfold(
-                dimension=-2, size=self.config.model.max_len_pad, step=step
-            ).mT
-            retunf = full_pad.unfold(
-                dimension=-2, size=self.config.model.max_len_pad, step=step
-            ).mT
-            return retunf / norm_mat
-        else:
-            return torch.nn.functional.pad(
-                item,
-                (0, 0, 0, self.config.model.max_len_pad - item.size(-2)),
+            pad_i = (
+                ((item.size(-2) // self.fold_size) + 1) * self.fold_size
+                - item.size(-2)
+                + self.fold_pad_len
             )
+            pads = (0, 0, self.fold_pad_len, pad_i)
+            full_pad = torch.nn.functional.pad(item.squeeze(), pads)
+            ones_mat = torch.ones_like(full_pad)
+            self.logger.trace_tensor(full_pad)
+            norm_mat = ones_mat.unfold(
+                dimension=-2, size=self.fold_size, step=self.fold_step
+            )
+            retunf = full_pad.unfold(
+                dimension=-2, size=self.fold_size, step=self.fold_step
+            )
+            return (retunf / norm_mat).mT
+        else:
+            pads = (0, 0, 0, self.fold_size - item.size(-2))
+            return torch.nn.functional.pad(item, pads)
 
     @torch.no_grad()
     def unstack(
@@ -294,38 +282,16 @@ class Scratchpad(Experiment):
         listitem: List[tuple[torch.Tensor, torch.Tensor]],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if len(listitem) == 1:
-            self.logger.trace("Returned")
             return listitem[0]
-        unf_size = self.config.model.max_len_pad
-        unf_step = self.config.model.max_len_pad // self.fold_div
         gt_mod = torch.stack([item[0] for item in listitem]).transpose(0, -1)
         out_mod = torch.stack([item[1] for item in listitem]).transpose(0, -1)
-        length = gt_mod.size(-1)
-        out_size = (1, ((length + 1) * unf_step))
-        kernel_size = (1, unf_size)
-        stride = (1, unf_step)
-        out_gt = (
-            torch.nn.functional.fold(
-                gt_mod,
-                output_size=out_size,
-                kernel_size=kernel_size,
-                stride=stride,
-            )
-            .squeeze(1)
-            .squeeze(1)
-            .T
+        fold_fn = torch.nn.Fold(
+            output_size=(1, ((gt_mod.size(-1) + 1) * self.fold_step)),
+            kernel_size=(1, self.fold_size),
+            stride=(1, self.fold_step),
         )
-        out_out = (
-            torch.nn.functional.fold(
-                out_mod,
-                output_size=out_size,
-                kernel_size=kernel_size,
-                stride=stride,
-            )
-            .squeeze(1)
-            .squeeze(1)
-            .T
-        )
+        out_gt = fold_fn(gt_mod).squeeze(1).squeeze(1).T
+        out_out = fold_fn(out_mod).squeeze(1).squeeze(1).T
         self.logger.trace_tensor(out_gt)
         self.logger.trace_tensor(out_out)
         return out_gt, out_out

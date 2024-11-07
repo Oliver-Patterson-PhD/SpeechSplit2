@@ -4,12 +4,13 @@ import inspect
 from enum import IntEnum
 from os import makedirs
 from os.path import dirname
-from sys import _getframe, stderr, stdout
+from shutil import get_terminal_size
+from sys import _getframe
 from time import gmtime, strftime
 from typing import Any, List, Optional, Self, TextIO, overload
 
 from torch import Tensor
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from .patterns import Singleton
 
@@ -57,20 +58,17 @@ class LoggedException(Exception):
 
 class Logger(metaclass=Singleton):
     __level: LogLevel = LogLevel.DEBUG
-    __stream: TextIO = stdout
     __file: Optional[TextIO] = None
     __flush: bool = False
+    __process_bar_running: bool = False
 
     def __init__(
         self: Self,
         level: Optional[LogLevel] = None,
-        use_stderr: Optional[bool] = None,
         flush: Optional[bool] = None,
     ) -> None:
         if level is not None:
             self.__level = level
-        if use_stderr is not None:
-            self.use_stderr(use_stderr)
         if flush is not None:
             self.__flush = flush
 
@@ -103,7 +101,6 @@ class Logger(metaclass=Singleton):
         level: LogLevel,
         caller: str,
         message: str,
-        end: str = "\n",
     ) -> None:
         if self.__file is not None or level >= self.__level:
             fullmsg = self.__format_msg(
@@ -112,16 +109,12 @@ class Logger(metaclass=Singleton):
                 message=message,
             )
             if level >= self.__level:
-                print(
-                    fullmsg,
-                    end=end,
-                    file=self.__stream,
-                    flush=self.__flush,
-                )
+                if self.__process_bar_running:
+                    tqdm.write("\r" + (" " * get_terminal_size().columns), end="\r")
+                tqdm.write(fullmsg)
             if self.__file is not None:
                 print(
                     fullmsg,
-                    end=end,
                     file=self.__file,
                     flush=self.__flush,
                 )
@@ -175,21 +168,10 @@ class Logger(metaclass=Singleton):
         else:
             raise ValueError
 
-    def get_stream(
-        self: Self,
-    ) -> TextIO:
-        return self.__stream
-
     def get_file(
         self: Self,
     ) -> Optional[TextIO]:
         return self.__file
-
-    def set_stream(
-        self: Self,
-        stream: TextIO,
-    ) -> None:
-        self.__stream = stream
 
     def set_file(
         self: Self,
@@ -204,15 +186,6 @@ class Logger(metaclass=Singleton):
             "wt",
             encoding="utf-8",
         )
-
-    def use_stderr(
-        self: Self,
-        use_stderr: bool,
-    ) -> None:
-        if use_stderr:
-            self.__steam = stderr
-        else:
-            self.__steam = stdout
 
     def input(
         self: Self,
@@ -248,79 +221,67 @@ class Logger(metaclass=Singleton):
         self: Self,
         message: str,
         depth: int = 1,
-        end: str = "\n",
     ) -> None:
         self.__log(
             level=LogLevel.TRACE,
             caller=self.__get_caller(depth),
             message=message,
-            end=end,
         )
 
     def debug(
         self: Self,
         message: str,
         depth: int = 1,
-        end: str = "\n",
     ) -> None:
         self.__log(
             level=LogLevel.DEBUG,
             caller=self.__get_caller(depth),
             message=message,
-            end=end,
         )
 
     def info(
         self: Self,
         message: str,
         depth: int = 1,
-        end: str = "\n",
     ) -> None:
         self.__log(
             level=LogLevel.INFO,
             caller=self.__get_caller(depth),
             message=message,
-            end=end,
         )
 
     def warn(
         self: Self,
         message: str,
         depth: int = 1,
-        end: str = "\n",
     ) -> None:
         self.__log(
             level=LogLevel.WARN,
             caller=self.__get_caller(depth),
             message=message,
-            end=end,
         )
 
     def error(
         self: Self,
         message: str,
         depth: int = 1,
-        end: str = "\n",
     ) -> None:
         self.__log(
             level=LogLevel.ERROR,
             caller=self.__get_caller(depth),
             message=message,
-            end=end,
         )
 
     def fatal(
         self: Self,
-        message: str,
+        message: str | Exception,
         depth: int = 1,
-        end: str = "\n",
     ) -> None:
         self.__flush = True
         self.__log(
             level=LogLevel.FATAL,
             caller=self.__get_caller(depth),
-            message=message,
-            end=end,
+            message=str(message),
         )
         raise LoggedException(message)
 
@@ -386,9 +347,25 @@ class Logger(metaclass=Singleton):
         else:
             return False
 
-    def process_bar(
+    def progress_bar(
         self: Self,
         *args,
         **kwargs,
     ):
+        self.__process_bar_running = True
+        for item in tqdm(*args, **kwargs):
+            yield item
+        self.__process_bar_running = False
+
+    def manual_process_bar_start(
+        self: Self,
+        *args,
+        **kwargs,
+    ):
+        self.__process_bar_running = True
         return tqdm(*args, **kwargs)
+
+    def manual_process_bar_end(self: Self, pbar):
+        pbar.close()
+        self.__process_bar_running = False
+        return

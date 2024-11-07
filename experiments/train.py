@@ -3,8 +3,8 @@ from typing import Self
 
 import torch
 
-from util.exception import NanError
-from utils import masked_mse, quantize_f0_torch
+from util import NanError
+from utils import masked_mse
 
 from .experiment import Experiment
 
@@ -26,7 +26,6 @@ class Train(Experiment):
         # Learning rate cache for decaying.
         lr = self.config.training.lr
         self.logger.info("Current learning rates, lr: {}.".format(lr))
-        self.data_iter = iter(self.data_loader)
 
         # Start training.
         self.model.train()
@@ -38,7 +37,14 @@ class Train(Experiment):
         else:
             self.loss_fn = torch.nn.MSELoss(reduction="mean")
 
+        if __debug__:
+            self.check_data()
+
         i = start_iters
+        pbar = self.logger.manual_process_bar_start(
+            total=self.config.options.num_iters,
+            initial=i,
+        )
         while i <= self.config.options.num_iters:
             fname: str
             spk_id_org: str
@@ -58,57 +64,25 @@ class Train(Experiment):
             #                   1. Load input data                            #
             # =============================================================== #
             # Load data
-            try:
-                (
-                    fname,
-                    spk_id_org,
-                    spmel_gt,
-                    rhythm_input,
-                    content_input,
-                    pitch_input,
-                    timbre_input,
-                    len_crop,
-                ) = next(self.data_iter)
-
-            except StopIteration:
-                self.data_iter = iter(self.data_loader)
-                (
-                    fname,
-                    spk_id_org,
-                    spmel_gt,
-                    rhythm_input,
-                    content_input,
-                    pitch_input,
-                    timbre_input,
-                    len_crop,
-                ) = next(self.data_iter)
-
-            except AssertionError as e:
-                raise NanError(e)
+            (
+                fname,
+                spk_id_org,
+                spmel_gt,
+                rhythm_input,
+                content_input,
+                pitch_input,
+                timbre_input,
+                len_crop,
+            ) = self.get_next_data()
 
             # =============================================================== #
             #                   2. Train the model                            #
             # =============================================================== #
-            # Move data to GPU if available
-            spmel_gt = spmel_gt.to(self.compute.device())
-            rhythm_input = rhythm_input.to(self.compute.device())
-            content_input = content_input.to(self.compute.device())
-            pitch_input = pitch_input.to(self.compute.device())
-            timbre_input = timbre_input.to(self.compute.device())
-            len_crop = len_crop.to(self.compute.device())
-
             # Prepare input data and apply random resampling
-            content_pitch_input_intrp: torch.Tensor = self.intrp(
-                torch.cat((content_input, pitch_input), dim=-1), len_crop
-            )  # [B, T, F+1]
-            content_pitch_input = torch.cat(
-                (
-                    content_pitch_input_intrp[:, :, :-1],
-                    quantize_f0_torch(
-                        content_pitch_input_intrp[:, :, -1],
-                    ),
-                ),
-                dim=-1,
+            content_pitch_input = self.prepare_input(
+                content_input,
+                pitch_input,
+                len_crop,
             )
 
             # Identity mapping loss
@@ -146,7 +120,7 @@ class Train(Experiment):
             # =============================================================== #
             #                   3. Logging and saving checkpoints             #
             # =============================================================== #
-
+            pbar.update()
             # Save model checkpoints
             if i % self.config.options.ckpt_save_step == 0:
                 self.save_checkpoint(i)
@@ -184,7 +158,6 @@ class Train(Experiment):
                 found_nan |= self.logger.log_if_nan_ret(timbre_input)
                 found_nan |= self.logger.log_if_nan_ret(len_crop)
                 found_nan |= self.logger.log_if_nan_ret(content_pitch_input)
-                found_nan |= self.logger.log_if_nan_ret(spmel_output)
                 if self.config.options.return_latents:
                     found_nan |= self.logger.log_if_nan_ret(code_exp_1)
                     found_nan |= self.logger.log_if_nan_ret(code_exp_2)
@@ -197,3 +170,4 @@ class Train(Experiment):
                     self.logger.error(f"tensor: {spmel_gt.any()}")
                     self.writer.flush()
                     raise NanError(f"{fname}")
+        self.logger.manual_process_bar_end(pbar)

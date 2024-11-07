@@ -8,6 +8,9 @@ from util import Config, Logger, RunTests
 
 
 def main() -> None:
+    torch.backends.cudnn.benchmark = True
+    torch.multiprocessing.set_sharing_strategy("file_system")
+    torch.multiprocessing.set_start_method("spawn")
     parser = ArgumentParser()
     parser.add_argument("--config_name", type=str, default="base")
     parser.add_argument("--scratch", action="store_true")
@@ -20,9 +23,6 @@ def main() -> None:
         return
 
     try:
-        torch.backends.cudnn.benchmark = True
-        torch.multiprocessing.set_sharing_strategy("file_system")
-        torch.multiprocessing.set_start_method("spawn")
         preprocess_data(config)
 
         if doscratch:

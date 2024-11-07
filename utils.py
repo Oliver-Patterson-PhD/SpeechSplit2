@@ -9,8 +9,8 @@ from pysptk.sptk import rapt
 from transcribers.whisper.audio import log_mel_spectrogram
 from util import Logger
 
-N_FFT: int = 1024
-HOP_LENGTH: int = 256
+N_FFT: int = 400
+HOP_LENGTH: int = 160
 DIM_FREQ: int = 80
 FREQ_MIN: int = 90
 FREQ_MAX: int = 7600
@@ -113,7 +113,7 @@ def get_spmel(
     wav: torch.Tensor,
     whispercheck: bool = False,
 ) -> torch.Tensor:
-    if whispercheck:
+    if whispercheck and False:
         return torch.nn.functional.pad(
             log_mel_spectrogram(
                 audio=wav.float(),
@@ -124,7 +124,11 @@ def get_spmel(
             (0, 1),
         ).T
     else:
-        return torch_melbasis(torch_stft(wav.float())).T
+        mel_spec = torch_melbasis(torch_stft(wav.float()) ** 2).T
+        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
+        log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+        log_spec = (log_spec + 4.0) / 4.0
+        return torch.nn.functional.pad(log_spec, (0, 0, 0, 1))
 
 
 def get_spenv(
@@ -140,10 +144,13 @@ def get_spenv(
     expfft = torch.exp(torch.fft.rfft(mmul, axis=-1))
     maxval = torch.maximum(min_level, torch.abs(expfft))
     env = zero_one_norm((20 * torch.log10(maxval) - 16 + 100) / 100)
-    retval = torchaudio.functional.resample(
-        env,
-        orig_freq=env.size(dim=-1),
-        new_freq=DIM_FREQ,
+    retval = torch.nn.functional.pad(
+        torchaudio.functional.resample(
+            env,
+            orig_freq=env.size(dim=-1),
+            new_freq=DIM_FREQ,
+        ),
+        (0, 0, 0, 1),
     )
     if __debug__ and is_nan(retval):
         Logger().error("Tensors with Nans: ")

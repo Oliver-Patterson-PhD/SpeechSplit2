@@ -122,11 +122,23 @@ class Utterances(AudioDataset):
         if os.path.exists(meta_file):
             os.remove(meta_file)
         make_metadata(config, meta_file)
+        logger = Logger()
         metadata = torch.load(meta_file, weights_only=True)
-        Logger().info(f"Loading data: {config.options.dataset_name}")
-        tmp_dataset = [self.load_item(sbmt=sbmt, config=config) for sbmt in metadata]
-        Logger().debug(f"Refining data: {config.options.dataset_name}")
-        self.dataset = [item for item in tmp_dataset if item_works(item)]
+        tmp_dataset = [
+            self.load_item(sbmt=sbmt, config=config)
+            for sbmt in logger.progress_bar(
+                metadata,
+                desc=f"Loading {config.options.dataset_name}",
+            )
+        ]
+        self.dataset = [
+            item
+            for item in logger.progress_bar(
+                tmp_dataset,
+                desc=f"Refining {config.options.dataset_name}",
+            )
+            if item_works(item)
+        ]
         self.num_tokens = len(self.dataset)
 
     def load_item(
@@ -201,11 +213,11 @@ class FullAudios(AudioDataset):
                     spk_dir=spk_dir,
                 )
             )
-        from tqdm import tqdm
+        logger = Logger()
 
         self.dataset = [
             item
-            for item in tqdm(
+            for item in logger.progress_bar(
                 tmp_dataset,
                 desc=f"Refining {config.options.dataset_name}",
             )
@@ -219,8 +231,6 @@ class FullAudios(AudioDataset):
         dir_name: str,
         spk_dir: str,
     ) -> List[DataLoadItemType]:
-        from tqdm import tqdm
-
         from data_preprocessing import F_HI, F_LO, M_HI, M_LO
 
         _, _, file_list = next(os.walk(os.path.join(dir_name, spk_dir)))
@@ -236,6 +246,7 @@ class FullAudios(AudioDataset):
             dtype=torch.float32,
         )
         spk_emb[int(spk_id)] = 1.0
+        logger = Logger()
         return [
             self.load_item(
                 dir_name=dir_name,
@@ -246,7 +257,9 @@ class FullAudios(AudioDataset):
                 lo=lo,
                 hi=hi,
             )
-            for fname in tqdm(sorted(file_list), desc=f"Processing: {spk_dir:>4}")
+            for fname in logger.progress_bar(
+                sorted(file_list), desc=f"Processing: {spk_dir:>4}"
+            )
         ]
 
     def load_item(

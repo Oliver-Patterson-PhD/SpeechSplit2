@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from data_loader import get_loader
 from model import InterpLnr, SpeechSplit
-from util import Compute, Config, Logger
+from util import Compute, Config, Logger, LogLevel, NanError
 from utils import quantize_f0_torch, save_tensor
 
 
@@ -156,7 +156,7 @@ class Experiment(object):
         self.logger.info(
             "Elapsed [{}], Iteration [{}/{}], loss: {:.8f}".format(
                 str(datetime.timedelta(seconds=time.time() - self.start_time))[:-7],
-                step,
+                f"{step : >{len(str(self.config.options.num_iters))}}",
                 self.config.options.num_iters,
                 loss,
             ),
@@ -169,6 +169,7 @@ class Experiment(object):
 
     def load_data(self: Self, **kwargs) -> None:
         self.data_loader = get_loader(self.config, **kwargs)
+        self.data_iter = iter(self.data_loader)
 
     def save_tensor(self: Self, tensor: torch.Tensor, fname: str) -> None:
         save_tensor(
@@ -201,3 +202,102 @@ class Experiment(object):
             dim=-1,
         )
         return content_pitch_input_intrp_2
+
+    def get_next_data(self: Self):
+        try:
+            (
+                fname,
+                spk_id_org,
+                spmel_gt,
+                rhythm_input,
+                content_input,
+                pitch_input,
+                timbre_input,
+                len_crop,
+            ) = next(self.data_iter)
+        except StopIteration:
+            self.data_iter = iter(self.data_loader)
+            (
+                fname,
+                spk_id_org,
+                spmel_gt,
+                rhythm_input,
+                content_input,
+                pitch_input,
+                timbre_input,
+                len_crop,
+            ) = next(self.data_iter)
+        except AssertionError as e:
+            raise NanError(e)
+        finally:
+            # Move data to GPU if available
+            spmel_gt = spmel_gt.to(self.compute.device())
+            rhythm_input = rhythm_input.to(self.compute.device())
+            content_input = content_input.to(self.compute.device())
+            pitch_input = pitch_input.to(self.compute.device()).unsqueeze(-1)
+            timbre_input = timbre_input.to(self.compute.device())
+            len_crop = len_crop.to(self.compute.device())
+        return (
+            fname,
+            spk_id_org,
+            spmel_gt,
+            rhythm_input,
+            content_input,
+            pitch_input,
+            timbre_input,
+            len_crop,
+        )
+
+    @torch.no_grad()
+    def check_data(self: Self) -> None:
+        for item in self.logger.progress_bar(
+            self.data_loader,
+            desc=f"Verifying {self.config.options.dataset_name}",
+        ):
+            (
+                i_fname,
+                i_spk_id_org,
+                i_spmel_gt,
+                i_rhythm_input,
+                i_content_input,
+                i_pitch_input,
+                i_timbre_input,
+                i_len_crop,
+            ) = item
+            i_spmel_gt = i_spmel_gt.to(self.compute.device())
+            i_rhythm_input = i_rhythm_input.to(self.compute.device())
+            i_content_input = i_content_input.to(self.compute.device())
+            i_pitch_input = i_pitch_input.to(self.compute.device())
+            i_timbre_input = i_timbre_input.to(self.compute.device())
+            i_len_crop = i_len_crop.to(self.compute.device())
+
+            # Prepare input data and apply random resampling
+            try:
+                i_content_pitch_input = self.prepare_input(
+                    i_content_input,
+                    i_pitch_input,
+                    i_len_crop,
+                )
+            except Exception as e:
+                self.logger.trace_tensor(i_spmel_gt, LogLevel.ERROR)
+                self.logger.trace_tensor(i_rhythm_input, LogLevel.ERROR)
+                self.logger.trace_tensor(i_content_input, LogLevel.ERROR)
+                self.logger.trace_tensor(i_pitch_input, LogLevel.ERROR)
+                self.logger.trace_tensor(i_timbre_input, LogLevel.ERROR)
+                self.logger.trace_tensor(i_len_crop, LogLevel.ERROR)
+                self.logger.fatal(str(e))
+
+            found_nan = False
+            found_nan |= self.logger.log_if_nan_ret(i_spmel_gt)
+            found_nan |= self.logger.log_if_nan_ret(i_spmel_gt)
+            found_nan |= self.logger.log_if_nan_ret(i_rhythm_input)
+            found_nan |= self.logger.log_if_nan_ret(i_content_input)
+            found_nan |= self.logger.log_if_nan_ret(i_pitch_input)
+            found_nan |= self.logger.log_if_nan_ret(i_timbre_input)
+            found_nan |= self.logger.log_if_nan_ret(i_len_crop)
+            found_nan |= self.logger.log_if_nan_ret(i_content_pitch_input)
+            if found_nan:
+                self.logger.error("Step has NaN loss")
+                self.logger.error(f"filename: {i_fname}")
+                raise NanError(f"{i_fname}")
+        return

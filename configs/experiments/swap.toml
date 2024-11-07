@@ -1,4 +1,5 @@
 [options]
+experiment = "swap"
 run_tests = ["save_latents", "swap_latents", "save_audios"]
 dataset_name = "smolspeech"
 num_iters = 1

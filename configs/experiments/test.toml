@@ -1,4 +1,5 @@
 [options]
+experiment = "test"
 run_tests = ["test"]
 dataset_name = "vctk"
 num_iters = 1

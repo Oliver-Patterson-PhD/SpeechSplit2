@@ -1,4 +1,5 @@
 [options]
+experiment = "trainmod"
 run_tests = ["train"]
 dataset_name = "vctk"
 num_iters = 1600000

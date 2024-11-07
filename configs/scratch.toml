@@ -3,7 +3,7 @@ proc_data = "/mnt/datasets/processed/Whisper"
 raw_data = "/mnt/datasets/raw"
 
 [log]
-level = "DEBUG"
+level = "TRACE"
 file = true
 
 [options]

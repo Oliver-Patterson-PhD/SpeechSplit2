@@ -119,7 +119,7 @@ def make_spect_f0(
     dir_name, spk_dir_list, _ = next(os.walk(config.paths.raw_wavs))
     [
         make_sf_item(spk_dir, config, spk_meta, dir_name, SAMPLE_RATE)  # type: ignore [func-returns-value]
-        for spk_dir in sorted(spk_dir_list)
+        for spk_dir in Logger().progress_bar(sorted(spk_dir_list))
         if spk_dir in spk_meta
     ]
 
@@ -167,7 +167,7 @@ def make_sf_item(
 
     wavs: List[torch.Tensor] = []
     fnames: List[str] = []
-    for fname in sorted(file_list):
+    for fname in Logger().progress_bar(sorted(file_list), desc="Files Processed"):
         full_fname = os.path.join(dir_name, spk_dir, fname)
         wav = filter_wav(getraw(full_fname))
         if has_content(wav):
