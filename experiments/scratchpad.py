@@ -1,6 +1,6 @@
 import os
 from math import floor
-from typing import List, Optional, Self, Tuple
+from typing import Iterable, List, Optional, Self, Tuple
 
 import torch
 import torchaudio
@@ -28,14 +28,11 @@ class Scratchpad(Experiment):
             model_name=self.config.options.whisper_type,
             config=self.config,
         )
-        ckpt_name = "{2}-{1}/{0}/{0}-{1}-{2}-{3}.ckpt".format(
-            self.config.options.experiment,
-            self.config.options.bottleneck,
-            self.config.options.model_type,
-            self.config.options.resume_iters,
+        model_name = os.path.join(
+            "speechsplit2-large",
+            "trainmask-large-SpeechSplit2-2024-11-07.ckpt",
         )
-        model_name = os.path.join(self.config.paths.models, ckpt_name)
-        self.restore_model(model_name=model_name)
+        self.load_trained(model_name)
         self.logger.info("Full Process On")
         self.compute.set_gpu()
         from synthesizers import MelGan, ParallelWaveGan
@@ -65,6 +62,7 @@ class Scratchpad(Experiment):
         max_items: Optional[int] = 5,
     ) -> None:
         self.load_data(singleitem=True, full_process=True)
+        proc_data: Iterable
         if max_items is not None:
             proc_data = [
                 data_item
@@ -72,7 +70,7 @@ class Scratchpad(Experiment):
                 if number <= max_items
             ]
         else:
-            max_items = self.data_loader
+            proc_data = self.data_loader
         [
             (
                 save_tensor(
@@ -267,26 +265,42 @@ class Scratchpad(Experiment):
         item: torch.Tensor,
     ) -> torch.Tensor:
         pads: Tuple[int, ...]
-        if item.size(dim=-2) > self.config.model.max_len_pad:
+        opads: Tuple[int, ...]
+        item.squeeze_()
+        if item.ndim == 1:
+            dim = -1
             pad_i = (
-                ((item.size(-2) // self.fold_size) + 1) * self.fold_size
-                - item.size(-2)
+                ((item.size(dim) // self.fold_size) + 1) * self.fold_size
+                - item.size(dim)
+                + self.fold_pad_len
+            )
+            pads = (self.fold_pad_len, pad_i)
+            opads = (0, self.fold_size - item.size(dim))
+        elif item.ndim == 2:
+            dim = -2
+            pad_i = (
+                ((item.size(dim) // self.fold_size) + 1) * self.fold_size
+                - item.size(dim)
                 + self.fold_pad_len
             )
             pads = (0, 0, self.fold_pad_len, pad_i)
-            full_pad = torch.nn.functional.pad(item.squeeze(), pads)
+            opads = (0, 0, 0, self.fold_size - item.size(dim))
+        self.logger.trace_tensor(item)
+        if item.size(dim=dim) > self.config.model.max_len_pad:
+            full_pad = torch.nn.functional.pad(item, pads)
             ones_mat = torch.ones_like(full_pad)
-            self.logger.trace_tensor(full_pad)
             norm_mat = ones_mat.unfold(
-                dimension=-2, size=self.fold_size, step=self.fold_step
+                dimension=dim, size=self.fold_size, step=self.fold_step
             )
             retunf = full_pad.unfold(
-                dimension=-2, size=self.fold_size, step=self.fold_step
+                dimension=dim, size=self.fold_size, step=self.fold_step
             )
-            return (retunf / norm_mat).mT
+            retval = (retunf / norm_mat).mT
         else:
-            pads = (0, 0, 0, self.fold_size - item.size(-2))
-            return torch.nn.functional.pad(item, pads)
+            retval = torch.nn.functional.pad(item, opads)
+        if retval.ndim == item.ndim:
+            retval.unsqueeze_(0)
+        return retval
 
     @torch.no_grad()
     def unstack(
@@ -302,8 +316,10 @@ class Scratchpad(Experiment):
             kernel_size=(1, self.fold_size),
             stride=(1, self.fold_step),
         )
+        norm_mod = torch.ones_like(out_mod)
         out_gt = fold_fn(gt_mod).squeeze(1).squeeze(1).T
         out_out = fold_fn(out_mod).squeeze(1).squeeze(1).T
+        out_norm = fold_fn(norm_mod).squeeze(1).squeeze(1).T
         self.logger.trace_tensor(out_gt)
         self.logger.trace_tensor(out_out)
-        return out_gt, out_out
+        return (out_gt / out_norm), (out_out / out_norm)

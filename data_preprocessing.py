@@ -268,18 +268,21 @@ def make_metadata(
 def preprocess_data(
     config: Config,
 ):
-    speaker_list = getattr(
-        __import__("meta_dicts"),
-        config.options.dataset_name,
-    ).keys()
-    feat_dir = config.paths.features
-    procdata_exists = all(
-        [os.path.exists(f"{feat_dir}/freqs/{speaker}") for speaker in speaker_list]
-    )
-    if config.options.regenerate_data or not procdata_exists:
-        Logger().info("Generating Spectrograms and Frequency Contours")
-        make_spect_f0(config)
-    Logger().info("Preprocessing Complete")
+    from data.preprocess import PreProcess
+
+    PreProcess(config)
+    # speaker_list = getattr(
+    #     __import__("meta_dicts"),
+    #     config.options.dataset_name,
+    # ).keys()
+    # feat_dir = config.paths.features
+    # procdata_exists = all(
+    #     [os.path.exists(f"{feat_dir}/freqs/{speaker}") for speaker in speaker_list]
+    # )
+    # if config.options.regenerate_data or not procdata_exists:
+    #     Logger().info("Generating Spectrograms and Frequency Contours")
+    #     make_spect_f0(config)
+    # Logger().info("Preprocessing Complete")
 
 
 vad_transform = torchaudio.transforms.Vad(

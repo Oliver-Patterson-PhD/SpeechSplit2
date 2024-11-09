@@ -48,7 +48,6 @@ class CompareItem:
             device=compute.device(),
             model_name=self.__config.options.whisper_type,
             config=self.__config,
-            output_dir=tmpdir,
         )
         self.fname = fname
         self.loss_mse = torch.nn.functional.mse_loss(destin, source).item()
@@ -87,6 +86,8 @@ class CompareItem:
         self: Self,
         fname: str,
     ) -> str:
+        if fname[-2] == "_":
+            fname = fname[0:-3]
         if self.__config.options.dataset_name in ("uaspeech", "smolspeech"):
             uttr_code = self.fname.split("_")[1] + "_" + self.fname.split("_")[2]
             return clean_string(ua_uttrs[uttr_code])

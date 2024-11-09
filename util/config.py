@@ -45,18 +45,19 @@ class ConfigPaths:
 
 
 class ConfigAudioProcessing:
-    n_fft: int = 1024
-    vtlp_fft: int = 1024 * 2
-    hop_len: int = 256
-    freq_min: int = 90
+    chunk_length = 30
+    f0_f_hi: int = 600
+    f0_f_lo: int = 100
+    f0_m_hi: int = 250
+    f0_m_lo: int = 50
     freq_max: int = 7600
-    sample_rate: int = 16000
-    max_len_pad = 192
-    m_lo: int = 50
-    m_hi: int = 250
-    f_lo: int = 100
-    f_hi: int = 600
+    freq_min: int = 90
     hi_pass_cutoff: int = 30
+    hop_len: int = 160
+    max_len_pad = 192
+    n_fft: int = 400
+    sample_rate: int = 16000
+    vtlp_fft: int = 400 * 2
 
 
 class ConfigModel:
@@ -146,6 +147,7 @@ class Config(metaclass=Singleton):
     original_config: str
 
     __logging: ConfigLogging = ConfigLogging()
+    audio: ConfigAudioProcessing = ConfigAudioProcessing()
     paths: ConfigPaths = ConfigPaths()
     model: ConfigModel = ConfigModel()
     options: ConfigOptions = ConfigOptions()

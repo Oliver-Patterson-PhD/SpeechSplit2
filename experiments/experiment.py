@@ -86,6 +86,29 @@ class Experiment(object):
         self.logger.info(self.config.options.model_type, depth=2)
         self.logger.info("The number of parameters: {}".format(num_params), depth=2)
 
+    def load_trained(
+        self: Self,
+        model_name: str,
+    ) -> None:
+        model_path = os.path.join(self.config.paths.full_models, model_name)
+        self.logger.info(
+            f"Loading the trained model {model_path}",
+            depth=2,
+        )
+        ckpt = torch.load(
+            model_path,
+            map_location=lambda storage, loc: storage,
+            weights_only=True,
+        )
+        try:
+            self.model.load_state_dict(ckpt["model"])
+        except RuntimeError:
+            new_state_dict = OrderedDict()
+            for k, v in ckpt["model"].items():
+                new_state_dict[k[7:]] = v
+            self.model.load_state_dict(new_state_dict)
+        self.config.training.lr = self.optimizer.param_groups[0]["lr"]
+
     def restore_model(
         self: Self,
         resume_iters: int = 0,
@@ -97,12 +120,11 @@ class Experiment(object):
             f"Loading the trained models from step {resume_iters}...",
             depth=2,
         )
-        ckpt_name = "{2}-{1}/{0}/{0}-{1}-{2}-{3}-{4}.ckpt".format(
+        ckpt_name = "{2}-{1}/{0}/{0}-{1}-{2}-{3}.ckpt".format(
             self.config.options.experiment,
             self.config.options.bottleneck,
             self.config.options.model_type,
             resume_iters,
-            self.config.start_time,
         )
         save_dir = (
             self.config.paths.models
@@ -129,12 +151,11 @@ class Experiment(object):
             f"Saving model checkpoint into {self.config.paths.models}...",
             depth=2,
         )
-        ckpt_name = "{2}-{1}/{0}/{0}-{1}-{2}-{3}-{4}.ckpt".format(
+        ckpt_name = "{2}-{1}/{0}/{0}-{1}-{2}-{3}.ckpt".format(
             self.config.options.experiment,
             self.config.options.bottleneck,
             self.config.options.model_type,
             save_iters,
-            self.config.start_time,
         )
         ckpt_file = os.path.join(self.config.paths.models, ckpt_name)
         os.makedirs(os.path.dirname(ckpt_file), exist_ok=True)
@@ -187,6 +208,8 @@ class Experiment(object):
         pitch_input: torch.Tensor,
         len_crop: torch.Tensor,
     ) -> torch.Tensor:
+        self.logger.trace_tensor(content_input)
+        self.logger.trace_tensor(pitch_input)
         content_pitch_input = torch.cat(
             (content_input, pitch_input), dim=-1
         )  # [B, T, F+1]
