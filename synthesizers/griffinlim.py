@@ -18,6 +18,7 @@ class GriffinLim(Synthesizer):
     sample_rate = 16000
     n_iter = 64
 
+    @torch.no_grad()
     def __init__(
         self: Self,
         device: torch.device,

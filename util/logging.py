@@ -10,7 +10,7 @@ from time import gmtime, strftime
 from typing import Any, List, Optional, Self, TextIO, overload
 
 from torch import Tensor
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 from .patterns import Singleton
 

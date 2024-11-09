@@ -1,6 +1,6 @@
 import os
 from math import floor
-from typing import List, Self, Tuple
+from typing import List, Optional, Self, Tuple
 
 import torch
 import torchaudio
@@ -46,9 +46,10 @@ class Scratchpad(Experiment):
             # Wavenet(self.compute.device(), config=self.config),
             # GriffinLim(self.compute.device(), config=self.config),
         ]
-        self.lossdir = os.path.join(self.experiment_dir, "losses")
-        self.wavsdir = os.path.join(self.experiment_dir, "wavs")
-        self.spmelsdir = os.path.join(self.experiment_dir, "spmels")
+        dname = self.config.options.dataset_name
+        self.lossdir = os.path.join(self.experiment_dir, dname, "losses")
+        self.wavsdir = os.path.join(self.experiment_dir, dname, "wavs")
+        self.spmelsdir = os.path.join(self.experiment_dir, dname, "spmels")
         os.makedirs(self.lossdir, exist_ok=True)
         os.makedirs(self.wavsdir, exist_ok=True)
         os.makedirs(self.spmelsdir, exist_ok=True)
@@ -61,41 +62,51 @@ class Scratchpad(Experiment):
     @torch.no_grad()
     def process(
         self: Self,
+        max_items: Optional[int] = 5,
     ) -> None:
         self.load_data(singleitem=True, full_process=True)
-        i = 0
-        for item in self.data_loader:
-            fname = item[0][0].split("/")[-1].split(".")[0]
-            save_tensor(item[2], f"{self.spmelsdir}/{fname}-orig.png")
-            self.logger.info(f"Processing: {fname}")
-            i += 1
-            self.save_item(
-                fname,
-                *self.unstack(
-                    [
-                        self.process_item(
-                            spmel_gt,
-                            rhythm_input,
-                            content_input,
-                            pitch_input,
-                            timbre_input,
-                            len_crop,
-                        )
-                        for (
-                            _,
-                            _,
-                            spmel_gt,
-                            rhythm_input,
-                            content_input,
-                            pitch_input,
-                            timbre_input,
-                            len_crop,
-                        ) in zip(*self.make_stack(item))
-                    ]
-                ),
+        if max_items is not None:
+            proc_data = [
+                data_item
+                for number, data_item in enumerate(self.data_loader)
+                if number <= max_items
+            ]
+        else:
+            max_items = self.data_loader
+        [
+            (
+                save_tensor(
+                    item[2],
+                    f"{self.spmelsdir}/{item[0][0].split("/")[-1].split(".")[0]}-orig.png",
+                ),  # type: ignore [func-returns-value]
+                self.save_item(
+                    item[0][0].split("/")[-1].split(".")[0],
+                    *self.unstack(
+                        [
+                            self.process_item(
+                                spmel_gt,
+                                rhythm_input,
+                                content_input,
+                                pitch_input,
+                                timbre_input,
+                                len_crop,
+                            )
+                            for (
+                                _,
+                                _,
+                                spmel_gt,
+                                rhythm_input,
+                                content_input,
+                                pitch_input,
+                                timbre_input,
+                                len_crop,
+                            ) in zip(*self.make_stack(item))
+                        ]
+                    ),
+                ),  # type: ignore [func-returns-value]
             )
-            if i > 5:
-                return
+            for item in self.logger.progress_bar(proc_data)
+        ]
 
     def save_item(
         self: Self,
@@ -103,6 +114,7 @@ class Scratchpad(Experiment):
         out_gt: torch.Tensor,
         out_out: torch.Tensor,
     ) -> None:
+        self.logger.trace(f"Processing: {fname}")
         open(os.path.join(self.lossdir, fname + ".txt"), "w").write(
             str(
                 CompareItem(
@@ -163,7 +175,7 @@ class Scratchpad(Experiment):
         spmel_gt = spmel_gt.to(self.compute.device()).unsqueeze(0)
         rhythm_input = rhythm_input.to(self.compute.device()).unsqueeze(0)
         content_input = content_input.to(self.compute.device()).unsqueeze(0)
-        pitch_input = pitch_input.to(self.compute.device()).unsqueeze(0)
+        pitch_input = pitch_input.to(self.compute.device()).unsqueeze(0).unsqueeze(-1)
         timbre_input = timbre_input.to(self.compute.device()).unsqueeze(0)
         len_crop = len_crop.to(self.compute.device())
         content_pitch_input = self.prepare_input(
