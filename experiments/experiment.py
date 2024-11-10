@@ -7,7 +7,7 @@ from typing import Optional, Self
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from data_loader import get_loader
+from data.loader import get_loader
 from model import InterpLnr, SpeechSplit
 from util import Compute, Config, Logger, LogLevel, NanError
 from utils import quantize_f0_torch, save_tensor

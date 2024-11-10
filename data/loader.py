@@ -7,7 +7,7 @@ from util import Config, Logger
 from utils import get_spenv, get_spmel, is_nan, vtlp
 
 
-def __check(
+def check(
     x: torch.Tensor,
     msg: str,
 ) -> torch.Tensor:
@@ -28,8 +28,6 @@ def __worker_init_fn(x):
 
 
 class MyDataset(torch.utils.data.Dataset):
-    config: Config
-    logger: Logger
     dataset_name: str
     dataset: List[
         Tuple[
@@ -44,14 +42,23 @@ class MyDataset(torch.utils.data.Dataset):
         ]
     ]
     num_tokens: int
+    sample_rate: int
+    max_len_seq: int
+    path_freqs: str
+    path_monowavs: str
+    path_spmels: str
 
     def __init__(
         self: Self,
         config: Config,
     ) -> None:
-        self.config = config
-        self.logger = Logger()
+        logger = Logger()
         self.dataset_name = config.options.dataset_name
+        self.sample_rate = config.audio.sample_rate
+        self.max_len_seq = config.model.max_len_seq
+        self.path_freqs = config.paths.freqs
+        self.path_monowavs = config.paths.monowavs
+        self.path_spmels = config.paths.spmels
         spk_meta = getattr(
             __import__("meta_dicts"),
             config.options.dataset_name,
@@ -67,7 +74,7 @@ class MyDataset(torch.utils.data.Dataset):
                 self.load_from_meta(str(os.path.join(spk_dir, filepath))),
                 str(os.path.join(spk_dir, filepath)),
             )
-            for spk_dir in self.logger.progress_bar(
+            for spk_dir in logger.progress_bar(
                 sorted(spk_dir_list), desc="speakers loaded"
             )
             if spk_dir in spk_meta
@@ -81,7 +88,7 @@ class MyDataset(torch.utils.data.Dataset):
             )[-1]
         ]
         self.num_tokens = len(self.dataset)
-        self.logger.trace_var(self.dataset)
+        logger.trace_var(self.dataset)
         return
 
     def __len__(
@@ -95,25 +102,23 @@ class MyDataset(torch.utils.data.Dataset):
     ) -> Tuple[
         str,
         str,
-        torch.FloatTensor,
-        torch.FloatTensor,
-        torch.FloatTensor,
-        torch.FloatTensor,
-        torch.FloatTensor,
-        torch.DoubleTensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
     ]:
         spk_dir, spk_emb, (wav_mono, spmel, f0), fname = self.dataset[index]
         alpha: float = 0.2 * torch.rand(1).item() + 0.9
-        pert_mono: torch.FloatTensor = vtlp(
-            wav_mono, self.config.audio.sample_rate, alpha
-        )
-        len_crop = torch.tensor([self.config.model.max_len_seq], dtype=torch.double)
+        pert_mono: torch.Tensor = vtlp(wav_mono, self.sample_rate, alpha)
+        len_crop = torch.tensor([self.max_len_seq], dtype=torch.double)
         return (
             fname,  # Filename
             spk_dir,  # Speaker ID string
             spmel,  # Mel Spectrogram
-            __check(get_spenv(pert_mono), f"spenv invalid: {fname}"),  # Rhythm Input
-            __check(get_spmel(pert_mono), f"spmel invalid: {fname}"),  # Content Input
+            check(get_spenv(pert_mono), f"spenv invalid: {fname}"),  # Rhythm Input
+            check(get_spmel(pert_mono), f"spmel invalid: {fname}"),  # Content Input
             f0,  # Pitch Input
             spk_emb,  # Timbre Input
             len_crop,  # len_crop (required in padding)
@@ -122,30 +127,30 @@ class MyDataset(torch.utils.data.Dataset):
     def load_from_meta(
         self: Self,
         filepath: str,
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         wav_mono: torch.Tensor = torch.load(
-            os.path.join(self.config.paths.monowavs, filepath),
+            os.path.join(self.path_monowavs, filepath),
             weights_only=True,
         )
         spmel: torch.Tensor = torch.load(
-            os.path.join(self.config.paths.spmels, filepath),
+            os.path.join(self.path_spmels, filepath),
             weights_only=True,
         )
         f0: torch.Tensor = torch.load(
-            os.path.join(self.config.paths.freqs, filepath),
+            os.path.join(self.path_freqs, filepath),
             weights_only=True,
         )
         return (
-            __check(wav_mono.float(), f"wav invalid: {filepath}"),
-            __check(spmel.float(), f"spmel invalid: {filepath}"),
-            __check(f0.float(), f"f0 invalid: {filepath}"),
+            check(wav_mono.float(), f"wav invalid: {filepath}"),
+            check(spmel.float(), f"spmel invalid: {filepath}"),
+            check(f0.float(), f"f0 invalid: {filepath}"),
         )
 
 
 def get_loader(
     config: Config,
     sequential: bool = False,
-) -> torch.utils.data.Dataloader:
+) -> torch.utils.data.DataLoader:
     dataset: torch.utils.data.Dataset
     sampler: torch.utils.data.sampler.Sampler
     dataset = MyDataset(config)

@@ -1,6 +1,6 @@
 import os
 from math import floor
-from typing import List, Optional, Self, Tuple
+from typing import Self, Tuple
 
 import torch
 
@@ -42,39 +42,31 @@ class PreProcess:
         )
         procdata_exists = all(
             [
-                os.path.exists(f"{self.in_path}/freqs/{speaker}")
+                os.path.exists(f"{self.out_path}/freqs/{speaker}")
                 for speaker in self.spk_meta.keys()
             ]
         )
         if procdata_exists and not config.options.regenerate_data:
             self.logger.info("Preprocessing Skipped")
             return
-        _, spk_dir_list, _ = next(os.walk(config.paths.raw_wavs))
-        for spk_dir in self.logger.progress_bar(sorted(spk_dir_list), desc="Speakers"):
-            if spk_dir not in self.spk_meta:
-                continue
-            for fea_dir in ["freqs", "monowavs", "spmels"]:
-                os.makedirs(os.path.join(fea_dir, spk_dir), exist_ok=True)
-            _, _, file_list = next(os.walk(os.path.join(self.in_path, spk_dir)))
-
-            def map_wavs(fname: str) -> Optional[Tuple[torch.Tensor, str, str]]:
-                wav = filter_wav(getraw(os.path.join(self.in_path, spk_dir, fname)))
-                return (wav, fname, spk_dir) if has_content(wav) else None
-
-            wavs: List[Tuple[torch.Tensor, str, str]] = [
-                wav
-                for wav in map(
-                    map_wavs,
-                    self.logger.progress_bar(sorted(file_list), desc="wavs loaded"),
-                )
-                if wav is not None
-            ]
-            map(self.process_file, self.logger.progress_bar(wavs, desc="processed"))
-            Logger().debug(f"Generating features for speaker {spk_dir}")
+        spk_dir_list = next(os.walk(config.paths.raw_wavs))[1]
+        speakers = [spk for spk in spk_dir_list if spk in self.spk_meta]
+        self.logger.info(f"Found {len(speakers)} speakers")
+        [
+            self.process_file(spk_dir=spk_dir, fname=fname)
+            for spk_dir in sorted(speakers)
+            for fname in self.logger.progress_bar(
+                sorted(next(os.walk(os.path.join(self.in_path, spk_dir)))[-1]),
+                desc=f"items in {spk_dir}",
+            )
+        ]
         self.logger.info("Preprocessing Complete")
 
-    def process_file(self: Self, item: Tuple[torch.Tensor, str, str]) -> None:
-        wav, fname, spk_dir = item
+    def process_file(self: Self, spk_dir: str, fname: str) -> None:
+        wav = filter_wav(getraw(os.path.join(self.in_path, spk_dir, fname)))
+        if not has_content(wav):
+            self.logger.warn(f"No Content: {fname}")
+            return
         lo, hi = self.get_f0_lohi(spk_dir)
         f0, sp, ap = get_world_params(wav, self.sample_rate)
 
@@ -94,7 +86,7 @@ class PreProcess:
             if (len(spmel) - 1) == len(f0_norm):
                 spmel = spmel[:-1]
             else:
-                Logger().fatal(
+                self.logger.fatal(
                     f"melspec and f0 lengths do not match for {fname}\n"
                     f"spmel: {len(spmel)}\n"
                     f"f0_norm: {len(f0_norm)}\n"
@@ -117,18 +109,11 @@ class PreProcess:
         os.makedirs(monowavs, exist_ok=True)
         os.makedirs(spmels, exist_ok=True)
         os.makedirs(freqs, exist_ok=True)
-        self.logger.trace_tensor(wav_mono_split)
-        self.logger.trace_tensor(spmel_split)
-        self.logger.trace_tensor(f0_split)
         for idx, (wav_mo_i, spmel_i, f0_i) in enumerate(
             zip(wav_mono_split, spmel_split, f0_split)
         ):
             filename = f"{os.path.splitext(fname)[0]}_{idx}.pt"
-            good: bool = True
-            good &= has_content(wav_mo_i)
-            good &= has_content(spmel_i)
-            good &= has_content(f0_i)
-            if good:
+            if has_content(wav_mo_i) and has_content(spmel_i) and has_content(f0_i):
                 torch.save(wav_mo_i, os.path.join(monowavs, filename))
                 torch.save(spmel_i, os.path.join(spmels, filename))
                 torch.save(f0_i, os.path.join(freqs, filename))
