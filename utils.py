@@ -128,7 +128,7 @@ def get_spmel(
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
-        return torch.nn.functional.pad(log_spec, (0, 0, 0, 1))
+        return torch.nn.functional.pad(log_spec, (0, 0, 0, 1)).to(dtype=wav.dtype)
 
 
 def get_spenv(
@@ -159,7 +159,7 @@ def get_spenv(
         Logger().trace_nans(maxval)
         Logger().trace_nans(env)
         Logger().trace_nans(retval)
-    return retval
+    return retval.to(dtype=wav.dtype)
 
 
 def extract_f0(

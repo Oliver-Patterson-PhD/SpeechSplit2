@@ -5,8 +5,7 @@ import torch
 
 from data_preprocessing import filter_wav, getraw, has_content, make_metadata
 from meta_dicts import MetaDictType
-from util.config import Config
-from util.logging import Logger
+from util import Config, Logger
 from utils import clip, get_spenv, get_spmel, is_nan, vtlp
 
 DataLoadItemType = Tuple[
@@ -309,7 +308,7 @@ class Collator(object):
         (
             fname,  # Filename
             dysarthric,  # Single char string Dysarthric
-            perturbeCustomizabled_wav_mono,  # Monotonic waveform with VTLP
+            perturbed_wav_mono,  # Monotonic waveform with VTLP
             spk_id_org,  # speaker ID string
             melspec,  # MelSpectrogram
             rhythm_input,  # spenv
