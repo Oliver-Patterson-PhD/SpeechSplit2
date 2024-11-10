@@ -7,26 +7,6 @@ from util import Config, Logger
 from utils import get_spenv, get_spmel, is_nan, vtlp
 
 
-def check(
-    x: torch.Tensor,
-    msg: str,
-) -> torch.Tensor:
-    assert (
-        (x.size(dim=-1) > 1)
-        and (x.max().item() > 1e-03)
-        and (x != 0).any()
-        and not is_nan(x)
-        and (x != 0.0).any()
-    ), msg
-    return x
-
-
-def __worker_init_fn(x):
-    return torch.random.manual_seed(
-        (torch.initial_seed()) % (2**32),
-    )
-
-
 class MyDataset(torch.utils.data.Dataset):
     dataset_name: str
     dataset: List[
@@ -59,10 +39,7 @@ class MyDataset(torch.utils.data.Dataset):
         self.path_freqs = config.paths.freqs
         self.path_monowavs = config.paths.monowavs
         self.path_spmels = config.paths.spmels
-        spk_meta = getattr(
-            __import__("meta_dicts"),
-            config.options.dataset_name,
-        )
+        spk_meta = getattr(__import__("meta_dicts"), config.options.dataset_name)
         _, spk_dir_list, _ = next(os.walk(config.paths.monowavs))
         self.dataset = [
             (
@@ -85,15 +62,13 @@ class MyDataset(torch.utils.data.Dataset):
                         spk_dir,
                     )
                 )
-            )[-1]
+            )[2]
         ]
         self.num_tokens = len(self.dataset)
         logger.trace_var(self.dataset)
         return
 
-    def __len__(
-        self: Self,
-    ) -> int:
+    def __len__(self: Self) -> int:
         return self.num_tokens
 
     def __getitem__(
@@ -111,14 +86,16 @@ class MyDataset(torch.utils.data.Dataset):
     ]:
         spk_dir, spk_emb, (wav_mono, spmel, f0), fname = self.dataset[index]
         alpha: float = 0.2 * torch.rand(1).item() + 0.9
-        pert_mono: torch.Tensor = vtlp(wav_mono, self.sample_rate, alpha)
+        p_mono: torch.Tensor = vtlp(wav_mono, self.sample_rate, alpha)
         len_crop = torch.tensor([self.max_len_seq], dtype=torch.double)
+        spenv = self.check(get_spenv(p_mono), f"spenv invalid: {fname}")
+        spmel = self.check(get_spmel(p_mono), f"spmel invalid: {fname}")
         return (
             fname,  # Filename
             spk_dir,  # Speaker ID string
             spmel,  # Mel Spectrogram
-            check(get_spenv(pert_mono), f"spenv invalid: {fname}"),  # Rhythm Input
-            check(get_spmel(pert_mono), f"spmel invalid: {fname}"),  # Content Input
+            spenv,  # Rhythm Input
+            spmel,  # Content Input
             f0,  # Pitch Input
             spk_emb,  # Timbre Input
             len_crop,  # len_crop (required in padding)
@@ -140,28 +117,46 @@ class MyDataset(torch.utils.data.Dataset):
             os.path.join(self.path_freqs, filepath),
             weights_only=True,
         )
-        return (
-            check(wav_mono.float(), f"wav invalid: {filepath}"),
-            check(spmel.float(), f"spmel invalid: {filepath}"),
-            check(f0.float(), f"f0 invalid: {filepath}"),
-        )
+        o_wav_mono = self.check(wav_mono.float(), f"wav invalid: {filepath}")
+        o_spmel = self.check(spmel.float(), f"spmel invalid: {filepath}")
+        o_f0 = self.check(f0.float(), f"f0 invalid: {filepath}")
+        return (o_wav_mono, o_spmel, o_f0)
+
+    def check(
+        self: Self,
+        x: torch.Tensor,
+        msg: str,
+    ) -> torch.Tensor:
+        assert (
+            (x.size(dim=-1) > 1)
+            and (x.max().item() > 1e-03)
+            and (x != 0).any()
+            and not is_nan(x)
+            and (x != 0.0).any()
+        ), msg
+        return x
+
+
+def worker_init_fn(x):
+    return torch.random.manual_seed(
+        (torch.initial_seed()) % (2**32),
+    )
 
 
 def get_loader(
     config: Config,
     sequential: bool = False,
 ) -> torch.utils.data.DataLoader:
+    logger = Logger()
     dataset: torch.utils.data.Dataset
     sampler: torch.utils.data.sampler.Sampler
     dataset = MyDataset(config)
     if sequential:
         sampler = torch.utils.data.SequentialSampler(dataset)
     else:
-        sampler = torch.utils.data.RandomSampler(
-            data_source=dataset,
-            replacement=config.dataloader.shuffle,
-            num_samples=config.dataloader.samplier,
-        )
+        sampler = torch.utils.data.RandomSampler(dataset)
+
+    logger.debug("Initialising DataLoader")
     data_loader = torch.utils.data.DataLoader(
         dataset=dataset,
         batch_size=1 if sequential else config.dataloader.batch_size,
@@ -170,6 +165,7 @@ def get_loader(
         prefetch_factor=None if sequential else config.dataloader.num_workers,
         drop_last=False,
         pin_memory=True,
-        worker_init_fn=__worker_init_fn,
+        worker_init_fn=worker_init_fn,
     )
+    logger.debug("Created DataLoader")
     return data_loader

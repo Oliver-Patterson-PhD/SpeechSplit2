@@ -227,6 +227,14 @@ class Experiment(object):
         return content_pitch_input_intrp_2
 
     def get_next_data(self: Self):
+        fname: str
+        spk_id_org: str
+        spmel_gt: torch.Tensor
+        rhythm_input: torch.Tensor
+        content_input: torch.Tensor
+        pitch_input: torch.Tensor
+        timbre_input: torch.Tensor
+        len_crop: torch.Tensor
         try:
             (
                 fname,

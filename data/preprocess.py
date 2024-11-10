@@ -117,7 +117,6 @@ class PreProcess:
                 torch.save(wav_mo_i, os.path.join(monowavs, filename))
                 torch.save(spmel_i, os.path.join(spmels, filename))
                 torch.save(f0_i, os.path.join(freqs, filename))
-            return
 
     def get_f0_lohi(self: Self, spk_dir: str) -> Tuple[int, int]:
         if self.spk_meta[spk_dir].sex == "M":
@@ -157,14 +156,14 @@ class PreProcess:
             opads = (0, 0, 0, fold_size - item.size(dim))
         else:
             raise ValueError
-        if item.size(dim=dim) > self.max_len_pad:
+        if item.size(dim=dim) > fold_size:
             full_pad = torch.nn.functional.pad(item, pads)
             ones_mat = torch.ones_like(full_pad)
             norm_mat = ones_mat.unfold(dimension=dim, size=fold_size, step=fold_step)
             retunf = full_pad.unfold(dimension=dim, size=fold_size, step=fold_step)
             retval = (retunf / norm_mat).mT
+            if dim == -1:
+                retval.transpose_(0, 1)
         else:
-            retval = torch.nn.functional.pad(item, opads)
-        if retval.ndim == item.ndim:
-            retval.unsqueeze_(0)
+            retval = torch.nn.functional.pad(item, opads).unsqueeze(0)
         return retval
