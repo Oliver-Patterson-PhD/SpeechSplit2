@@ -141,8 +141,8 @@ class Train(Experiment):
                 self.log_training_step(
                     step=i,
                     loss=train_loss_id,
-                    orig=spmel_gt,
-                    proc=spmel_output,
+                    # orig=spmel_gt,
+                    # proc=spmel_output,
                 )
 
             if __debug__:

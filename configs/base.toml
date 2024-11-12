@@ -1,5 +1,5 @@
 [paths]
-proc_data = "/mnt/datasets/processed/SpeechSplit2"
+proc_data = "/mnt/datasets/processed/NewProc"
 raw_data = "/mnt/datasets/raw"
 
 [options]

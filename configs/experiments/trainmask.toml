@@ -2,8 +2,9 @@
 experiment = "trainmask"
 run_tests = ["train"]
 dataset_name = "vctk"
-num_iters = 1600000
-log_step = 1000
+num_iters = 6400000
+resume_iters = 2800000
+log_step = 10000
 ckpt_save_step = 10000
 train = true
 return_latents = false
@@ -11,9 +12,9 @@ regenerate_data = false
 
 [dataloader]
 shuffle = true
-batch_size = 32
-num_workers = 24
-samplier = 32
+batch_size = 64
+num_workers = 20
+samplier = 64
 drop_and_pad = false
 
 [training]

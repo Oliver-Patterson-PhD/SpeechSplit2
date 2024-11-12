@@ -154,7 +154,13 @@ def get_loader(
     if sequential:
         sampler = torch.utils.data.SequentialSampler(dataset)
     else:
-        sampler = torch.utils.data.RandomSampler(dataset)
+        sampler = torch.utils.data.RandomSampler(
+            data_source=dataset,
+            replacement=True,
+            num_samples=config.dataloader.batch_size
+            * len(dataset)
+            * config.dataloader.samplier,
+        )
 
     logger.debug("Initialising DataLoader")
     data_loader = torch.utils.data.DataLoader(
