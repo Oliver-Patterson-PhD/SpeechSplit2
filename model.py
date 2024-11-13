@@ -1,8 +1,6 @@
 from typing import Optional, Self, Tuple
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 from util import Config
 
@@ -65,7 +63,7 @@ class ConvNorm(torch.nn.Module):
         return conv_signal
 
 
-class EncoderRhythm(nn.Module):
+class EncoderRhythm(torch.nn.Module):
     def __init__(
         self: Self,
         config: Config,
@@ -80,7 +78,7 @@ class EncoderRhythm(nn.Module):
         self.freq_2 = config.model.freq_2
         convolutions = []
         for i in range(1):
-            conv_layer = nn.Sequential(
+            conv_layer = torch.nn.Sequential(
                 ConvNorm(
                     self.dim_rhy if i == 0 else self.dim_enc_2,
                     self.dim_enc_2,
@@ -90,11 +88,11 @@ class EncoderRhythm(nn.Module):
                     dilation=1,
                     w_init_gain="relu",
                 ),
-                nn.GroupNorm(self.dim_enc_2 // self.chs_grp, self.dim_enc_2),
+                torch.nn.GroupNorm(self.dim_enc_2 // self.chs_grp, self.dim_enc_2),
             )
             convolutions.append(conv_layer)
-        self.convolutions = nn.ModuleList(convolutions)
-        self.lstm = nn.LSTM(
+        self.convolutions = torch.nn.ModuleList(convolutions)
+        self.lstm = torch.nn.LSTM(
             self.dim_enc_2, self.dim_neck_2, 1, batch_first=True, bidirectional=True
         )
 
@@ -104,7 +102,7 @@ class EncoderRhythm(nn.Module):
         mask: torch.Tensor,
     ) -> torch.Tensor:
         for conv in self.convolutions:
-            x = F.relu(conv(x))
+            x = torch.nn.functional.relu(conv(x))
         x = x.transpose(-2, -1)
         self.lstm.flatten_parameters()
         outputs, _ = self.lstm(x)
@@ -122,7 +120,7 @@ class EncoderRhythm(nn.Module):
         return codes
 
 
-class EncoderF0(nn.Module):
+class EncoderF0(torch.nn.Module):
     def __init__(
         self: Self,
         config: Config,
@@ -137,7 +135,7 @@ class EncoderF0(nn.Module):
         self.register_buffer("len_org", torch.tensor(config.model.max_len_pad))
         convolutions = []
         for i in range(3):
-            conv_layer = nn.Sequential(
+            conv_layer = torch.nn.Sequential(
                 ConvNorm(
                     self.dim_pit if i == 0 else self.dim_enc_3,
                     self.dim_enc_3,
@@ -147,11 +145,11 @@ class EncoderF0(nn.Module):
                     dilation=1,
                     w_init_gain="relu",
                 ),
-                nn.GroupNorm(self.dim_enc_3 // self.chs_grp, self.dim_enc_3),
+                torch.nn.GroupNorm(self.dim_enc_3 // self.chs_grp, self.dim_enc_3),
             )
             convolutions.append(conv_layer)
-        self.convolutions = nn.ModuleList(convolutions)
-        self.lstm = nn.LSTM(
+        self.convolutions = torch.nn.ModuleList(convolutions)
+        self.lstm = torch.nn.LSTM(
             self.dim_enc_3, self.dim_neck_3, 1, batch_first=True, bidirectional=True
         )
         self.interp = InterpLnr(config)
@@ -162,7 +160,7 @@ class EncoderF0(nn.Module):
         rr: bool = True,
     ) -> torch.Tensor:
         for conv in self.convolutions:
-            x = F.relu(conv(x))
+            x = torch.nn.functional.relu(conv(x))
             x = x.transpose(-2, -1)
             if rr:
                 x = self.interp(x, self.len_org.expand(x.size(0)))
@@ -182,7 +180,7 @@ class EncoderF0(nn.Module):
         return codes
 
 
-class EncoderSync(nn.Module):
+class EncoderSync(torch.nn.Module):
     def __init__(
         self: Self,
         config: Config,
@@ -202,7 +200,7 @@ class EncoderSync(nn.Module):
         # convolutions for code 1
         convolutions = []
         for i in range(3):
-            conv_layer = nn.Sequential(
+            conv_layer = torch.nn.Sequential(
                 ConvNorm(
                     self.dim_con if i == 0 else self.dim_enc,
                     self.dim_enc,
@@ -212,17 +210,17 @@ class EncoderSync(nn.Module):
                     dilation=1,
                     w_init_gain="relu",
                 ),
-                nn.GroupNorm(self.dim_enc // self.chs_grp, self.dim_enc),
+                torch.nn.GroupNorm(self.dim_enc // self.chs_grp, self.dim_enc),
             )
             convolutions.append(conv_layer)
-        self.convolutions_1 = nn.ModuleList(convolutions)
-        self.lstm_1 = nn.LSTM(
+        self.convolutions_1 = torch.nn.ModuleList(convolutions)
+        self.lstm_1 = torch.nn.LSTM(
             self.dim_enc, self.dim_neck, 2, batch_first=True, bidirectional=True
         )
         # convolutions for f0
         convolutions = []
         for i in range(3):
-            conv_layer = nn.Sequential(
+            conv_layer = torch.nn.Sequential(
                 ConvNorm(
                     self.dim_pit if i == 0 else self.dim_enc_3,
                     self.dim_enc_3,
@@ -232,11 +230,11 @@ class EncoderSync(nn.Module):
                     dilation=1,
                     w_init_gain="relu",
                 ),
-                nn.GroupNorm(self.dim_enc_3 // self.chs_grp, self.dim_enc_3),
+                torch.nn.GroupNorm(self.dim_enc_3 // self.chs_grp, self.dim_enc_3),
             )
             convolutions.append(conv_layer)
-        self.convolutions_2 = nn.ModuleList(convolutions)
-        self.lstm_2 = nn.LSTM(
+        self.convolutions_2 = torch.nn.ModuleList(convolutions)
+        self.lstm_2 = torch.nn.LSTM(
             self.dim_enc_3, self.dim_neck_3, 1, batch_first=True, bidirectional=True
         )
         self.interp = InterpLnr(config)
@@ -249,8 +247,8 @@ class EncoderSync(nn.Module):
         x = x_f0[:, : self.dim_con, :]
         f0 = x_f0[:, self.dim_con :, :]
         for conv_1, conv_2 in zip(self.convolutions_1, self.convolutions_2):
-            x = F.relu(conv_1(x))
-            f0 = F.relu(conv_2(f0))
+            x = torch.nn.functional.relu(conv_1(x))
+            f0 = torch.nn.functional.relu(conv_2(f0))
             x_f0 = torch.cat((x, f0), dim=-2).transpose(-2, -1)
             if rr:
                 x_f0 = self.interp(x_f0, self.len_org.expand(x.size(0)))
@@ -286,7 +284,7 @@ class EncoderSync(nn.Module):
         return codes_x, codes_f0
 
 
-class SpeechSplitDecoder(nn.Module):
+class SpeechSplitDecoder(torch.nn.Module):
     def __init__(
         self: Self,
         config: Config,
@@ -297,7 +295,7 @@ class SpeechSplitDecoder(nn.Module):
         self.dim_neck = config.model.dim_neck_1
         self.dim_neck_2 = config.model.dim_neck_2
         self.dim_neck_3 = config.model.dim_neck_3
-        self.lstm = nn.LSTM(
+        self.lstm = torch.nn.LSTM(
             self.dim_neck * 2
             + self.dim_neck_2 * 2
             + self.dim_neck_3 * 2
@@ -319,7 +317,7 @@ class SpeechSplitDecoder(nn.Module):
         return decoder_output
 
 
-class DecoderF0(nn.Module):
+class DecoderF0(torch.nn.Module):
     def __init__(
         self: Self,
         config: Config,
@@ -328,7 +326,7 @@ class DecoderF0(nn.Module):
         self.dim_f0 = config.model.dim_f0
         self.dim_neck_2 = config.model.dim_neck_2
         self.dim_neck_3 = config.model.dim_neck_3
-        self.lstm = nn.LSTM(
+        self.lstm = torch.nn.LSTM(
             self.dim_neck_2 * 2 + self.dim_neck_3 * 2,
             256,
             2,
@@ -347,7 +345,7 @@ class DecoderF0(nn.Module):
         return decoder_output
 
 
-class SpeechSplit(nn.Module):
+class SpeechSplit(torch.nn.Module):
     def __init__(
         self: Self,
         config: Config,
@@ -436,7 +434,7 @@ class SpeechSplit(nn.Module):
         return mel_outputs
 
 
-class GeneratorF0(nn.Module):
+class GeneratorF0(torch.nn.Module):
     def __init__(
         self: Self,
         config: Config,
@@ -465,7 +463,7 @@ class GeneratorF0(nn.Module):
         return mel_outputs
 
 
-class InterpLnr(nn.Module):
+class InterpLnr(torch.nn.Module):
     def __init__(
         self: Self,
         config: Config,
@@ -520,7 +518,7 @@ class InterpLnr(nn.Module):
         idx_mask = idx_scaled_fl < (len_seg - 1)
         offset = len_seg.view(batch_size, -1).cumsum(dim=-1)
         # offset starts from the 2nd segment
-        offset = F.pad(offset[:, :-1], (1, 0), value=0).view(-1, 1)
+        offset = torch.nn.functional.pad(offset[:, :-1], (1, 0), value=0).view(-1, 1)
         idx_scaled_org = idx_scaled_fl + offset
         len_seq_rp = torch.repeat_interleave(len_seq, self.max_num_seg)
         idx_mask_org = idx_scaled_org < (len_seq_rp - 1).unsqueeze(-1)
@@ -540,7 +538,7 @@ class InterpLnr(nn.Module):
         return seq_padded
 
 
-class D_VECTOR(nn.Module):
+class D_VECTOR(torch.nn.Module):
     def __init__(
         self: Self,
         num_layers: int = 3,
@@ -549,13 +547,13 @@ class D_VECTOR(nn.Module):
         dim_emb: int = 64,
     ) -> None:
         super(D_VECTOR, self).__init__()
-        self.lstm = nn.LSTM(
+        self.lstm = torch.nn.LSTM(
             input_size=dim_input,
             hidden_size=dim_cell,
             num_layers=num_layers,
             batch_first=True,
         )
-        self.embedding = nn.Linear(dim_cell, dim_emb)
+        self.embedding = torch.nn.Linear(dim_cell, dim_emb)
 
     def forward(
         self: Self,
