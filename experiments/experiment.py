@@ -14,8 +14,8 @@ from utils import quantize_f0_torch, save_tensor
 
 
 class Experiment(object):
-    logger: Logger = Logger()
-    compute: Compute = Compute()
+    logger: Logger
+    compute: Compute
     config: Config
     intrp: InterpLnr
     model: SpeechSplit
@@ -27,6 +27,8 @@ class Experiment(object):
 
     def __init__(self: Self, config: Config, currtime: int = int(time.time())) -> None:
         self.config = config
+        self.logger = Logger()
+        self.compute = Compute()
         self.compute.print_compute()
         self.model = SpeechSplit(self.config)
         self.intrp = InterpLnr(self.config)
@@ -39,18 +41,20 @@ class Experiment(object):
             weight_decay=1e-6,
         )
         self.writer = SummaryWriter(
-            log_dir="{}/{}/{}/{}".format(
+            log_dir=os.path.join(
                 self.config.paths.tensorboard,
                 self.config.options.model_type,
                 self.config.options.experiment,
-                currtime,
+                str(currtime),
             )
         )
-        self.tb_prefix = (
-            self.config.options.experiment + "/" + self.config.options.model_type
+        self.tb_prefix = os.path.join(
+            self.config.options.experiment,
+            self.config.options.model_type,
         )
-        self.experiment_dir = (
-            self.config.paths.artefacts + "/" + self.config.options.experiment
+        self.experiment_dir = os.path.join(
+            self.config.paths.artefacts,
+            self.config.options.experiment,
         )
         os.makedirs(self.experiment_dir, exist_ok=True)
 
@@ -113,6 +117,7 @@ class Experiment(object):
         self: Self,
         resume_iters: int = 0,
         model_name: Optional[str] = None,
+        load_optim: bool = False,
     ) -> None:
         if resume_iters == 0:
             resume_iters = self.config.options.resume_iters
@@ -120,7 +125,11 @@ class Experiment(object):
             f"Loading the trained models from step {resume_iters}...",
             depth=2,
         )
-        ckpt_name = "{2}-{1}/{0}/{0}-{1}-{2}-{3}.ckpt".format(
+        name_dir = "{}-{}".format(
+            self.config.options.model_type,
+            self.config.options.bottleneck,
+        )
+        name_file = "{}-{}-{}-{}.ckpt".format(
             self.config.options.experiment,
             self.config.options.bottleneck,
             self.config.options.model_type,
@@ -131,13 +140,24 @@ class Experiment(object):
             if resume_iters != 0
             else self.config.paths.full_models
         )
+        ckpt_file = os.path.join(
+            save_dir,
+            name_dir,
+            self.config.options.experiment,
+            name_file,
+        )
         ckpt = torch.load(
-            os.path.join(save_dir, ckpt_name) if model_name is None else model_name,
+            ckpt_file if model_name is None else model_name,
             map_location=lambda storage, loc: storage,
             weights_only=True,
         )
         try:
             self.model.load_state_dict(ckpt["model"])
+            if load_optim:
+                if "optimizer" in ckpt and ckpt["optimizer"] is not None:
+                    self.optimizer.load_state_dict(ckpt["optimizer"])
+                else:
+                    self.logger.error("Failed to load optimizer", depth=2)
         except RuntimeError:
             new_state_dict = OrderedDict()
             for k, v in ckpt["model"].items():
@@ -145,7 +165,11 @@ class Experiment(object):
             self.model.load_state_dict(new_state_dict)
         self.config.training.lr = self.optimizer.param_groups[0]["lr"]
 
-    def save_checkpoint(self: Self, save_iters: int) -> None:
+    def save_checkpoint(
+        self: Self,
+        current_iter: int,
+        save_optim: bool = True,
+    ) -> None:
         os.makedirs(self.config.paths.models, exist_ok=True)
         self.logger.info(
             f"Saving model checkpoint into {self.config.paths.models}...",
@@ -155,14 +179,14 @@ class Experiment(object):
             self.config.options.experiment,
             self.config.options.bottleneck,
             self.config.options.model_type,
-            save_iters,
+            current_iter,
         )
         ckpt_file = os.path.join(self.config.paths.models, ckpt_name)
         os.makedirs(os.path.dirname(ckpt_file), exist_ok=True)
         torch.save(
             {
                 "model": self.model.state_dict(),
-                "optimizer": self.optimizer.state_dict(),
+                "optimizer": self.optimizer.state_dict() if save_optim else None,
             },
             ckpt_file,
         )
@@ -208,8 +232,6 @@ class Experiment(object):
         pitch_input: torch.Tensor,
         len_crop: torch.Tensor,
     ) -> torch.Tensor:
-        self.logger.trace_tensor(content_input)
-        self.logger.trace_tensor(pitch_input)
         content_pitch_input = torch.cat(
             (content_input, pitch_input), dim=-1
         )  # [B, T, F+1]
@@ -301,7 +323,6 @@ class Experiment(object):
             i_pitch_input = i_pitch_input.to(self.compute.device())
             i_timbre_input = i_timbre_input.to(self.compute.device())
             i_len_crop = i_len_crop.to(self.compute.device())
-
             # Prepare input data and apply random resampling
             try:
                 i_content_pitch_input = self.prepare_input(
@@ -317,7 +338,6 @@ class Experiment(object):
                 self.logger.trace_tensor(i_timbre_input, LogLevel.ERROR)
                 self.logger.trace_tensor(i_len_crop, LogLevel.ERROR)
                 self.logger.fatal(str(e))
-
             found_nan = False
             found_nan |= self.logger.log_if_nan_ret(i_spmel_gt)
             found_nan |= self.logger.log_if_nan_ret(i_spmel_gt)

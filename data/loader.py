@@ -65,7 +65,6 @@ class MyDataset(torch.utils.data.Dataset):
             )[2]
         ]
         self.num_tokens = len(self.dataset)
-        logger.trace_var(self.dataset)
         return
 
     def __len__(self: Self) -> int:
