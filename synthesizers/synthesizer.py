@@ -38,6 +38,7 @@ class Synthesizer(object):
         self.model = model(**model_params)
         self.model.load_state_dict(state_dict["model"]["generator"])
         self.model = self.model.to(self.device)
+        self.model.eval()
 
     @torch.no_grad()
     def spect2wav(

@@ -7,6 +7,9 @@ from .util import LRELU_SLOPE, HiFiConfig, init_weights
 
 
 class Generator(torch.nn.Module):
+    num_kernels: int
+    num_upsamples: int
+
     def __init__(
         self: Self,
         hifi_config: HiFiConfig,
@@ -67,7 +70,6 @@ class Generator(torch.nn.Module):
                     xs = self.resblocks[i * self.num_kernels + j](x)
                 else:
                     xs += self.resblocks[i * self.num_kernels + j](x)
-            assert isinstance(xs, int)
             x = xs / self.num_kernels
         x = torch.nn.functional.leaky_relu(x)
         x = self.conv_post(x)

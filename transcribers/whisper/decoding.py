@@ -734,7 +734,7 @@ class DecodingTask:
 def decode(
     model: "Whisper",
     mel: torch.Tensor,
-    options: DecodingOptions = DecodingOptions(),
+    options: DecodingOptions = DecodingOptions(best_of=5, beam_size=5),
     **kwargs,
 ) -> Union[DecodingResult, List[DecodingResult]]:
     if single := mel.ndim == 2:

@@ -1,6 +1,7 @@
-##
-# @package util
-#
+__all__ = [
+    "Config",
+    "RunTests",
+]
 
 from datetime import datetime
 from enum import Flag, auto
@@ -20,6 +21,7 @@ class ConfigPaths:
     freqs: str
     spmels: str
     monowavs: str
+    fullwavs: str
 
     full_models: str
     models: str
@@ -182,16 +184,17 @@ class Config(metaclass=Singleton):
         config_str = "configs/{}.toml"
         config_file = config_str.format(config_name)
         if not path.exists(config_file):
-            Logger().fatal(f"Could not find file: {config_file}")
+            err_str = f"Could not find file: {config_file}"
+            Logger().fatal(err_str)
+            raise FileNotFoundError(err_str)
         tomldict = loadtoml(open(config_file, "rb"))
         if (
             "experiment" not in tomldict["options"].keys()
             and "bottleneck" not in tomldict["options"].keys()
         ):
-            Logger().fatal(
-                "Could not find options.experiment and "
-                + "options.bottleneck in config file"
-            )
+            err_str = "Could not find options.experiment and options.bottleneck in config file"
+            Logger().fatal(err_str)
+            raise RuntimeError(err_str)
         elif config_name == "scratch":
             model_name = "models/" + tomldict["options"]["bottleneck"]
             model_dict = loadtoml(open(config_str.format(model_name), "rb"))
@@ -253,9 +256,11 @@ class Config(metaclass=Singleton):
                         self.__logging.file = "SET_ME"
             case "paths":
                 if not subdict.keys() >= {"raw_data", "proc_data"}:
-                    Logger().fatal(
+                    err_str = (
                         "Could not find paths.proc_data and paths.raw_data in config"
                     )
+                    Logger().fatal(err_str)
+                    raise RuntimeError(err_str)
                 self.paths.__dict__.update(subdict)
             case "model":
                 self.model.__dict__.update(subdict)
@@ -265,7 +270,9 @@ class Config(metaclass=Singleton):
                 self.training.__dict__.update(subdict)
             case "options":
                 if not subdict.keys() >= {"dataset_name"}:
-                    Logger().fatal("Could not find options.dataset_name in config")
+                    err_str = "Could not find options.dataset_name in config"
+                    Logger().fatal(err_str)
+                    raise RuntimeError(err_str)
                 if "run_tests" in subdict.keys():
                     subdict["run_tests"] = self.__set_runtypes(subdict["run_tests"])
                 self.options.__dict__.update(subdict)
@@ -285,11 +292,12 @@ class Config(metaclass=Singleton):
             try:
                 runtype |= RunTests[runtype_str]
             except Exception as e:
-                Logger().fatal(
+                err_str = (
                     f"Invalid options.run_tests value in config: {runtype_str}\n"
-                    f"Options: {[str(test) for test in RunTests]}\n"
-                    f"Exception: {e}"
+                    f"Options: {[str(test) for test in RunTests]}"
                 )
+                Logger().fatal(err_str)
+                raise Exception(err_str) from e
         return runtype
 
     def __fill_nulls(
@@ -324,6 +332,8 @@ class Config(metaclass=Singleton):
             self.paths.spmels = f"{self.paths.features}/spmels"
         if not hasattr(self.paths, "monowavs"):
             self.paths.monowavs = f"{self.paths.features}/monowavs"
+        if not hasattr(self.paths, "fullwavs"):
+            self.paths.fullwavs = f"{self.paths.features}/fullwavs"
 
     def __set_dataset_paths(
         self: Self,
@@ -376,10 +386,10 @@ class Config(metaclass=Singleton):
             data_dir = self.paths.raw_smolvctk
             feat_dir = self.paths.dataset_smolvctk
         else:
-            Logger().fatal(
-                "Invalid options.dataset_name in config: {}".format(
-                    self.options.dataset_name
-                )
+            err_str = (
+                f"Invalid options.dataset_name in config: {self.options.dataset_name}"
             )
+            Logger().fatal(err_str)
+            raise RuntimeError(err_str)
         self.paths.features = feat_dir
         self.paths.raw_wavs = data_dir

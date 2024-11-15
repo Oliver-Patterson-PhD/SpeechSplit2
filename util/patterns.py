@@ -1,3 +1,8 @@
+__all__ = [
+    "Singleton",
+]
+
+
 class Singleton(type):
     _instances: dict = {}
 

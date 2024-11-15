@@ -6,8 +6,6 @@ from typing import List, Union
 import torch
 from tqdm import tqdm
 
-from util import Logger
-
 from .model import ModelDimensions, Whisper
 
 _MODELS = {
@@ -55,7 +53,7 @@ def _download(url: str, root: str) -> str:
     download_target = os.path.join(root, os.path.basename(url))
 
     if os.path.exists(download_target) and not os.path.isfile(download_target):
-        Logger().fatal(f"{download_target} exists and is not a regular file")
+        raise Exception(f"{download_target} exists and is not a regular file")
 
     if os.path.isfile(download_target):
         with open(download_target, "rb") as f:
@@ -63,7 +61,7 @@ def _download(url: str, root: str) -> str:
         if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
             return download_target
         else:
-            Logger().fatal(
+            raise Exception(
                 f"{download_target} exists, but the SHA256 checksum does not match, re-downloading the file"
             )
 
@@ -84,7 +82,7 @@ def _download(url: str, root: str) -> str:
 
     model_bytes = open(download_target, "rb").read()
     if hashlib.sha256(model_bytes).hexdigest() != expected_sha256:
-        Logger().fatal(
+        raise Exception(
             "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
         )
 
@@ -100,7 +98,7 @@ def load_model(
         checkpoint_file = _download(_MODELS[name], download_root)
         alignment_heads = _ALIGNMENT_HEADS[name]
     else:
-        Logger().fatal(
+        raise Exception(
             f"Model {name} not found, available models: {available_models()}"
         )
 
@@ -109,7 +107,6 @@ def load_model(
     del checkpoint_file
 
     dims = ModelDimensions(**checkpoint["dims"])
-    Logger().debug(f"Whisper {name}: {dims}")
     model = Whisper(dims)
     model.load_state_dict(checkpoint["model_state_dict"])
 

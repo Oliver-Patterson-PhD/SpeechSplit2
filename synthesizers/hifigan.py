@@ -19,9 +19,12 @@ class HiFiGAN(Synthesizer):
         device: torch.device,
         config: Config,
     ) -> None:
+        self.device = device
+        self.config = config
         data_dir = self.config.paths.full_models
         config_file = f"{data_dir}/{self.model_name}.toml"
-        self.configtoml = HiFiConfig(**loadtoml(open(config_file, "rb")))
+        tomlconf = {**loadtoml(open(config_file, "rb")), "fmax_for_loss": None}
+        self.configtoml = HiFiConfig(**tomlconf)
         self.model = HifiGanGenerator(hifi_config=self.configtoml).to(device)
         self.model.eval()
         self.model.remove_weight_norm()
@@ -31,4 +34,4 @@ class HiFiGAN(Synthesizer):
         self: Self,
         spect: torch.Tensor,
     ) -> torch.Tensor:
-        return self.model(spect)
+        return self.model(spect.squeeze(0).T).squeeze()

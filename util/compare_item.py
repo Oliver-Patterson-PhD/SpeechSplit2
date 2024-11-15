@@ -1,21 +1,20 @@
+__all__ = [
+    "CompareItem",
+]
+
 import os
 import string
 from difflib import SequenceMatcher
 from math import sqrt
-from typing import List, Optional, Self, Tuple
+from typing import TYPE_CHECKING, List, Optional, Self, Tuple
 
 import torch
 
-from transcribers import Transcriber, WhisperTranscriber
-
 from .compute import Compute
 from .config import Config
-from .logging import Logger
 
-ua_uttrs = getattr(
-    __import__("meta_dicts"),
-    "uaspeech_uttrs",
-)
+if TYPE_CHECKING:
+    from transcribers import Transcriber
 
 
 class CompareItem:
@@ -37,21 +36,27 @@ class CompareItem:
         fname: str,
         source: torch.Tensor,
         destin: torch.Tensor,
-        model: Optional[Transcriber] = None,
+        text: str,
+        model: Optional["Transcriber"] = None,
     ) -> None:
         self.__config = Config()
         retries = 5
         compute = Compute()
         tmpdir = os.path.join(self.__config.paths.artefacts, "tmp")
         os.makedirs(tmpdir, exist_ok=True)
-        transcriber = model or WhisperTranscriber(
-            device=compute.device(),
-            model_name=self.__config.options.whisper_type,
-            config=self.__config,
-        )
+        if model is None and not TYPE_CHECKING:
+            from transcribers import Transcriber
+        if model is None:
+            transcriber = Transcriber(
+                device=compute.device(),
+                model_name=self.__config.options.whisper_type,
+                config=self.__config,
+            )
+        else:
+            transcriber = model
         self.fname = fname
         self.loss_mse = torch.nn.functional.mse_loss(destin, source).item()
-        self.truth_ground = self.get_real_text(fname)
+        self.truth_ground = text
         source_transcription, self.token_source = transcriber.transcribe(
             source, f"{self.fname}_gt"
         )
@@ -81,30 +86,6 @@ class CompareItem:
                 self.token_destin,
             )
         return
-
-    def get_real_text(
-        self: Self,
-        fname: str,
-    ) -> str:
-        if fname[-2] == "_":
-            fname = fname[0:-3]
-        if self.__config.options.dataset_name in ("uaspeech", "smolspeech"):
-            uttr_code = self.fname.split("_")[1] + "_" + self.fname.split("_")[2]
-            return clean_string(ua_uttrs[uttr_code])
-        elif self.__config.options.dataset_name in ("vctk", "smolvctk"):
-            uttr_code = self.fname
-            full_text_path = "{}/VCTK-Corpus/txt/{}/{}.txt".format(
-                self.__config.paths.raw_data,
-                self.fname.split("_")[0],
-                self.fname,
-            )
-            with open(full_text_path) as uttr_file:
-                return clean_string(next(uttr_file))
-        else:
-            Logger().fatal(
-                f"Dataset type not implemented: {self.__config.options.dataset_name}"
-            )
-            return ""
 
     def file_text(
         self: Self,

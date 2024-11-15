@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 
 import torch
 
-from data_preprocessing import preprocess_data
+from data import preprocess_data
 from experiments import Scratchpad, Swapper, TestSamples, Train
 from util import Config, Logger, RunTests
 
@@ -21,6 +21,10 @@ def main() -> None:
     logger.debug("Starting Main")
     if config.options.run_tests == RunTests.NOTHING and not doscratch:
         return
+    import os
+
+    modelfiles = os.listdir(os.path.join(config.paths.full_models, "whisper"))
+    logger.trace_var(modelfiles, level="DEBUG")
 
     try:
         preprocess_data(config)
@@ -52,4 +56,5 @@ def main() -> None:
                 swapper.save_audios()
         logger.debug("Finished main")
     except Exception as e:
-        logger.fatal(str(e))
+        logger.fatal(str(e.__cause__))
+        raise Exception from e

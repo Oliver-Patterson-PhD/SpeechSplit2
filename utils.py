@@ -6,7 +6,6 @@ import torchaudio
 import torchvision
 from pysptk.sptk import rapt
 
-from transcribers.whisper.audio import log_mel_spectrogram
 from util import Logger
 
 N_FFT: int = 400
@@ -113,22 +112,11 @@ def get_spmel(
     wav: torch.Tensor,
     whispercheck: bool = False,
 ) -> torch.Tensor:
-    if whispercheck and False:
-        return torch.nn.functional.pad(
-            log_mel_spectrogram(
-                audio=wav.float(),
-                n_mels=DIM_FREQ,
-                padding=0,
-                device=wav.device,
-            ),
-            (0, 1),
-        ).T
-    else:
-        mel_spec = torch_melbasis(torch_stft(wav.float()) ** 2).T
-        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-        log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
-        return torch.nn.functional.pad(log_spec, (0, 0, 0, 1)).to(dtype=wav.dtype)
+    mel_spec = torch_melbasis(torch_stft(wav.float()) ** 2).T
+    log_spec = torch.clamp(mel_spec, min=1e-10).log10()
+    log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+    log_spec = (log_spec + 4.0) / 4.0
+    return torch.nn.functional.pad(log_spec, (0, 0, 0, 1)).to(dtype=wav.dtype)
 
 
 def get_spenv(
@@ -244,7 +232,6 @@ def average_f0s(
         else:
             f0 = torch.zeros_like(f0)
         return f0
-
     f0s = [mapfn(f0) for f0 in f0s]
     return f0s
 
@@ -411,3 +398,11 @@ def masked_mse(
         reduction="sum",
     )
     return sum / mask.sum()
+
+
+def has_content(
+    audio: torch.Tensor,
+) -> bool:
+    return bool(
+        (audio.size(dim=-1) > 1) and (audio.max().item() > 1e-03) and (audio != 0).any()
+    )

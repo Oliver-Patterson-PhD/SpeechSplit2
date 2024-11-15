@@ -1,3 +1,7 @@
+__all__ = [
+    "Experiment",
+]
+
 import datetime
 import os
 import time
@@ -7,7 +11,7 @@ from typing import Optional, Self
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from data.loader import get_loader
+from data import Combiner, Dataset, get_loader
 from model import InterpLnr, SpeechSplit
 from util import Compute, Config, Logger, LogLevel, NanError
 from utils import quantize_f0_torch, save_tensor
@@ -24,6 +28,8 @@ class Experiment(object):
     writer: SummaryWriter
     tb_prefix: str
     experiment_dir: str
+    dataset: Dataset
+    combine: Combiner
 
     def __init__(self: Self, config: Config, currtime: int = int(time.time())) -> None:
         self.config = config
@@ -56,6 +62,8 @@ class Experiment(object):
             self.config.paths.artefacts,
             self.config.options.experiment,
         )
+        self.dataset = Dataset(config)
+        self.combine = Combiner(config)
         os.makedirs(self.experiment_dir, exist_ok=True)
 
     def tb_add_scalar(
@@ -337,7 +345,8 @@ class Experiment(object):
                 self.logger.trace_tensor(i_pitch_input, LogLevel.ERROR)
                 self.logger.trace_tensor(i_timbre_input, LogLevel.ERROR)
                 self.logger.trace_tensor(i_len_crop, LogLevel.ERROR)
-                self.logger.fatal(str(e))
+                self.logger.fatal(str(e.__cause__))
+                raise Exception(f"Failure during check_data for {i_fname}") from e
             found_nan = False
             found_nan |= self.logger.log_if_nan_ret(i_spmel_gt)
             found_nan |= self.logger.log_if_nan_ret(i_spmel_gt)
@@ -351,4 +360,3 @@ class Experiment(object):
                 self.logger.error("Step has NaN loss")
                 self.logger.error(f"filename: {i_fname}")
                 raise NanError(f"{i_fname}")
-        return

@@ -1,4 +1,7 @@
-from __future__ import annotations
+__all__ = [
+    "Logger",
+    "LogLevel",
+]
 
 import inspect
 from enum import IntEnum
@@ -44,16 +47,12 @@ class LogLevel(IntEnum):
         return str(self)
 
     @classmethod
-    def _missing_(cls, value: object) -> Optional[LogLevel]:
+    def _missing_(cls, value: object) -> Optional[Self]:
         if isinstance(value, str):
             for member in cls:
                 if str(member.value) == value.upper().strip():
                     return member
         return None
-
-
-class LoggedException(Exception):
-    pass
 
 
 class Logger(metaclass=Singleton):
@@ -138,6 +137,12 @@ class Logger(metaclass=Singleton):
         args = string[string.find("(") + 1 : -1].split(",")
         return [i.split("=")[1].strip() if i.find("=") != -1 else i for i in args]
 
+    def __get_level(
+        self: Self,
+        level: LogLevel | str,
+    ) -> LogLevel:
+        return level if isinstance(level, LogLevel) else LogLevel[level]
+
     def get_level(
         self: Self,
     ) -> LogLevel:
@@ -161,12 +166,7 @@ class Logger(metaclass=Singleton):
         self: Self,
         level: LogLevel | str,
     ) -> None:
-        if isinstance(level, str):
-            self.__level = LogLevel[level]
-        elif isinstance(level, int):
-            self.__level = level
-        else:
-            raise ValueError
+        self.__level = self.__get_level(level)
 
     def get_file(
         self: Self,
@@ -191,10 +191,10 @@ class Logger(metaclass=Singleton):
         self: Self,
         message: str,
         prompt: str = "",
-        level: LogLevel = LogLevel.INFO,
+        level: LogLevel | str = LogLevel.INFO,
     ) -> str:
         self.__log(
-            level=level,
+            level=self.__get_level(level),
             caller=self.__get_caller(),
             message=message,
         )
@@ -205,11 +205,11 @@ class Logger(metaclass=Singleton):
         message: str,
         default: str,
         prompt: str = "",
-        level: LogLevel = LogLevel.INFO,
+        level: LogLevel | str = LogLevel.INFO,
     ) -> str:
-        if self.__level <= level:
+        if self.__level <= self.__get_level(level):
             self.__log(
-                level=level,
+                level=self.__get_level(level),
                 caller=self.__get_caller(),
                 message=message,
             )
@@ -283,26 +283,25 @@ class Logger(metaclass=Singleton):
             caller=self.__get_caller(depth),
             message=str(message),
         )
-        raise LoggedException(message)
 
     def trace_var(
         self: Self,
         var: Any,
-        level: LogLevel = LogLevel.TRACE,
+        level: LogLevel | str = LogLevel.TRACE,
     ) -> None:
         self.__log(
-            level=level,
+            level=self.__get_level(level),
             caller=self.__get_caller(),
-            message=f"{self.__get_passed_varnames()[0]}: ({var})",
+            message=f"{self.__get_passed_varnames()[0]}: ({var}) - type: {type(var)}",
         )
 
     def trace_tensor(
         self: Self,
         var: Tensor,
-        level: LogLevel = LogLevel.TRACE,
+        level: LogLevel | str = LogLevel.TRACE,
     ) -> None:
         self.__log(
-            level=level,
+            level=self.__get_level(level),
             caller=self.__get_caller(),
             message=f"{self.__get_passed_varnames()[0]}: ({var.shape})",
         )
@@ -310,10 +309,10 @@ class Logger(metaclass=Singleton):
     def trace_nans(
         self: Self,
         x: Tensor,
-        level: LogLevel = LogLevel.ERROR,
+        level: LogLevel | str = LogLevel.ERROR,
     ) -> None:
         self.__log(
-            level=level,
+            level=self.__get_level(level),
             caller=self.__get_caller(),
             message=f"{self.__get_passed_varnames()[0]}: {
                 "Has NaNs" if self.__is_nan(x) else "No NaNs"
@@ -323,11 +322,11 @@ class Logger(metaclass=Singleton):
     def log_if_nan(
         self: Self,
         x: Tensor,
-        level: LogLevel = LogLevel.ERROR,
+        level: LogLevel | str = LogLevel.ERROR,
     ) -> None:
         if self.__is_nan(x):
             self.__log(
-                level=level,
+                level=self.__get_level(level),
                 caller=self.__get_caller(),
                 message=f"{self.__get_passed_varnames()[0]}: Has NaNs",
             )
@@ -335,11 +334,11 @@ class Logger(metaclass=Singleton):
     def log_if_nan_ret(
         self: Self,
         x: Tensor,
-        level: LogLevel = LogLevel.ERROR,
+        level: LogLevel | str = LogLevel.ERROR,
     ) -> bool:
         if self.__is_nan(x):
             self.__log(
-                level=level,
+                level=self.__get_level(level),
                 caller=self.__get_caller(),
                 message=f"{self.__get_passed_varnames()[0]}: Has NaNs",
             )

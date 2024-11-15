@@ -55,6 +55,7 @@ class Wavenet(Synthesizer):
         )
         self.model.load_state_dict(ckpt["state_dict"])
         self.model = self.model.to(self.device)
+        self.model.eval()
 
     @torch.no_grad()
     def spect2wav(

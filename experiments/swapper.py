@@ -1,14 +1,13 @@
 import os
 from glob import glob
 from itertools import product
-from typing import Self, Tuple
+from typing import List, Self, Tuple
 
 import torch
 import torchaudio
 
-from data_loader import CollaterItemType, get_loader
-from data_preprocessing import MetaDictType
-from meta_dicts import NamedMetaDictType
+from data import get_loader
+from meta_dicts import MetaDictType, NamedMetaDictType
 from synthesizers import (GriffinLim, MelGan, ParallelWaveGan, Synthesizer,
                           Wavenet)
 from utils import norm_audio, quantize_f0_torch, save_tensor
@@ -60,7 +59,19 @@ class Swapper(Experiment):
         [self.save_single_latent(batch) for batch in self.data_loader]  # type: ignore [func-returns-value]
 
     @torch.no_grad()
-    def save_single_latent(self: Self, batch: CollaterItemType) -> None:
+    def save_single_latent(
+        self: Self,
+        batch: Tuple[
+            List[str],
+            List[str],
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+        ],
+    ) -> None:
         (
             fname,
             spk_id_org,

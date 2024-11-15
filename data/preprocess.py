@@ -1,13 +1,20 @@
+__all__ = [
+    "PreProcess",
+    "Combiner",
+]
+
 import os
 from math import floor
-from typing import Self, Tuple
+from typing import List, Self, Tuple
 
 import torch
+import torchaudio
 
-from data_preprocessing import getraw, has_content
-from util import Config, Logger
-from utils import (extract_f0, filter_wav, get_monotonic_wav, get_spmel,
-                   get_world_params)
+from util import Config, Logger, norm_audio
+
+from .utils import AudioProcs
+
+FOLD_DIV = 2
 
 
 class PreProcess:
@@ -22,6 +29,7 @@ class PreProcess:
     sample_rate: int
     max_len_pad: int
     hop_length: int
+    proc: AudioProcs
 
     def __init__(self: Self, config: Config) -> None:
         self.config = config
@@ -35,11 +43,15 @@ class PreProcess:
         self.sample_rate = config.audio.sample_rate
         self.max_len_pad = config.audio.max_len_pad
         self.hop_length = config.audio.hop_len
-        self.fold_div = 2
+        self.fold_div = FOLD_DIV
         self.spk_meta = getattr(
             __import__("meta_dicts"),
             self.config.options.dataset_name,
         )
+        self.vad_transform = torchaudio.transforms.Vad(
+            sample_rate=self.sample_rate,
+        )
+        self.proc = AudioProcs(config=config)
         procdata_exists = all(
             [
                 os.path.exists(f"{self.out_path}/freqs/{speaker}")
@@ -63,23 +75,25 @@ class PreProcess:
         self.logger.info("Preprocessing Complete")
 
     def process_file(self: Self, spk_dir: str, fname: str) -> None:
-        wav = filter_wav(getraw(os.path.join(self.in_path, spk_dir, fname)))
-        if not has_content(wav):
+        wav = self.proc.filter_wav(
+            self.getraw(os.path.join(self.in_path, spk_dir, fname))
+        )
+        if not self.has_content(wav):
             self.logger.warn(f"No Content: {fname}")
             return
         lo, hi = self.get_f0_lohi(spk_dir)
-        f0, sp, ap = get_world_params(wav, self.sample_rate)
+        f0, sp, ap = self.proc.get_world_params(wav, self.sample_rate)
 
-        wav_mono = get_monotonic_wav(wav, f0, sp, ap, self.sample_rate)
-        if not has_content(wav_mono):
+        wav_mono = self.proc.get_monotonic_wav(wav, f0, sp, ap, self.sample_rate)
+        if not self.has_content(wav_mono):
             raise ValueError
 
-        spmel = get_spmel(wav)
-        if not has_content(spmel):
+        spmel = self.proc.get_spmel(wav)
+        if not self.has_content(spmel):
             raise ValueError
 
-        f0_norm = extract_f0(wav, self.sample_rate, lo, hi)
-        if not has_content(f0_norm):
+        f0_norm = self.proc.extract_f0(wav, self.sample_rate, lo, hi)
+        if not self.has_content(f0_norm):
             raise ValueError
 
         if len(spmel) != len(f0_norm):
@@ -91,6 +105,15 @@ class PreProcess:
                     f"spmel: {len(spmel)}\n"
                     f"f0_norm: {len(f0_norm)}\n"
                 )
+                raise Exception(
+                    f"melspec and f0 lengths do not match for {fname}\n"
+                    f"spmel: {len(spmel)}\n"
+                    f"f0_norm: {len(f0_norm)}\n"
+                )
+        wav_full_split = self.fold_pad(
+            item=wav,
+            fold_size=self.max_len_pad * (self.hop_length - 1),
+        )
         wav_mono_split = self.fold_pad(
             item=wav_mono,
             fold_size=self.max_len_pad * (self.hop_length - 1),
@@ -103,20 +126,28 @@ class PreProcess:
             item=f0_norm,
             fold_size=self.max_len_pad,
         )
+        fullwavs = os.path.join(self.out_path, "fullwavs", spk_dir)
         monowavs = os.path.join(self.out_path, "monowavs", spk_dir)
         spmels = os.path.join(self.out_path, "spmels", spk_dir)
         freqs = os.path.join(self.out_path, "freqs", spk_dir)
+        os.makedirs(fullwavs, exist_ok=True)
         os.makedirs(monowavs, exist_ok=True)
         os.makedirs(spmels, exist_ok=True)
         os.makedirs(freqs, exist_ok=True)
-        for idx, (wav_mo_i, spmel_i, f0_i) in enumerate(
-            zip(wav_mono_split, spmel_split, f0_split)
+        for idx, (wav_fu_i, wav_mo_i, spmel_i, f0_i) in enumerate(
+            zip(wav_full_split, wav_mono_split, spmel_split, f0_split)
         ):
             filename = f"{os.path.splitext(fname)[0]}_{idx}.pt"
-            if has_content(wav_mo_i) and has_content(spmel_i) and has_content(f0_i):
-                torch.save(wav_mo_i, os.path.join(monowavs, filename))
-                torch.save(spmel_i, os.path.join(spmels, filename))
-                torch.save(f0_i, os.path.join(freqs, filename))
+            if (
+                self.has_content(wav_fu_i)
+                and self.has_content(wav_mo_i)
+                and self.has_content(spmel_i)
+                and self.has_content(f0_i)
+            ):
+                torch.save(wav_fu_i.to("cpu"), os.path.join(fullwavs, filename))
+                torch.save(wav_mo_i.to("cpu"), os.path.join(monowavs, filename))
+                torch.save(spmel_i.to("cpu"), os.path.join(spmels, filename))
+                torch.save(f0_i.to("cpu"), os.path.join(freqs, filename))
 
     def get_f0_lohi(self: Self, spk_dir: str) -> Tuple[int, int]:
         if self.spk_meta[spk_dir].sex == "M":
@@ -167,3 +198,82 @@ class PreProcess:
         else:
             retval = torch.nn.functional.pad(item, opads).unsqueeze(0)
         return retval
+
+    def getraw(
+        self: Self,
+        full_fname: str | os.PathLike,
+    ) -> torch.Tensor:
+        x: torch.Tensor
+        inaud, sr = torchaudio.load(full_fname, channels_first=True)
+        assert sr == self.sample_rate
+        try:
+            x = self.clean_audio(inaud)
+        except Exception as e:
+            raise Exception(f"failed to load: {full_fname}") from e
+        if x.shape[0] % self.hop_length == 0:
+            x = torch.cat(
+                (x, torch.tensor([1e-10], device=x.device)),
+                dim=0,
+            )
+        return x
+
+    def clean_audio(
+        self: Self,
+        audio: torch.Tensor,
+    ):
+        return torchaudio.sox_effects.apply_effects_tensor(
+            self.vad_transform(
+                torchaudio.sox_effects.apply_effects_tensor(
+                    self.vad_transform(norm_audio(audio)),
+                    self.sample_rate,
+                    [["reverse"]],
+                )[0]
+            ),
+            self.sample_rate,
+            [["reverse"]],
+        )[0].squeeze()
+
+    def has_content(self: Self, audio: torch.Tensor) -> bool:
+        return bool(
+            (audio.size(dim=-1) > 1)
+            and (audio.max().item() > 1e-03)
+            and (audio != 0).any()
+        )
+
+
+class Combiner:
+    logger: Logger
+    max_len_pad: int
+
+    def __init__(
+        self: Self,
+        config: Config,
+    ) -> None:
+        self.logger = Logger()
+        self.max_len_pad = config.audio.max_len_pad
+
+    def __call__(
+        self: Self,
+        listitem: List[torch.Tensor],
+    ) -> torch.Tensor:
+        fold_size = self.max_len_pad
+        fold_step = fold_size // FOLD_DIV
+        if len(listitem) == 1:
+            return listitem[0]
+        item_mod = torch.stack([item for item in listitem]).transpose(0, -1)
+        fold_fn = torch.nn.Fold(
+            output_size=(1, ((item_mod.size(-1) + 1) * fold_step)),
+            kernel_size=(1, fold_size),
+            stride=(1, fold_step),
+        )
+        norm_mod = torch.ones_like(item_mod)
+        folded = fold_fn(item_mod).squeeze(1).squeeze(1).T
+        out_norm = fold_fn(norm_mod).squeeze(1).squeeze(1).T
+        self.logger.trace_tensor(folded)
+        return folded / out_norm
+
+
+def preprocess_data(
+    config: Config,
+) -> None:
+    PreProcess(config)
