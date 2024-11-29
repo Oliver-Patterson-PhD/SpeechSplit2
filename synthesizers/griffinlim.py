@@ -3,7 +3,7 @@ from typing import Self
 import torch
 import torchaudio
 
-from util.config import Config
+from util import Config
 
 from .synthesizer import Synthesizer
 

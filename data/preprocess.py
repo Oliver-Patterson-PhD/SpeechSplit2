@@ -88,7 +88,7 @@ class PreProcess:
         if not self.has_content(wav_mono):
             raise ValueError
 
-        spmel = self.proc.get_spmel(wav)
+        spmel, phase = self.proc.get_spmel(wav)
         if not self.has_content(spmel):
             raise ValueError
 
@@ -130,10 +130,12 @@ class PreProcess:
         monowavs = os.path.join(self.out_path, "monowavs", spk_dir)
         spmels = os.path.join(self.out_path, "spmels", spk_dir)
         freqs = os.path.join(self.out_path, "freqs", spk_dir)
+        phases = os.path.join(self.out_path, "phases", spk_dir)
         os.makedirs(fullwavs, exist_ok=True)
         os.makedirs(monowavs, exist_ok=True)
         os.makedirs(spmels, exist_ok=True)
         os.makedirs(freqs, exist_ok=True)
+        os.makedirs(phases, exist_ok=True)
         for idx, (wav_fu_i, wav_mo_i, spmel_i, f0_i) in enumerate(
             zip(wav_full_split, wav_mono_split, spmel_split, f0_split)
         ):
@@ -148,6 +150,8 @@ class PreProcess:
                 torch.save(wav_mo_i.to("cpu"), os.path.join(monowavs, filename))
                 torch.save(spmel_i.to("cpu"), os.path.join(spmels, filename))
                 torch.save(f0_i.to("cpu"), os.path.join(freqs, filename))
+        filename = f"{os.path.splitext(fname)[0]}.pt"
+        torch.save(phase.to("cpu"), os.path.join(phases, filename))
 
     def get_f0_lohi(self: Self, spk_dir: str) -> Tuple[int, int]:
         if self.spk_meta[spk_dir].sex == "M":

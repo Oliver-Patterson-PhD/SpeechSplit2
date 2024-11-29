@@ -204,7 +204,14 @@ class Config(metaclass=Singleton):
             model_dict = loadtoml(open(config_str.format(model_name), "rb"))
             experiment_name = "experiments/" + tomldict["options"]["experiment"]
             experiment_dict = loadtoml(open(config_str.format(experiment_name), "rb"))
-            tomldict = self.__merge_dicts(tomldict, model_dict, experiment_dict)
+            audio_name = "audio/" + tomldict["options"]["audio"]
+            audio_dict = loadtoml(open(config_str.format(audio_name), "rb"))
+            tomldict = self.__merge_dicts(
+                tomldict,
+                model_dict,
+                experiment_dict,
+                audio_dict,
+            )
         self.__print_config(tomldict)
         for key, subdict in tomldict.items():
             self.__map_categories(
@@ -266,6 +273,8 @@ class Config(metaclass=Singleton):
                 self.model.__dict__.update(subdict)
             case "dataloader":
                 self.dataloader.__dict__.update(subdict)
+            case "audio":
+                self.audio.__dict__.update(subdict)
             case "training":
                 self.training.__dict__.update(subdict)
             case "options":

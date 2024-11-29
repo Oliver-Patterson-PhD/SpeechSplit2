@@ -1,3 +1,5 @@
+from typing import Self
+
 import torch
 
 
@@ -9,7 +11,7 @@ class Stretch2d(torch.nn.Module):
     # @param y_scale    Y scaling factor (Frequency axis in spectrogram).
     # @param mode       Interpolation mode.
     def __init__(
-        self,
+        self: Self,
         x_scale: int,
         y_scale: int,
         mode: str = "nearest",
@@ -22,7 +24,7 @@ class Stretch2d(torch.nn.Module):
     ## Calculate forward propagation.
     # @param  x Input tensor (B, C, F, T).
     # @return Interpolated tensor (B, C, F * y_scale, T * x_scale),
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self: Self, x: torch.Tensor) -> torch.Tensor:
         return torch.nn.functional.interpolate(
             x, scale_factor=(self.y_scale, self.x_scale), mode=self.mode
         )

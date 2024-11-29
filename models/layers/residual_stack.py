@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Self
 
 import torch
 
@@ -19,7 +19,7 @@ class ResidualStack(torch.nn.Module):
     # @param    pad_params                  Hyperparameters for padding function.
     # @param    use_causal_conv             Whether to use causal convolution.
     def __init__(
-        self,
+        self: Self,
         kernel_size: int = 3,
         channels: int = 32,
         dilation: int = 1,

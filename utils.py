@@ -355,7 +355,7 @@ def save_tensor(
     tensor: torch.Tensor,
     save_path: str,
 ) -> None:
-    image = try_image(tensor)
+    image = try_image(tensor.abs())
     if image is not None:
         im_min = image.min()
         im_max = image.max()

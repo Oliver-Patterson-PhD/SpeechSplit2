@@ -3,11 +3,11 @@ from typing import Self
 
 import torch
 
-from .whisper.audio import N_FRAMES
-from .whisper.loader import load_model
-from .whisper.model import Whisper
-from .whisper.transcribe import transcribe
-from .whisper.utils import ResultWriter
+from models.whisper.audio import N_FRAMES
+from models.whisper.loader import load_model
+from models.whisper.model import Whisper
+from models.whisper.transcribe import transcribe
+from models.whisper.utils import ResultWriter
 
 
 class Transcriber:

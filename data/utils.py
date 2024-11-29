@@ -9,7 +9,7 @@ import torch
 import torchaudio
 from pysptk.sptk import rapt
 
-from util import Config
+from util import Config, Compute
 
 
 class AudioProcs:
@@ -22,6 +22,7 @@ class AudioProcs:
         self: Self,
         config: Config,
     ) -> None:
+        self.compute = Compute()
         self.dim_freq = config.model.dim_freq
         self.n_fft = config.audio.n_fft
         self.sample_rate = config.audio.sample_rate
@@ -47,14 +48,58 @@ class AudioProcs:
             mel_scale="htk",
             norm=None,
         )
+        self.demel = torchaudio.transforms.InverseMelScale(
+            n_stft=self.n_fft // 2 + 1,
+            n_mels=self.dim_freq,
+            sample_rate=self.sample_rate,
+            f_min=self.freq_min,
+            f_max=self.freq_max,
+            norm=None,
+            mel_scale="htk",
+            driver="gels",
+        )
+        self.simplewindow = torch.hann_window(self.n_fft)
         return
+
+    def simplestft(
+        self: Self,
+        wav: torch.Tensor,
+    ) -> torch.Tensor:
+        return torch.stft(
+            input=wav,
+            n_fft=self.n_fft,
+            hop_length=self.hop_len,
+            win_length=self.n_fft,
+            window=self.simplewindow.to(wav.device),
+            center=True,
+            pad_mode="reflect",
+            normalized=False,
+            onesided=True,
+            return_complex=True,
+        )
+
+    def simpleistft(
+        self: Self,
+        spec: torch.Tensor,
+    ) -> torch.Tensor:
+        return torch.istft(
+            input=spec,
+            n_fft=self.n_fft,
+            hop_length=self.hop_len,
+            win_length=self.n_fft,
+            window=self.simplewindow.to(spec.device),
+            center=True,
+            normalized=False,
+            onesided=True,
+            return_complex=False,
+        )
 
     def get_spenv(
         self: Self,
         wav: torch.Tensor,
         cutoff: int = 3,
     ) -> torch.Tensor:
-        spec = self.stft(wav).T
+        spec = torch.abs(self.simplestft(wav)).T
         ceps = torch.fft.irfft(torch.log(spec + 1e-6), axis=-1).to(dtype=torch.double)
         lifter = torch.zeros(ceps.shape[1], dtype=torch.double)
         lifter[:cutoff] = 1
@@ -76,12 +121,25 @@ class AudioProcs:
     def get_spmel(
         self: Self,
         wav: torch.Tensor,
-    ) -> torch.Tensor:
-        mel_spec = self.melbasis(self.stft(wav.float()) ** 2).T
-        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-        log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
-        return torch.nn.functional.pad(log_spec, (0, 0, 0, 1)).to(dtype=wav.dtype)
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        self.melbasis = self.melbasis.to(self.compute.device())
+        rawspec: torch.Tensor = self.simplestft(wav.float())
+        mags: torch.Tensor = rawspec.abs()
+        phases: torch.Tensor = rawspec.angle()
+        mel_spec = self.melbasis(mags.to(self.compute.device())).T
+        log_spec = torchaudio.functional.amplitude_to_DB(
+            x=mel_spec,
+            multiplier=20,
+            amin=self.min_level.to(self.compute.device()),
+            db_multiplier=1,
+        )
+        # log_spec = torch.clamp(mel_spec, min=1e-10).log10()
+        # log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+        # log_spec = (log_spec + 4.0) / 4.0
+        return (
+            torch.nn.functional.pad(log_spec, (0, 0, 0, 1)).to(dtype=wav.dtype),
+            phases,
+        )
 
     def zero_one_norm(
         self: Self,

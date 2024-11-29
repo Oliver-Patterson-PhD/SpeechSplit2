@@ -11,13 +11,13 @@ bottleneck = "large"
 experiment = "scratch"
 ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
 trace = false
-dataset_name = "smolspeech"
+dataset_name = "smolvctk"
 num_iters = 1
 log_step = 1
 ckpt_save_step = 10000
 train = false
 return_latents = false
-regenerate_data = false
+regenerate_data = true
 whisper_type = "tiny.en"
 resume_iters = 1200000
 
@@ -33,3 +33,35 @@ mask_loss = true
 lr = 0.001
 beta1 = 0.9
 beta2 = 0.999
+
+[audio]
+chunk_length = 30
+f0_f_hi = 600
+f0_f_lo = 100
+f0_m_hi = 250
+f0_m_lo = 50
+fold_div = 2
+freq_max = 7600
+freq_min = 90
+hi_pass_cutoff = 30
+hop_len = 160
+max_len_pad = 192
+n_fft = 400
+sample_rate = 16000
+vtlp_fft = 800
+
+# [audio]
+# chunk_length = 30
+# f0_f_hi = 600
+# f0_f_lo = 100
+# f0_m_hi = 250
+# f0_m_lo = 50
+# fold_div = 2
+# freq_max = 7600
+# freq_min = 90
+# hi_pass_cutoff = 30
+# hop_len = 256
+# max_len_pad = 192
+# n_fft = 1024
+# sample_rate = 16000
+# vtlp_fft = 2048

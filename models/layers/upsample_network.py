@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Self
 
 import torch
 
@@ -17,7 +17,7 @@ class UpsampleNetwork(torch.nn.Module):
     # @param    freq_axis_kernel_size       Kernel size in the direction of frequency axis.
     # @param    use_causal_conv             Use Causal Convolution
     def __init__(
-        self,
+        self: Self,
         upsample_scales: List[int],
         nonlinear_activation: Optional[str] = None,
         nonlinear_activation_params: dict = {},
@@ -56,7 +56,7 @@ class UpsampleNetwork(torch.nn.Module):
     ## Calculate forward propagation.
     # @param    c   Import tensor (B, C, T).
     # @return   Upsampled tensor (B, C, T'), where T' = T * prod(upsample_scales).
-    def forward(self, c: torch.Tensor) -> torch.Tensor:
+    def forward(self: Self, c: torch.Tensor) -> torch.Tensor:
         c = c.unsqueeze(1)  # (B, 1, C, T)
         for f in self.up_layers:
             if self.use_causal_conv and isinstance(f, Conv2d):

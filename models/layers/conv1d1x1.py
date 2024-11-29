@@ -1,10 +1,12 @@
+from typing import Self
+
 from .conv1d import Conv1d
 
 
 ## 1x1 Conv1d with customized initialization.
 class Conv1d1x1(Conv1d):
     def __init__(
-        self,
+        self: Self,
         in_channels: int,
         out_channels: int,
         bias: bool,

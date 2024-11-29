@@ -2,9 +2,9 @@ from typing import Self
 
 import torch
 
-from util.config import Config
+from models.parallel_wavegan import ParallelWaveGANGenerator
+from util import Config
 
-from .parallel_wavegan.parallel_wavegan import ParallelWaveGANGenerator
 from .synthesizer import Synthesizer
 
 
@@ -27,5 +27,7 @@ class ParallelWaveGan(Synthesizer):
         self: Self,
         spect: torch.Tensor,
     ) -> torch.Tensor:
-        outwav = self.model.inference(c=spect.to(self.device)).view(-1)
+        outwav = self.model.inference(
+            c=spect.to(self.device),
+        ).view(-1)
         return outwav

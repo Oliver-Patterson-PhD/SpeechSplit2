@@ -65,7 +65,7 @@ class Dataset:
             case DType.UASPEECH:
                 return "_".join(file_name.split("_")[0:3])
             case DType.VCTK:
-                return "_".join(file_name.split("_")[0:1])
+                return "_".join(file_name.split("_")[0:2])
             case _:
                 raise ValueError
 

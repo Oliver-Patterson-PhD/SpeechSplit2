@@ -13,3 +13,4 @@ f0_m_hi = 250
 f0_f_lo = 100
 f0_f_hi = 600
 hi_pass_cutoff = 30
+fold_div = 2

@@ -8,7 +8,8 @@ from typing import List, Self, Tuple
 import torch
 
 from util import Config, Logger
-from utils import get_spenv, get_spmel, vtlp
+
+from .utils import AudioProcs
 
 
 class MyDataset(torch.utils.data.Dataset):
@@ -46,6 +47,7 @@ class MyDataset(torch.utils.data.Dataset):
         self.path_fullwavs = config.paths.fullwavs
         self.path_spmels = config.paths.spmels
         self.full_info = not config.options.train
+        self.myproc = AudioProcs(config)
         spk_meta = getattr(__import__("meta_dicts"), config.options.dataset_name)
         _, spk_dir_list, _ = next(os.walk(config.paths.monowavs))
         self.dataset = [
@@ -95,10 +97,11 @@ class MyDataset(torch.utils.data.Dataset):
         if self.full_info:
             p_mono = wav_mono.to("cpu")
         else:
-            p_mono = vtlp(wav_mono, self.sample_rate, alpha).to("cpu")
+            p_mono = self.myproc.vtlp(wav_mono, self.sample_rate, alpha).to("cpu")
         len_crop = torch.tensor([self.max_len_seq], dtype=torch.double, device="cpu")
-        spenv = self.check(get_spenv(p_mono).to("cpu"), f"spenv invalid: {fname}")
-        spmel = self.check(get_spmel(p_mono).to("cpu"), f"spmel invalid: {fname}")
+        spenv = self.check(self.myproc.get_spenv(p_mono).to("cpu"), f"spenv invalid: {fname}")
+        p_mel, _ = self.myproc.get_spmel(p_mono)
+        spmel = self.check(p_mel.to("cpu"), f"spmel invalid: {fname}")
         return (
             fname,  # Filename
             spk_dir,  # Speaker ID string

@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Tuple
+from typing import Optional, Self, Tuple
 
 import torch
 
@@ -21,7 +21,7 @@ class ResidualBlock(torch.nn.Module):
     # @param bias                Whether to add bias parameter in convolution layers.
     # @param use_causal_conv     Whether to use use_causal_conv or non-use_causal_conv convolution.
     def __init__(
-        self,
+        self: Self,
         kernel_size: int = 3,
         residual_channels: int = 64,
         gate_channels: int = 128,

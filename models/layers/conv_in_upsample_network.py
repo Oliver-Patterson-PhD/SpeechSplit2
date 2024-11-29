@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Self
 
 import torch
 
@@ -19,7 +19,7 @@ class ConvInUpsampleNetwork(torch.nn.Module):
     # @param aux_context_window          Context window size of the pre-convolutional layer.
     # @param use_causal_conv             Whether to use causal structure.
     def __init__(
-        self,
+        self: Self,
         upsample_scales: List[int],
         nonlinear_activation: Optional[str] = None,
         nonlinear_activation_params: Dict[str, Any] = {},
@@ -53,7 +53,7 @@ class ConvInUpsampleNetwork(torch.nn.Module):
     # @param c Input tensor (B, C, T')
     # @return Upsampled tensor (B, C, T), where T = (T' - aux_context_window * 2) * prod(upsample_scales).
     # @note The length of inputs considers the context window size.
-    def forward(self, c: torch.Tensor) -> torch.Tensor:
+    def forward(self: Self, c: torch.Tensor) -> torch.Tensor:
         c_ = self.conv_in(c)
         c = c_[:, :, : -self.aux_context_window] if self.use_causal_conv else c_
         return self.upsample(c)

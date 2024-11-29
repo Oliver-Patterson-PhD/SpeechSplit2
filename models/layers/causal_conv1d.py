@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Self
 
 import torch
 
@@ -8,7 +8,7 @@ class CausalConv1d(torch.nn.Module):
 
     ## Initialize CausalConv1d module
     def __init__(
-        self,
+        self: Self,
         in_channels: int,
         out_channels: int,
         kernel_size: int,
@@ -26,5 +26,5 @@ class CausalConv1d(torch.nn.Module):
     ## Calculate forward propagation
     # @param    x   Input tensor (B, in_channels, T).
     # @return   Tensor: Output tensor (B, out_channels, T).
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self: Self, x: torch.Tensor) -> torch.Tensor:
         return self.conv(self.pad(x))[:, :, : x.size(2)]
