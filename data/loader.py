@@ -1,5 +1,6 @@
 __all__ = [
     "get_loader",
+    "MyDataset",
 ]
 
 import os
@@ -66,7 +67,11 @@ class MyDataset(torch.utils.data.Dataset):
             for filepath in next(
                 os.walk(
                     os.path.join(
-                        config.paths.monowavs,
+                        (
+                            config.paths.fullwavs
+                            if self.full_info
+                            else config.paths.monowavs
+                        ),
                         spk_dir,
                     )
                 )
@@ -75,7 +80,9 @@ class MyDataset(torch.utils.data.Dataset):
         self.num_tokens = len(self.dataset)
         return
 
-    def __len__(self: Self) -> int:
+    def __len__(
+        self: Self,
+    ) -> int:
         return self.num_tokens
 
     def __getitem__(
@@ -92,14 +99,16 @@ class MyDataset(torch.utils.data.Dataset):
         torch.Tensor,
     ]:
         spk_dir, spk_emb, (wav_mono, spmel, f0), fname = self.dataset[index]
-        alpha: float = 0.2 * torch.rand(1).item() + 0.9
         p_mono: torch.Tensor
         if self.full_info:
             p_mono = wav_mono.to("cpu")
         else:
+            alpha: float = 0.2 * torch.rand(1).item() + 0.9
             p_mono = self.myproc.vtlp(wav_mono, self.sample_rate, alpha).to("cpu")
         len_crop = torch.tensor([self.max_len_seq], dtype=torch.double, device="cpu")
-        spenv = self.check(self.myproc.get_spenv(p_mono).to("cpu"), f"spenv invalid: {fname}")
+        spenv = self.check(
+            self.myproc.get_spenv(p_mono).to("cpu"), f"spenv invalid: {fname}"
+        )
         p_mel, _ = self.myproc.get_spmel(p_mono)
         spmel = self.check(p_mel.to("cpu"), f"spmel invalid: {fname}")
         return (

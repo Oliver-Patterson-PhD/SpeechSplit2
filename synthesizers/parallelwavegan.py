@@ -1,4 +1,4 @@
-from typing import Self
+from typing import Optional, Self
 
 import torch
 
@@ -12,12 +12,14 @@ class ParallelWaveGan(Synthesizer):
     def __init__(
         self: Self,
         device: torch.device,
-        config: Config,
+        config: Optional[Config] = None,
     ) -> None:
+        if config is None:
+            config = Config()
         super().__init__(
             device=device,
             model=ParallelWaveGANGenerator,
-            model_name="parallelwavegan-3M",
+            model_name=config.options.parallelwavegan_name,
             config=config,
         )
         self.model.eval()

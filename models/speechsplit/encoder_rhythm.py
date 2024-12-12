@@ -2,9 +2,8 @@ from typing import Self
 
 import torch
 
+from models.layers.conv_norm import ConvNorm
 from util import Config
-
-from .layers.conv_norm import ConvNorm
 
 
 class EncoderRhythm(torch.nn.Module):

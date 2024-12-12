@@ -2,9 +2,9 @@ from typing import Any, Dict, List, Self
 
 import torch
 
-from .layers.causal_conv1d import CausalConv1d
-from .layers.causal_conv_transpose1d import CausalConvTranspose1d
-from .layers.residual_stack import ResidualStack
+from models.layers.causal_conv1d import CausalConv1d
+from models.layers.causal_conv_transpose1d import CausalConvTranspose1d
+from models.layers.residual_stack import ResidualStack
 
 
 class MelGANGenerator(torch.nn.Module):

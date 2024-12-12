@@ -6,13 +6,13 @@ import datetime
 import os
 import time
 from collections import OrderedDict
-from typing import Optional, Self
+from typing import Optional, Self, Tuple
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from data import Combiner, Dataset, get_loader
-from model import InterpLnr, SpeechSplit
+from data import AudioProcs, DatasetParser, get_loader
+from models.speechsplit import InterpLnr, SpeechSplit
 from util import Compute, Config, Logger, LogLevel, NanError
 from utils import quantize_f0_torch, save_tensor
 
@@ -28,10 +28,16 @@ class Experiment(object):
     writer: SummaryWriter
     tb_prefix: str
     experiment_dir: str
-    dataset: Dataset
-    combine: Combiner
+    dataset: DatasetParser
+    audproc: AudioProcs
 
-    def __init__(self: Self, config: Config, currtime: int = int(time.time())) -> None:
+    def __init__(
+        self: Self,
+        config: Optional[Config] = None,
+        currtime: int = int(time.time()),
+    ) -> None:
+        if config is None:
+            config = Config()
         self.config = config
         self.logger = Logger()
         self.compute = Compute()
@@ -62,8 +68,8 @@ class Experiment(object):
             self.config.paths.artefacts,
             self.config.options.experiment,
         )
-        self.dataset = Dataset(config)
-        self.combine = Combiner(config)
+        self.dataset = DatasetParser(config)
+        self.audproc = AudioProcs(config)
         os.makedirs(self.experiment_dir, exist_ok=True)
 
     def tb_add_scalar(
@@ -90,7 +96,9 @@ class Experiment(object):
             global_step=step,
         )
 
-    def print_model_info(self: Self) -> None:
+    def print_model_info(
+        self: Self,
+    ) -> None:
         num_params = 0
         for p in self.model.parameters():
             num_params += p.numel()
@@ -220,11 +228,18 @@ class Experiment(object):
             self.tb_add_melspec(name="proc", tensor=proc, step=step)
             self.writer.flush()
 
-    def load_data(self: Self, **kwargs) -> None:
+    def load_data(
+        self: Self,
+        **kwargs,
+    ) -> None:
         self.data_loader = get_loader(self.config, **kwargs)
         self.data_iter = iter(self.data_loader)
 
-    def save_tensor(self: Self, tensor: torch.Tensor, fname: str) -> None:
+    def save_tensor(
+        self: Self,
+        tensor: torch.Tensor,
+        fname: str,
+    ) -> None:
         save_tensor(
             tensor,
             "{}/{}".format(
@@ -256,7 +271,18 @@ class Experiment(object):
         )
         return content_pitch_input_intrp_2
 
-    def get_next_data(self: Self):
+    def get_next_data(
+        self: Self,
+    ) -> Tuple[
+        str,
+        str,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
         fname: str
         spk_id_org: str
         spmel_gt: torch.Tensor
@@ -310,7 +336,9 @@ class Experiment(object):
         )
 
     @torch.no_grad()
-    def check_data(self: Self) -> None:
+    def check_data(
+        self: Self,
+    ) -> None:
         for item in self.logger.progress_bar(
             self.data_loader,
             desc=f"Verifying {self.config.options.dataset_name}",

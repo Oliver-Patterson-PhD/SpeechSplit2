@@ -1,5 +1,5 @@
 from tomllib import load as loadtoml
-from typing import List, Self
+from typing import List, Optional, Self
 
 import torch
 from tqdm import tqdm
@@ -46,8 +46,10 @@ class Wavenet(Synthesizer):
     def __init__(
         self: Self,
         device: torch.device,
-        config: Config,
+        config: Optional[Config] = None,
     ) -> None:
+        if config is None:
+            config = Config()
         self.config = config
         data_dir = self.config.paths.full_models
         config_file = f"{data_dir}/{self.model_name}.toml"

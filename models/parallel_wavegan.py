@@ -10,9 +10,9 @@ from typing import Any, Dict, Optional
 
 import torch
 
-from .layers.conv1d1x1 import Conv1d1x1
-from .layers.conv_in_upsample_network import ConvInUpsampleNetwork
-from .layers.residual_block import ResidualBlock
+from models.layers.conv1d1x1 import Conv1d1x1
+from models.layers.conv_in_upsample_network import ConvInUpsampleNetwork
+from models.layers.residual_block import ResidualBlock
 
 
 ## Parallel WaveGAN Generator module.

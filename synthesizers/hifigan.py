@@ -1,5 +1,5 @@
 # from tomllib import load as loadtoml
-from typing import Self
+from typing import Optional, Self
 
 import torch
 
@@ -17,8 +17,10 @@ class HiFiGAN(Synthesizer):
     def __init__(
         self: Self,
         device: torch.device,
-        config: Config,
+        config: Optional[Config] = None,
     ) -> None:
+        if config is None:
+            config = Config()
         self.device = device
         self.config = config
         # data_dir = self.config.paths.full_models

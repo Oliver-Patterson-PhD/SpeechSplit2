@@ -1,5 +1,5 @@
 from tomllib import load as loadtoml
-from typing import Self
+from typing import Optional, Self
 
 import torch
 
@@ -18,8 +18,10 @@ class Synthesizer(object):
         device: torch.device,
         model: type,
         model_name: str,
-        config: Config,
+        config: Optional[Config] = None,
     ) -> None:
+        if config is None:
+            config = Config()
         self.device = device
         self.model_name = model_name
         self.config = config

@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 
 import torch
 
-from data import preprocess_data
+from data import PreProcess
 from experiments import Scratchpad, Swapper, TestSamples, Train
 from util import Config, Logger, RunTests
 
@@ -27,7 +27,7 @@ def main() -> None:
     logger.trace_var(modelfiles, level="DEBUG")
 
     try:
-        preprocess_data(config)
+        PreProcess(config)
 
         if doscratch:
             scratch = Scratchpad(config)

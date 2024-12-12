@@ -2,9 +2,8 @@ from typing import Self
 
 import torch
 
+from models.layers.linear_norm import LinearNorm
 from util import Config
-
-from .layers.linear_norm import LinearNorm
 
 
 class SpeechSplitDecoder(torch.nn.Module):

@@ -60,6 +60,7 @@ class ConfigAudioProcessing:
     n_fft: int = 400
     sample_rate: int = 16000
     vtlp_fft: int = 400 * 2
+    fold_div: int = 2
 
 
 class ConfigModel:
@@ -109,6 +110,7 @@ class ConfigOptions:
     bottleneck: str = "large"
     model_type: str = "SpeechSplit2"
     whisper_type: str = "large-v3-turbo"
+    parallelwavegan_name: str = "parallelwavegan-3M"
     ntfy_url: str
     experiment: str
     dataset_name: str
@@ -173,6 +175,8 @@ class Config(metaclass=Singleton):
             else:
                 self.original_config = config_name
             self.load_config(config_name)
+        else:
+            raise RuntimeError("Config not initialised")
 
     ## Load config file and update values
     #  Duplicate values will be overwritten, existing config options that not
