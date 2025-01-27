@@ -14,13 +14,12 @@ class ParallelWaveGan(Synthesizer):
         device: torch.device,
         config: Optional[Config] = None,
     ) -> None:
-        if config is None:
-            config = Config()
+        self.config: Config = config or Config()
         super().__init__(
             device=device,
             model=ParallelWaveGANGenerator,
-            model_name=config.options.parallelwavegan_name,
-            config=config,
+            model_name=self.config.options.parallelwavegan_name,
+            config=self.config,
         )
         self.model.eval()
 

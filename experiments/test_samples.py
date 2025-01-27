@@ -14,9 +14,7 @@ class TestSamples(Experiment):
         config: Optional[Config] = None,
         currtime: int = int(time.time()),
     ) -> None:
-        if config is None:
-            config = Config()
-        self.config = config
+        self.config = config or Config()
 
     @torch.no_grad()
     def test(

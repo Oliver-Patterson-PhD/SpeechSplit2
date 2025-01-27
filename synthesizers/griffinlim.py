@@ -24,8 +24,7 @@ class GriffinLim(Synthesizer):
         device: torch.device,
         config: Optional[Config] = None,
     ) -> None:
-        if config is None:
-            config = Config()
+        self.config = config or Config()
         self.demel = torchaudio.transforms.InverseMelScale(
             n_stft=self.n_fft // 2 + 1,
             n_mels=self.dim_freq,

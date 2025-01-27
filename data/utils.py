@@ -11,7 +11,8 @@ import torch
 import torchaudio
 from pysptk.sptk import rapt
 
-from util import Compute, Config, norm_audio
+from util import Compute, Config
+from util.audio import norm_audio
 
 from .dataset import DatasetParser
 
@@ -23,10 +24,10 @@ class AudioProcs:
         self: Self,
         config: Optional[Config] = None,
     ) -> None:
+        self.__compute = Compute()
+        self.__parser = DatasetParser(config=config)
         if config is None:
             config = Config()
-        self.compute = Compute()
-        self.parser = DatasetParser(config=config)
         self.__dim_freq = config.model.dim_freq
         self.__n_fft = config.audio.n_fft
         self.__sample_rate = config.audio.sample_rate
@@ -145,11 +146,11 @@ class AudioProcs:
         self: Self,
         wav: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.__melbasis = self.__melbasis.to(self.compute.device())
+        self.__melbasis = self.__melbasis.to(self.__compute.device())
         rawspec: torch.Tensor = self.stft(wav.float())
         mags: torch.Tensor = rawspec.abs()
         phases: torch.Tensor = rawspec.angle()
-        mel_spec = self.__melbasis(mags.to(self.compute.device())).T
+        mel_spec = self.__melbasis(mags.to(self.__compute.device())).T
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
@@ -354,9 +355,9 @@ class AudioProcs:
         self: Self,
         speaker: str,
     ) -> Tuple[int, int]:
-        if self.parser.sex(speaker) == "M":
+        if self.__parser.sex(speaker) == "M":
             return self.__f0_m_lo, self.__f0_m_hi
-        elif self.parser.sex(speaker) == "F":
+        elif self.__parser.sex(speaker) == "F":
             return self.__f0_f_lo, self.__f0_f_hi
         else:
             raise ValueError

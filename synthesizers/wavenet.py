@@ -48,9 +48,7 @@ class Wavenet(Synthesizer):
         device: torch.device,
         config: Optional[Config] = None,
     ) -> None:
-        if config is None:
-            config = Config()
-        self.config = config
+        self.config = config or Config()
         data_dir = self.config.paths.full_models
         config_file = f"{data_dir}/{self.model_name}.toml"
         self.wavconf = WavenetConfig(loadtoml(open(config_file, "rb")))

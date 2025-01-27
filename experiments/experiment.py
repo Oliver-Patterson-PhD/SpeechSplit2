@@ -14,7 +14,8 @@ from torch.utils.tensorboard import SummaryWriter
 from data import AudioProcs, DatasetParser, get_loader
 from models.speechsplit import InterpLnr, SpeechSplit
 from util import Compute, Config, Logger, LogLevel, NanError
-from utils import quantize_f0_torch, save_tensor
+from util.tensor import save_tensor
+from utils import quantize_f0_torch
 
 
 class Experiment(object):
@@ -36,9 +37,7 @@ class Experiment(object):
         config: Optional[Config] = None,
         currtime: int = int(time.time()),
     ) -> None:
-        if config is None:
-            config = Config()
-        self.config = config
+        self.config = config or Config()
         self.logger = Logger()
         self.compute = Compute()
         self.compute.print_compute()

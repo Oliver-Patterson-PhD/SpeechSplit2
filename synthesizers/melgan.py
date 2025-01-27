@@ -14,8 +14,6 @@ class MelGan(Synthesizer):
         device: torch.device,
         config: Optional[Config] = None,
     ) -> None:
-        if config is None:
-            config = Config()
         super().__init__(
             device=device,
             model=MelGANGenerator,

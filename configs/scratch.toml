@@ -20,7 +20,7 @@ return_latents = false
 regenerate_data = true
 whisper_type = "tiny.en"
 resume_iters = 1200000
-parallelwavegan_name = "parallelwavegan-490000"
+parallelwavegan_name = "parallelwavegan-1000000"
 
 [dataloader]
 shuffle = false

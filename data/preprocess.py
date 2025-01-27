@@ -26,9 +26,7 @@ class PreProcess(metaclass=Singleton):
         self: Self,
         config: Optional[Config] = None,
     ) -> None:
-        if config is None:
-            config = Config()
-        self.config = config
+        self.config = config or Config()
         self.logger = Logger()
         self.in_path = config.paths.raw_wavs
         self.out_path = config.paths.features

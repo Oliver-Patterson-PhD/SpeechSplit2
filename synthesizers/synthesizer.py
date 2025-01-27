@@ -20,11 +20,9 @@ class Synthesizer(object):
         model_name: str,
         config: Optional[Config] = None,
     ) -> None:
-        if config is None:
-            config = Config()
-        self.device = device
+        self.config = config or Config()
         self.model_name = model_name
-        self.config = config
+        self.device = device
         config_file = f"{self.config.paths.full_models}/{self.model_name}.toml"
         pickle_file = f"{self.config.paths.full_models}/{self.model_name}.pkl"
         tomlconfig = loadtoml(open(config_file, "rb"))

@@ -6,8 +6,10 @@ import torchaudio
 
 from synthesizers import Synthesizer
 from transcribers import Transcriber
-from util import CompareItem, norm_audio
-from utils import save_tensor, zero_one_norm
+from util import CompareItem
+from util.audio import norm_audio
+from util.tensor import save_tensor
+from utils import zero_one_norm
 
 from .experiment import Experiment
 
@@ -48,7 +50,7 @@ class Scratchpad(Experiment):
             getattr(
                 __import__("synthesizers"),
                 synthname,
-            )(self.compute.device(), config=self.config)
+            )(self.compute.device())
             for synthname in [
                 # "MelGan",
                 "ParallelWaveGan",
@@ -162,8 +164,14 @@ class Scratchpad(Experiment):
     ) -> None:
         self.logger.trace_tensor(orig, "DEBUG")
         self.logger.trace_tensor(proc, "DEBUG")
-        raw_mags_orig = torch.sqrt(self.audproc.rev_spmel(orig.mT))
-        raw_mags_proc = torch.sqrt(self.audproc.rev_spmel(proc.mT))
+        self.logger.debug(f"orig: {orig.device.__str__()}")
+        self.logger.debug(f"proc: {proc.device.__str__()}")
+        origmt = self.audproc.rev_spmel(orig.mT)
+        procmt = self.audproc.rev_spmel(proc.mT)
+        self.logger.debug(f"origmt: {origmt.device.__str__()}")
+        self.logger.debug(f"procmt: {procmt.device.__str__()}")
+        raw_mags_orig = torch.sqrt(origmt)
+        raw_mags_proc = torch.sqrt(procmt)
 
         raw_audio_file = os.path.join(
             self.config.paths.raw_wavs, self.dataset.speaker(name), f"{name}.wav"

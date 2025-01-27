@@ -8,9 +8,10 @@ import torchaudio
 
 from data import get_loader
 from meta_dicts import MetaDictType, NamedMetaDictType
-from synthesizers import (GriffinLim, MelGan, ParallelWaveGan, Synthesizer,
-                          Wavenet)
-from utils import norm_audio, quantize_f0_torch, save_tensor
+from synthesizers import GriffinLim, MelGan, ParallelWaveGan, Synthesizer, Wavenet
+from utils import quantize_f0_torch
+from util.audio import norm_audio
+from util.tensor import save_tensor
 
 from .experiment import Experiment
 
