@@ -6,7 +6,6 @@ from tqdm import tqdm
 
 from models.wavenet_vocoder import WaveNet as WavenetGenerator
 from util import Config
-from util import Logger
 
 from .synthesizer import Synthesizer
 

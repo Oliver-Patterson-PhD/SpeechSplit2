@@ -21,7 +21,7 @@ def save_tensor(
         norm_image = 1.0 / (im_max - im_min) * image + 1.0 * im_min / (im_min - im_max)
         save_image(norm_image, save_path)
     else:
-        torch.save(tensor, save_path.rsplit(",", 1)[0] + ".pth")
+        torch.save(tensor, save_path.rsplit(".", 1)[0] + ".pth")
     return
 
 

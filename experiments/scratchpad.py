@@ -31,9 +31,7 @@ class Scratchpad(Experiment):
     synth_list: List[Synthesizer]
 
     @torch.no_grad()
-    def run(
-        self: Self,
-    ) -> None:
+    def run(self: Self) -> None:
         self.transcriber = Transcriber(
             device=self.compute.device(),
             model_name=self.config.options.whisper_type,
@@ -71,9 +69,7 @@ class Scratchpad(Experiment):
         self.process()
 
     @torch.no_grad()
-    def process(
-        self: Self,
-    ) -> None:
+    def process(self: Self) -> None:
         self.load_data(singleitem=True, sequential=True)
         proc_data = [item for item in self.data_loader]
         proc_data = sorted(proc_data, key=lambda i: i[0])[:5]
@@ -115,10 +111,7 @@ class Scratchpad(Experiment):
 
     @torch.no_grad()
     def save_item(
-        self: Self,
-        name: str,
-        orig: torch.Tensor,
-        proc: torch.Tensor,
+        self: Self, name: str, orig: torch.Tensor, proc: torch.Tensor
     ) -> None:
         self.logger.debug(f"Processing: {name}")
         open(os.path.join(self.lossdir, name + ".txt"), "w").write(
@@ -157,10 +150,7 @@ class Scratchpad(Experiment):
         return raw_phases
 
     def full_convert(
-        self: Self,
-        name: str,
-        orig: torch.Tensor,
-        proc: torch.Tensor,
+        self: Self, name: str, orig: torch.Tensor, proc: torch.Tensor
     ) -> None:
         self.logger.trace_tensor(orig, "DEBUG")
         self.logger.trace_tensor(proc, "DEBUG")
@@ -223,11 +213,7 @@ class Scratchpad(Experiment):
         )
         return
 
-    def save_audio(
-        self: Self,
-        wav: torch.Tensor,
-        file: str,
-    ) -> None:
+    def save_audio(self: Self, wav: torch.Tensor, file: str) -> None:
         torchaudio.save(
             file,
             wav.cpu(),
@@ -244,11 +230,7 @@ class Scratchpad(Experiment):
 
     @torch.no_grad()
     def process_synth(
-        self: Self,
-        synt: Synthesizer,
-        name: str,
-        orig: torch.Tensor,
-        proc: torch.Tensor,
+        self: Self, synt: Synthesizer, name: str, orig: torch.Tensor, proc: torch.Tensor
     ) -> None:
         self.logger.debug(f"Synthesizing: {synt.model_name}")
         synth_gt = os.path.join(self.wavsdir, f"{name}-{synt}-orig.wav")
@@ -260,10 +242,7 @@ class Scratchpad(Experiment):
 
     @torch.no_grad()
     def single_spmel_to_audio(
-        self: Self,
-        file: str,
-        spec: torch.Tensor,
-        synt: Synthesizer,
+        self: Self, file: str, spec: torch.Tensor, synt: Synthesizer
     ) -> None:
         wav = synt.spect2wav(spec).unsqueeze(dim=0)
         self.logger.trace_tensor(wav)

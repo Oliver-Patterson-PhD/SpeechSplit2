@@ -1,6 +1,7 @@
 __all__ = [
-    "Generator",
+    "HiFiGenerator",
     "HiFiConfig",
 ]
 
-from .generator import Generator, HiFiConfig
+from .generator import HiFiGanGenerator as HiFiGenerator
+from .generator import HiFiConfig as HiFiConfig

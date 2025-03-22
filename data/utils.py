@@ -35,7 +35,6 @@ class AudioProcs:
         self.__hop_length = config.audio.hop_len
         self.__vtlp_fft = config.audio.vtlp_fft
         self.__hi_pass_cutoff = config.audio.hi_pass_cutoff
-        self.__vtlp_window = torch.hann_window(self.__vtlp_fft)
         self.__f0_m_lo = config.audio.f0_m_lo
         self.__f0_m_hi = config.audio.f0_m_hi
         self.__f0_f_lo = config.audio.f0_f_lo
@@ -173,11 +172,11 @@ class AudioProcs:
     ) -> torch.Tensor:
         if alpha is None:
             alpha = 0.2 * torch.rand(1).item() + 0.9
-        self.__vtlp_window.to(x.device)
+        vtlp_window = torch.hann_window(self.__vtlp_fft, device=x.device)
         vtlp_stft = torch.stft(
             x,
             n_fft=self.__vtlp_fft,
-            window=self.__vtlp_window,
+            window=vtlp_window,
             return_complex=True,
         ).T
         dtype = vtlp_stft.dtype
@@ -206,7 +205,7 @@ class AudioProcs:
         y = torch.istft(
             new_S.T,
             n_fft=self.__vtlp_fft,
-            window=self.__vtlp_window,
+            window=vtlp_window,
         )
         if len(x) <= len(y):
             y = y[: len(x)]

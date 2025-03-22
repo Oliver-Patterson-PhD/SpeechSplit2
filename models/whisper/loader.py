@@ -6,6 +6,8 @@ from typing import List, Union
 import torch
 from tqdm import tqdm
 
+from ...util.file import fread
+
 from .model import ModelDimensions, Whisper
 
 _MODELS = {
@@ -56,13 +58,12 @@ def _download(url: str, root: str) -> str:
         raise Exception(f"{download_target} exists and is not a regular file")
 
     if os.path.isfile(download_target):
-        with open(download_target, "rb") as f:
-            model_bytes = f.read()
+        model_bytes = fread(download_target, binary=True)
         if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
             return download_target
         else:
             raise Exception(
-                f"{download_target} exists, but the SHA256 checksum does not match, re-downloading the file"
+                f"{download_target} exists, but the SHA256 checksum does not match"
             )
 
     with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
@@ -79,13 +80,8 @@ def _download(url: str, root: str) -> str:
                     break
                 output.write(buffer)
                 loop.update(len(buffer))
-
     model_bytes = open(download_target, "rb").read()
-    if hashlib.sha256(model_bytes).hexdigest() != expected_sha256:
-        raise Exception(
-            "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
-        )
-
+    assert hashlib.sha256(model_bytes).hexdigest() == expected_sha256
     return download_target
 
 
@@ -94,23 +90,15 @@ def load_model(
     device: Union[str, torch.device],
     download_root: str,
 ) -> Whisper:
-    if name in _MODELS:
-        checkpoint_file = _download(_MODELS[name], download_root)
-        alignment_heads = _ALIGNMENT_HEADS[name]
-    else:
-        raise Exception(
-            f"Model {name} not found, available models: {available_models()}"
-        )
-
-    with open(checkpoint_file, "rb") as fp:
-        checkpoint = torch.load(fp, map_location=device, weights_only=True)
-    del checkpoint_file
-
-    dims = ModelDimensions(**checkpoint["dims"])
-    model = Whisper(dims)
+    assert name in _MODELS, f"{name} not found: {available_models()}"
+    alignment_heads = _ALIGNMENT_HEADS[name]
+    checkpoint = torch.load(
+        _download(_MODELS[name], download_root),
+        map_location=device,
+        weights_only=True,
+    )
+    model = Whisper(**checkpoint["dims"])
     model.load_state_dict(checkpoint["model_state_dict"])
-
     if alignment_heads is not None:
         model.set_alignment_heads(alignment_heads)
-
     return model.to(device)

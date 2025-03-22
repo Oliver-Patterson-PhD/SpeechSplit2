@@ -47,7 +47,7 @@ class ConfigPaths:
 
 
 class ConfigAudioProcessing:
-    chunk_length = 30
+    chunk_length: int = 30
     f0_f_hi: int = 600
     f0_f_lo: int = 100
     f0_m_hi: int = 250

@@ -51,7 +51,7 @@ class MyDataset(torch.utils.data.Dataset):
         self.myproc = AudioProcs(config)
         spk_meta = getattr(__import__("meta_dicts"), config.options.dataset_name)
         _, spk_dir_list, _ = next(os.walk(config.paths.monowavs))
-        self.map_device = Compute().device()
+        self.map_device = torch.device("cpu")
         self.dataset = [
             (
                 str(spk_dir),
@@ -80,10 +80,10 @@ class MyDataset(torch.utils.data.Dataset):
         ]
         self.num_tokens = len(self.dataset)
 
-    def map_cpu(
+    def pinnable(
         self: Self,
     ) -> bool:
-        return self.map_device == torch.device("cpu")
+        return Compute().could_be_gpu() and self.map_device == torch.device("cpu")
 
     def __len__(
         self: Self,
@@ -215,7 +215,7 @@ def get_loader(
         num_workers=0 if singleitem else config.dataloader.num_workers,
         prefetch_factor=None if singleitem else config.dataloader.num_workers,
         drop_last=False,
-        pin_memory=Compute().could_be_gpu() and dataset.map_cpu(),
+        pin_memory=dataset.pinnable(),
         worker_init_fn=worker_init_fn,
     )
     logger.debug("Created DataLoader")

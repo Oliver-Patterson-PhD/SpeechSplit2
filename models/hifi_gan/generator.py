@@ -1,3 +1,8 @@
+__all__ = [
+    "HiFiGanGenerator",
+]
+
+
 from typing import Self
 
 import torch
@@ -6,7 +11,7 @@ from .resblocks import ResBlock1, ResBlock2
 from .util import LRELU_SLOPE, HiFiConfig, init_weights
 
 
-class Generator(torch.nn.Module):
+class HiFiGanGenerator(torch.nn.Module):
     num_kernels: int
     num_upsamples: int
 
@@ -14,7 +19,7 @@ class Generator(torch.nn.Module):
         self: Self,
         hifi_config: HiFiConfig,
     ) -> None:
-        super(Generator, self).__init__()
+        super(HiFiGanGenerator, self).__init__()
         self.hifi_config = hifi_config
         self.num_kernels = len(hifi_config.resblock_kernel_sizes)
         self.num_upsamples = len(hifi_config.upsample_rates)
