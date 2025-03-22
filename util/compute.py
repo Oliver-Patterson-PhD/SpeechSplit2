@@ -6,13 +6,12 @@ from typing import Self, Tuple
 
 import torch
 
-from .logging import Logger
 from .patterns import Singleton
+from .logging import Logger
 
 
 ## Compute device handler
 class Compute(metaclass=Singleton):
-    __logger: Logger
     __device: torch.device
     __current_device: torch.device
     __device_id: int
@@ -24,7 +23,6 @@ class Compute(metaclass=Singleton):
     def __init__(
         self: Self,
     ) -> None:
-        self.__logger = Logger()
         if torch.cuda.is_available():
             self.__device = torch.device("cuda")
             if self.__device is not None:
@@ -52,7 +50,7 @@ class Compute(metaclass=Singleton):
     def set_cpu(
         self: Self,
     ) -> None:
-        self.__logger.info("Explicitly setting CPU for inference.")
+        Logger().info("Explicitly setting CPU for inference.")
         self.__current_device = torch.device("cpu")
         torch.set_default_device("cpu")
         return None
@@ -60,7 +58,7 @@ class Compute(metaclass=Singleton):
     def set_gpu(
         self: Self,
     ) -> None:
-        self.__logger.info("Explicitly setting GPU for inference.")
+        Logger().info("Explicitly setting GPU for inference.")
         self.__current_device = self.__device
         torch.set_default_device(self.__device)
         return None
@@ -71,19 +69,27 @@ class Compute(metaclass=Singleton):
         torch.set_default_device(self.__device)
         return None
 
+    def __repr__(
+        self: Self,
+    ):
+        return self.__str__()
+
+    def __str__(
+        self: Self,
+    ) -> str:
+        if self.__device.type == "cuda":
+            return "Using GPU {:d} {:s} with {:.1f}Gb total memory.".format(
+                self.__device_id,
+                self.__gpu_name[0],
+                self.__gpu_memory[0],
+            )
+        else:
+            return "Using CPU for inference."
+
     def print_compute(
         self: Self,
     ) -> None:
-        if self.__device.type == "cuda":
-            self.__logger.info(
-                "Using GPU {:d} {:s} with {:.1f}Gb total memory.".format(
-                    self.__device_id,
-                    self.__gpu_name[0],
-                    self.__gpu_memory[0],
-                )
-            )
-        else:
-            self.__logger.info("Using CPU for inference.")
+        Logger().info(self.__str__())
 
     def is_cpu(
         self: Self,
@@ -94,3 +100,8 @@ class Compute(metaclass=Singleton):
         self: Self,
     ) -> bool:
         return self.__current_device != torch.device("cpu")
+
+    def could_be_gpu(
+        self: Self,
+    ) -> bool:
+        return self.__device != torch.device("cpu")

@@ -3,9 +3,9 @@ proc_data = "/mnt/datasets/processed"
 raw_data = "/mnt/datasets/raw"
 
 [options]
-bottleneck = "large"
-experiment = "trainmask"
-ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
+bottleneck = "switch"
+experiment = "trainswitch"
+audio = "speechsplit2"
 trace = false
 
 [log]

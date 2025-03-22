@@ -24,7 +24,6 @@ class AudioProcs:
         self: Self,
         config: Optional[Config] = None,
     ) -> None:
-        self.__compute = Compute()
         self.__parser = DatasetParser(config=config)
         if config is None:
             config = Config()
@@ -73,7 +72,6 @@ class AudioProcs:
             mel_scale="htk",
             driver="gels",
         )
-        self.__simplewindow = torch.hann_window(self.__n_fft)
         return
 
     def stft(
@@ -85,7 +83,7 @@ class AudioProcs:
             n_fft=self.__n_fft,
             hop_length=self.__hop_length,
             win_length=self.__n_fft,
-            window=self.__simplewindow.to(wav.device),
+            window=torch.hann_window(self.__n_fft, device=wav.device),
             center=True,
             pad_mode="reflect",
             normalized=False,
@@ -102,7 +100,7 @@ class AudioProcs:
             n_fft=self.__n_fft,
             hop_length=self.__hop_length,
             win_length=self.__n_fft,
-            window=self.__simplewindow.to(spec.device),
+            window=torch.hann_window(self.__n_fft, device=spec.device),
             center=True,
             normalized=False,
             onesided=True,
@@ -146,11 +144,11 @@ class AudioProcs:
         self: Self,
         wav: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.__melbasis = self.__melbasis.to(self.__compute.device())
+        self.__melbasis = self.__melbasis.to(Compute().device())
         rawspec: torch.Tensor = self.stft(wav.float())
         mags: torch.Tensor = rawspec.abs()
         phases: torch.Tensor = rawspec.angle()
-        mel_spec = self.__melbasis(mags.to(self.__compute.device())).T
+        mel_spec = self.__melbasis(mags.to(Compute().device())).T
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
@@ -175,6 +173,7 @@ class AudioProcs:
     ) -> torch.Tensor:
         if alpha is None:
             alpha = 0.2 * torch.rand(1).item() + 0.9
+        self.__vtlp_window.to(x.device)
         vtlp_stft = torch.stft(
             x,
             n_fft=self.__vtlp_fft,

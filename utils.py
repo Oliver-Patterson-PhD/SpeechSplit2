@@ -7,6 +7,9 @@ from pysptk.sptk import rapt
 
 from util import Logger
 
+cpufloat = float
+gpufloat = torch.float
+
 N_FFT: int = 400
 HOP_LENGTH: int = 160
 DIM_FREQ: int = 80

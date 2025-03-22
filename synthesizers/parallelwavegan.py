@@ -18,7 +18,7 @@ class ParallelWaveGan(Synthesizer):
         super().__init__(
             device=device,
             model=ParallelWaveGANGenerator,
-            model_name=self.config.options.parallelwavegan_name,
+            model_name="parallelwavegan/" + self.config.options.parallelwavegan_name,
             config=self.config,
         )
         self.model.eval()

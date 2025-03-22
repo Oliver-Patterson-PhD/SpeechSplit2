@@ -8,7 +8,7 @@ from typing import List, Self, Tuple
 
 import torch
 
-from util import Config, Logger
+from util import Config, Logger, Compute
 
 from .utils import AudioProcs
 
@@ -34,12 +34,12 @@ class MyDataset(torch.utils.data.Dataset):
     path_monowavs: str
     path_spmels: str
     full_info: bool
+    map_device: torch.device
 
     def __init__(
         self: Self,
         config: Config,
     ) -> None:
-        logger = Logger()
         self.dataset_name = config.options.dataset_name
         self.sample_rate = config.audio.sample_rate
         self.max_len_seq = config.model.max_len_seq
@@ -51,16 +51,17 @@ class MyDataset(torch.utils.data.Dataset):
         self.myproc = AudioProcs(config)
         spk_meta = getattr(__import__("meta_dicts"), config.options.dataset_name)
         _, spk_dir_list, _ = next(os.walk(config.paths.monowavs))
+        self.map_device = Compute().device()
         self.dataset = [
             (
-                spk_dir,
-                torch.zeros((config.model.dim_spk_emb,), dtype=torch.float32)
-                .index_fill(0, torch.tensor([int(spk_meta[spk_dir][0])]), 1)
-                .to("cpu"),
+                str(spk_dir),
+                torch.zeros(
+                    (config.model.dim_spk_emb,), dtype=torch.float32
+                ).index_fill(0, torch.tensor([int(spk_meta[spk_dir][0])]), 1),
                 self.load_from_meta(str(os.path.join(spk_dir, filepath))),
                 str(os.path.join(spk_dir, filepath)),
             )
-            for spk_dir in logger.progress_bar(
+            for spk_dir in Logger().progress_bar(
                 sorted(spk_dir_list), desc="speakers loaded"
             )
             if spk_dir in spk_meta
@@ -78,7 +79,11 @@ class MyDataset(torch.utils.data.Dataset):
             )[2]
         ]
         self.num_tokens = len(self.dataset)
-        return
+
+    def map_cpu(
+        self: Self,
+    ) -> bool:
+        return self.map_device == torch.device("cpu")
 
     def __len__(
         self: Self,
@@ -101,16 +106,14 @@ class MyDataset(torch.utils.data.Dataset):
         spk_dir, spk_emb, (wav_mono, spmel, f0), fname = self.dataset[index]
         p_mono: torch.Tensor
         if self.full_info:
-            p_mono = wav_mono.to("cpu")
+            p_mono = wav_mono
         else:
             alpha: float = 0.2 * torch.rand(1).item() + 0.9
-            p_mono = self.myproc.vtlp(wav_mono, self.sample_rate, alpha).to("cpu")
+            p_mono = self.myproc.vtlp(wav_mono, self.sample_rate, alpha)
         len_crop = torch.tensor([self.max_len_seq], dtype=torch.double, device="cpu")
-        spenv = self.check(
-            self.myproc.get_spenv(p_mono).to("cpu"), f"spenv invalid: {fname}"
-        )
+        spenv = self.check(self.myproc.get_spenv(p_mono), f"spenv invalid: {fname}")
         p_mel, _ = self.myproc.get_spmel(p_mono)
-        spmel = self.check(p_mel.to("cpu"), f"spmel invalid: {fname}")
+        spmel = self.check(p_mel, f"spmel invalid: {fname}")
         return (
             fname,  # Filename
             spk_dir,  # Speaker ID string
@@ -133,19 +136,23 @@ class MyDataset(torch.utils.data.Dataset):
             wav_mono = torch.load(
                 os.path.join(self.path_fullwavs, filepath),
                 weights_only=True,
+                map_location=self.map_device,
             )
         else:
             wav_mono = torch.load(
                 os.path.join(self.path_monowavs, filepath),
                 weights_only=True,
+                map_location=self.map_device,
             )
         spmel = torch.load(
             os.path.join(self.path_spmels, filepath),
             weights_only=True,
+            map_location=self.map_device,
         )
         f0 = torch.load(
             os.path.join(self.path_freqs, filepath),
             weights_only=True,
+            map_location=self.map_device,
         )
         o_wav_mono = self.check(wav_mono.float(), f"wav invalid: {filepath}")
         o_spmel = self.check(spmel.float(), f"spmel invalid: {filepath}")
@@ -179,15 +186,18 @@ def get_loader(
     singleitem: bool = False,
 ) -> torch.utils.data.DataLoader:
     logger = Logger()
+    logger.debug(f"Initialising DataLoader for {config.options.dataset_name}")
     dataset: torch.utils.data.Dataset
     sampler: torch.utils.data.sampler.Sampler
     dataset = MyDataset(config)
     if sequential:
         sampler = torch.utils.data.SequentialSampler(dataset)
     else:
+        gen = torch.Generator(device=Compute().device())
         sampler = torch.utils.data.RandomSampler(
             data_source=dataset,
             replacement=True,
+            generator=gen,
             num_samples=(
                 (len(dataset) * config.dataloader.samplier)
                 if singleitem
@@ -198,7 +208,6 @@ def get_loader(
                 )
             ),
         )
-    logger.debug(f"Initialising DataLoader for {config.options.dataset_name}")
     data_loader = torch.utils.data.DataLoader(
         dataset=dataset,
         batch_size=1 if singleitem else config.dataloader.batch_size,
@@ -206,7 +215,7 @@ def get_loader(
         num_workers=0 if singleitem else config.dataloader.num_workers,
         prefetch_factor=None if singleitem else config.dataloader.num_workers,
         drop_last=False,
-        pin_memory=True,
+        pin_memory=Compute().could_be_gpu() and dataset.map_cpu(),
         worker_init_fn=worker_init_fn,
     )
     logger.debug("Created DataLoader")

@@ -1,16 +1,12 @@
-from argparse import ArgumentParser
-
-import torch
-
-from data import PreProcess
-from experiments import Scratchpad, Swapper, TestSamples, Train
-from util import Config, Logger, RunTests
-
-
 def main() -> None:
+    import torch
+    from argparse import ArgumentParser
+
+    from data import PreProcess
+    from experiments import Scratchpad, Swapper, TestSamples, Train
+    from util import Config, Logger, RunTests, Compute
+
     torch.backends.cudnn.benchmark = True
-    torch.multiprocessing.set_sharing_strategy("file_system")
-    torch.multiprocessing.set_start_method("spawn")
     parser = ArgumentParser()
     parser.add_argument("--config_name", type=str, default="base")
     parser.add_argument("--scratch", action="store_true")
@@ -18,6 +14,7 @@ def main() -> None:
     config = Config("scratch" if args.scratch else args.config_name)
     doscratch = args.scratch
     logger = Logger()
+    Compute().set_gpu()
     logger.debug("Starting Main")
     if config.options.run_tests == RunTests.NOTHING and not doscratch:
         return

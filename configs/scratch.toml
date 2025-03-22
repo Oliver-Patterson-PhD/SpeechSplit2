@@ -9,7 +9,6 @@ file = true
 [options]
 bottleneck = "large"
 experiment = "scratch"
-ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
 trace = false
 dataset_name = "smolvctk"
 num_iters = 1

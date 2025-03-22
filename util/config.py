@@ -111,7 +111,6 @@ class ConfigOptions:
     model_type: str = "SpeechSplit2"
     whisper_type: str = "large-v3-turbo"
     parallelwavegan_name: str = "parallelwavegan-3M"
-    ntfy_url: str
     experiment: str
     dataset_name: str
     return_latents: bool = False

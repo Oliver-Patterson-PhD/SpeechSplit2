@@ -46,8 +46,8 @@ class HiFiGAN(Synthesizer):
         for k in CHECKPOINT_SPECIFIC_ARGS:
             self.logger.debug(f"{k}: {vocoder_train_setup.get(k, None)}")
         self.div_val = vocoder_train_setup.get("max_wav_value", 1)
-        self.hifigan.to(device)
-        self.denoiser.to(device)
+        self.hifigan.to(self.device)
+        self.denoiser.to(self.device)
         self.denoising_strength = 0.05
         self.hifigan.eval()
         self.denoiser.eval()
@@ -59,8 +59,10 @@ class HiFiGAN(Synthesizer):
     ) -> torch.Tensor:
         retval = (
             self.denoiser(
-                self.hifigan(spect.T).float().squeeze(1), self.denoising_strength
+                self.hifigan(spect.T.to(self.device)).float().squeeze(1),
+                self.denoising_strength,
             )
+            .to(self.device)
             .squeeze()
             .T
         )

@@ -1,9 +1,8 @@
 [options]
-experiment = "trainmask"
+experiment = "trainswitch"
 run_tests = ["train"]
 dataset_name = "vctk"
-num_iters = 12800000
-resume_iters = 6400000
+num_iters = 6400000
 log_step = 10000
 ckpt_save_step = 10000
 train = true
@@ -12,9 +11,9 @@ regenerate_data = false
 
 [dataloader]
 shuffle = true
-batch_size = 64
-num_workers = 20
-samplier = 64
+batch_size = 128
+num_workers = 24
+samplier = 8
 drop_and_pad = false
 
 [training]

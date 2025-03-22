@@ -28,11 +28,11 @@ class PreProcess(metaclass=Singleton):
     ) -> None:
         self.config = config or Config()
         self.logger = Logger()
-        self.in_path = config.paths.raw_wavs
-        self.out_path = config.paths.features
-        self.max_len_pad = config.audio.max_len_pad
-        self.hop_length = config.audio.hop_len
-        self.proc = AudioProcs(config=config)
+        self.in_path = self.config.paths.raw_wavs
+        self.out_path = self.config.paths.features
+        self.max_len_pad = self.config.audio.max_len_pad
+        self.hop_length = self.config.audio.hop_len
+        self.proc = AudioProcs(config=self.config)
         self.parser = DatasetParser(config=config)
         procdata_exists = all(
             [
@@ -40,10 +40,10 @@ class PreProcess(metaclass=Singleton):
                 for speaker in self.parser.speakers()
             ]
         )
-        if procdata_exists and not config.options.regenerate_data:
+        if procdata_exists and not self.config.options.regenerate_data:
             self.logger.info("Preprocessing Skipped")
             return
-        spk_dir_list = next(os.walk(config.paths.raw_wavs))[1]
+        spk_dir_list = next(os.walk(self.config.paths.raw_wavs))[1]
         speakers = [spk for spk in spk_dir_list if spk in self.parser.speakers()]
         self.logger.info(f"Found {len(speakers)} speakers")
         [

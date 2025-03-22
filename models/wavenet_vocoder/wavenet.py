@@ -63,45 +63,38 @@ def receptive_field_size(
     return (kernel_size - 1) * sum(dilations) + 1
 
 
+## The WaveNet model that supports local and global conditioning.
 class WaveNet(torch.nn.Module):
-    """The WaveNet model that supports local and global conditioning.
 
-    Args:
-        out_channels (int): Output channels. If input_type is mu-law quantized
-          one-hot vecror. this must equal to the quantize channels. Other wise
-          num_mixtures x 3 (pi, mu, log_scale).
-        layers (int): Number of total layers
-        stacks (int): Number of dilation cycles
-        residual_channels (int): Residual input / output channels
-        gate_channels (int): Gated activation channels.
-        skip_out_channels (int): Skip connection channels.
-        kernel_size (int): Kernel size of convolution layers.
-        dropout (float): Dropout probability.
-        cin_channels (int): Local conditioning channels. If negative value is
-          set, local conditioning is disabled.
-        gin_channels (int): Global conditioning channels. If negative value is
-          set, global conditioning is disabled.
-        n_speakers (int): Number of speakers. Used only if global conditioning
-          is enabled.
-        weight_normalization (bool): If True, DeepVoice3-style weight
-          normalization is applied.
-        upsample_conditional_features (bool): Whether upsampling local
-          conditioning features by transposed convolution layers or not.
-        upsample_scales (list): List of upsample scale.
-          ``prod(upsample_scales)`` must equal to hop size. Used only if
-          upsample_conditional_features is enabled.
-        freq_axis_kernel_size (int): Freq-axis kernel_size for transposed
-          convolution layers for upsampling. If you only care about time-axis
-          upsampling, set this to 1.
-        scalar_input (Bool): If True, scalar input ([-1, 1]) is expected, otherwise
-          quantized one-hot vector is expected.
-        use_speaker_embedding (Bool): Use speaker embedding or Not. Set to False
-          if you want to disable embedding layer and use external features
-          directly.
-        legacy (bool) Use legacy code or not. Default is True for backward
-          compatibility.
-    """
-
+    ## Initialiser
+    # @param out_channels                   Output channels.
+    #                                       If input_type is mu-law quantized one-hot vecror.
+    #                                       This must equal to the quantize channels.
+    #                                       Other wise num_mixtures x 3 (pi, mu, log_scale).
+    # @param layers                         Number of total layers
+    # @param stacks                         Number of dilation cycles
+    # @param residual_channels              Residual input / output channels
+    # @param gate_channels                  Gated activation channels.
+    # @param skip_out_channels              Skip connection channels.
+    # @param kernel_size                    Kernel size of convolution layers.
+    # @param dropout                        Dropout probability.
+    # @param cin_channels                   Local conditioning channels.
+    #                                       If negative value is set, local conditioning is disabled.
+    # @param gin_channels                   Global conditioning channels.
+    #                                       If negative value is set, global conditioning is disabled.
+    # @param n_speakers                     Number of speakers.
+    #                                       Used only if global conditioning is enabled.
+    # @param weight_normalization           If True, DeepVoice3-style weight normalization is applied.
+    # @param upsample_conditional_features  Whether upsampling local conditioning features by transposed convolution layers or not.
+    # @param upsample_scales                List of upsample scale. ``prod(upsample_scales)`` must equal to hop size.
+    #                                       Used only if upsample_conditional_features is enabled.
+    # @param freq_axis_kernel_size          Freq-axis kernel_size for transposed convolution layers for upsampling. If you only care about time-axis upsampling, set this to 1.
+    #
+    # @param scalar_input                   If True, scalar input ([-1, 1]) is expected, otherwise quantized one-hot vector is expected.
+    # @param use_speaker_embedding          Use speaker embedding or Not.
+    #                                       Set to False if you want to disable embedding layer and use external features directly.
+    # @param legacy                         Use legacy code or not.
+    #                                       Default is True for backward compatibility.
     def __init__(
         self: Self,
         out_channels: int = 256,
@@ -206,16 +199,16 @@ class WaveNet(torch.nn.Module):
     def local_conditioning_enabled(self: Self) -> bool:
         return self.cin_channels > 0
 
-    # Forward step
-    # Args:
-    #     x (Tensor): One-hot encoded audio signal, shape (B x C x T)
-    #     c (Tensor): Local conditioning features, shape (B x cin_channels x T)
-    #     g (Tensor): Global conditioning features, shape (B x gin_channels x 1) or speaker Ids of shape (B x 1).
-    #       Note that `self.use_speaker_embedding` must be False when you want to disable embedding layer and use external features directly (e.g., one-hot vector).
-    #       Also type of input tensor must be FloatTensor, not LongTensor in case of `self.use_speaker_embedding` equals False.
-    #     softmax (bool): Whether applies softmax or not.
-    # Returns:
-    #     Tensor: output, shape B x out_channels x T
+    ## Forward step
+    #
+    # @param x          One-hot encoded audio signal, shape (B x C x T)
+    # @param c          Local conditioning features, shape (B x cin_channels x T)
+    # @param g          Global conditioning features, shape (B x gin_channels x 1) or speaker Ids of shape (B x 1).
+    #                   Note that `self.use_speaker_embedding` must be False when you want to disable embedding layer and use external features directly (e.g., one-hot vector).
+    #                   Also type of input tensor must be FloatTensor, not LongTensor in case of `self.use_speaker_embedding` equals False.
+    # @param softmax    Whether applies softmax or not.
+    #
+    # @returns output, shape B x out_channels x T
     def forward(
         self: Self,
         x: torch.Tensor,
@@ -223,18 +216,18 @@ class WaveNet(torch.nn.Module):
         g: Optional[torch.Tensor] = None,
         softmax: bool = False,
     ) -> torch.Tensor:
-        B, _, T = x.size()
+        batch_size, _, time_size = x.size()
 
         if g is not None:
             if self.embed_speakers is not None:
                 # (B x 1) -> (B x 1 x gin_channels)
-                g = self.embed_speakers(g.view(B, -1))
+                g = self.embed_speakers(g.view(batch_size, -1))
                 # (B x gin_channels x 1)
                 assert g is not None
                 g = g.transpose(1, 2)
                 assert g.dim() == 3
         # Expand global conditioning features to all time steps
-        g_bct = _expand_global_features(B, T, g, bct=True)
+        g_bct = _expand_global_features(batch_size, time_size, g, bct=True)
 
         if c is not None and self.upsample_conv is not None:
             # B x 1 x C x T
@@ -268,28 +261,29 @@ class WaveNet(torch.nn.Module):
         return x
 
     ## Incremental forward step
+    #
     # Due to linearized convolutions, inputs of shape (B x C x T) are reshaped
     # to (B x T x C) internally and fed to the network for each time step.
     # Input of each time step will be of shape (B x 1 x C).
-    # Args:
-    #     initial_input (Tensor): Initial decoder input, (B x C x 1)
-    #     c (Tensor): Local conditioning features, shape (B x C' x T)
-    #     g (Tensor): Global conditioning features, shape (B x C'' or B x C''x 1)
-    #     T (int): Number of time steps to generate.
-    #     test_inputs (Tensor): Teacher forcing inputs (for debugging)
-    #     tqdm (lamda) : tqdm
-    #     softmax (bool) : Whether applies softmax or not
-    #     quantize (bool): Whether quantize softmax output before feeding the network output to input for the next time step.
-    #     log_scale_min (float):  Log scale minimum value.
-    # Returns:
-    #     Tensor: Generated one-hot encoded samples. B x C x T
-    #       or scaler vector B x 1 x T
+    #
+    # @param initial_input  Initial decoder input, (B x C x 1)
+    # @param c              Local conditioning features, shape (B x C' x T)
+    # @param g              Global conditioning features, shape (B x C'' or B x C''x 1)
+    # @param time_steps     Number of time steps to generate.
+    # @param test_inputs    Teacher forcing inputs (for debugging)
+    # @param tqdm           tqdm
+    # @param softmax        Whether applies softmax or not
+    # @param quantize       Whether quantize softmax output before feeding the network output to input for the next time step.
+    # @param log_scale_min  Log scale minimum value.
+    #
+    # @return   Generated one-hot encoded samples.
+    #           B x C x T or scaler vector B x 1 x T
     def incremental_forward(
         self: Self,
         initial_input: Optional[torch.Tensor] = None,
         c: Optional[torch.Tensor] = None,
         g: Optional[torch.Tensor] = None,
-        T: int = 100,
+        time_steps: int = 100,
         test_inputs: Optional[torch.Tensor] = None,
         tqdm: Callable = lambda x: x,
         softmax: bool = True,
@@ -297,7 +291,9 @@ class WaveNet(torch.nn.Module):
         log_scale_min: float = -7.0,
     ) -> torch.Tensor:
         self.clear_buffer()
-        B = 1
+        batch_size = 1
+        # Note: B = batch_size
+        # Note: T = test_size
         # Note: shape should be **(B x T x C)**, not (B x C x T) opposed to
         # batch forward due to linealized convolution
         if test_inputs is not None:
@@ -307,22 +303,20 @@ class WaveNet(torch.nn.Module):
             else:
                 if test_inputs.size(1) == self.out_channels:
                     test_inputs = test_inputs.transpose(1, 2).contiguous()
-            B = test_inputs.size(0)
-            if T is None:
-                T = test_inputs.size(1)
+            batch_size = test_inputs.size(0)
+            if time_steps is None:
+                time_steps = test_inputs.size(1)
             else:
-                T = max(T, test_inputs.size(1))
-        # cast to int in case of numpy.int64...
-        T = int(T)
+                time_steps = max(time_steps, test_inputs.size(1))
         # Global conditioning
         if g is not None:
             if self.embed_speakers is not None:
-                g = self.embed_speakers(g.view(B, -1))
+                g = self.embed_speakers(g.view(batch_size, -1))
                 # (B x gin_channels, 1)
                 assert g is not None
                 g = g.transpose(1, 2)
                 assert g.dim() == 3
-        g_btc = _expand_global_features(B, T, g, bct=False)
+        g_btc = _expand_global_features(batch_size, time_steps, g, bct=False)
         # Local conditioning
         if c is not None and self.upsample_conv is not None:
             # B x 1 x C x T
@@ -332,15 +326,15 @@ class WaveNet(torch.nn.Module):
             # B x C x T
             assert c is not None
             c = c.squeeze(1)
-            assert c.size(-1) == T
-        if c is not None and c.size(-1) == T:
+            assert c.size(-1) == time_steps
+        if c is not None and c.size(-1) == time_steps:
             c = c.transpose(1, 2).contiguous()
         outputs: List[torch.Tensor] = []
         if initial_input is None:
             if self.scalar_input:
-                initial_input = torch.zeros(B, 1, 1)
+                initial_input = torch.zeros(batch_size, 1, 1)
             else:
-                initial_input = torch.zeros(B, 1, self.out_channels)
+                initial_input = torch.zeros(batch_size, 1, self.out_channels)
                 initial_input[:, :, 127] = 1  # TODO: is this ok?
             # https://github.com/pytorch/pytorch/issues/584#issuecomment-275169567
             if next(self.parameters()).is_cuda:
@@ -349,7 +343,7 @@ class WaveNet(torch.nn.Module):
             if initial_input.size(1) == self.out_channels:
                 initial_input = initial_input.transpose(1, 2).contiguous()
         current_input = initial_input
-        for t in tqdm(range(T), desc="WaveNet Increments"):
+        for t in tqdm(range(time_steps), desc="WaveNet Increments"):
             if test_inputs is not None and t < test_inputs.size(1):
                 current_input = test_inputs[:, t, :].unsqueeze(1)
             else:
@@ -377,7 +371,7 @@ class WaveNet(torch.nn.Module):
             # Generate next input by sampling
             assert self.scalar_input is True
             x = sample_from_discretized_mix_logistic(
-                x.view(B, -1, 1), log_scale_min=log_scale_min
+                x.view(batch_size, -1, 1), log_scale_min=log_scale_min
             )
             outputs += [x.data]
         # T x B x C

@@ -13,6 +13,7 @@ from .experiment import Experiment
 class Train(Experiment):
     def train(self: Self) -> None:
         # Start training from scratch or resume training.
+        self.compute.set_gpu()
         self.load_data()
         start_iters = 0
         if self.config.options.resume_iters:
@@ -30,7 +31,6 @@ class Train(Experiment):
         # Start training.
         self.model.train()
         self.intrp.train()
-        self.logger.info("Start training...")
         self.start_time = time.time()
         if self.config.training.mask_loss:
             self.loss_fn = masked_mse
@@ -45,6 +45,7 @@ class Train(Experiment):
             total=self.config.options.num_iters,
             initial=i,
         )
+        self.logger.info("Start training...")
         while i <= self.config.options.num_iters:
             fname: str
             spk_id_org: str
@@ -79,6 +80,12 @@ class Train(Experiment):
             #                   2. Train the model                            #
             # =============================================================== #
             # Prepare input data and apply random resampling
+            self.logger.trace_tensor(spmel_gt)
+            self.logger.trace_tensor(rhythm_input)
+            self.logger.trace_tensor(content_input)
+            self.logger.trace_tensor(pitch_input)
+            self.logger.trace_tensor(timbre_input)
+            self.logger.trace_tensor(len_crop)
             content_pitch_input = self.prepare_input(
                 content_input,
                 pitch_input,
@@ -149,15 +156,7 @@ class Train(Experiment):
                 found_nan = False
                 found_nan |= self.logger.log_if_nan_ret(loss)
                 found_nan |= self.logger.log_if_nan_ret(loss_id)
-                found_nan |= self.logger.log_if_nan_ret(spmel_gt)
                 found_nan |= self.logger.log_if_nan_ret(spmel_output)
-                found_nan |= self.logger.log_if_nan_ret(spmel_gt)
-                found_nan |= self.logger.log_if_nan_ret(rhythm_input)
-                found_nan |= self.logger.log_if_nan_ret(content_input)
-                found_nan |= self.logger.log_if_nan_ret(pitch_input)
-                found_nan |= self.logger.log_if_nan_ret(timbre_input)
-                found_nan |= self.logger.log_if_nan_ret(len_crop)
-                found_nan |= self.logger.log_if_nan_ret(content_pitch_input)
                 if self.config.options.return_latents:
                     found_nan |= self.logger.log_if_nan_ret(code_exp_1)
                     found_nan |= self.logger.log_if_nan_ret(code_exp_2)
@@ -169,5 +168,6 @@ class Train(Experiment):
                     self.logger.error(f"filename: {fname}")
                     self.logger.error(f"tensor: {spmel_gt.any()}")
                     self.writer.flush()
+                    self.logger.manual_process_bar_end(pbar)
                     raise NanError(f"{fname}")
         self.logger.manual_process_bar_end(pbar)

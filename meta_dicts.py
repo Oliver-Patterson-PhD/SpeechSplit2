@@ -132,6 +132,11 @@ nameduaspeech: NamedMetaDictType = {
     # fmt: on
 }
 
+namedsmolspeech: NamedMetaDictType = {
+    "CF02": nameduaspeech["CF02"],
+    "F05": nameduaspeech["F05"],
+}
+
 uaspeech_uttrs: Dict[str, str] = {
     "B1_D0": "Zero",
     "B1_D1": "One",

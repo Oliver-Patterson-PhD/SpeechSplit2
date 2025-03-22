@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 from models.wavenet_vocoder import WaveNet as WavenetGenerator
 from util import Config
+from util import Logger
 
 from .synthesizer import Synthesizer
 
@@ -49,6 +50,7 @@ class Wavenet(Synthesizer):
         config: Optional[Config] = None,
     ) -> None:
         self.config = config or Config()
+        self.device = device
         data_dir = self.config.paths.full_models
         config_file = f"{data_dir}/{self.model_name}.toml"
         self.wavconf = WavenetConfig(loadtoml(open(config_file, "rb")))
@@ -59,19 +61,18 @@ class Wavenet(Synthesizer):
             residual_channels=self.wavconf.residual_channels,
             gate_channels=self.wavconf.gate_channels,
             skip_out_channels=self.wavconf.skip_out_channels,
+            kernel_size=self.wavconf.kernel_size,
+            dropout=self.wavconf.dropout,
             cin_channels=self.wavconf.cin_channels,
             gin_channels=self.wavconf.gin_channels,
-            weight_normalization=self.wavconf.weight_normalization,
             n_speakers=self.wavconf.n_speakers,
-            dropout=self.wavconf.dropout,
-            kernel_size=self.wavconf.kernel_size,
+            weight_normalization=self.wavconf.weight_normalization,
             upsample_conditional_features=self.wavconf.upsample_conditional_features,
             upsample_scales=self.wavconf.upsample_scales,
             freq_axis_kernel_size=self.wavconf.freq_axis_kernel_size,
             scalar_input=True,
             legacy=True,
         )
-        self.device = device
         ckpt = torch.load(
             f"{data_dir}/{self.model_name}.pth",
             weights_only=False,
@@ -80,6 +81,7 @@ class Wavenet(Synthesizer):
         self.model = self.model.to(self.device)
         self.model.eval()
         self.model.make_generation_fast_()
+        self.model = self.model.to(self.device)
 
     @torch.no_grad()
     def spect2wav(
@@ -90,7 +92,7 @@ class Wavenet(Synthesizer):
             initial_input=None,
             c=spect.mT.to(dtype=torch.float).unsqueeze(0).to(self.device),
             g=None,
-            T=spect.shape[0] * self.wavconf.hop_size,
+            time_steps=spect.shape[0] * self.wavconf.hop_size,
             tqdm=tqdm,
             softmax=True,
             quantize=True,

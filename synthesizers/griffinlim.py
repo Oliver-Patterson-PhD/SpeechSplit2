@@ -25,6 +25,14 @@ class GriffinLim(Synthesizer):
         config: Optional[Config] = None,
     ) -> None:
         self.config = config or Config()
+        self.device = device
+        self.n_fft = self.config.audio.n_fft
+        self.hop_length = self.config.audio.hop_len
+        self.dim_freq = self.config.model.dim_freq
+        self.f_min = self.config.audio.freq_min
+        self.f_max = self.config.audio.freq_max
+        self.sample_rate = self.config.audio.sample_rate
+        self.n_iter = 1000
         self.demel = torchaudio.transforms.InverseMelScale(
             n_stft=self.n_fft // 2 + 1,
             n_mels=self.dim_freq,
@@ -50,4 +58,4 @@ class GriffinLim(Synthesizer):
         spect: torch.Tensor,
     ) -> torch.Tensor:
         tspec = spect.T
-        return self.glim(self.demel(tspec))
+        return self.glim(self.demel(tspec.to(self.device)).to(self.device))

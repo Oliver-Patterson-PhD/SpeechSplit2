@@ -5,7 +5,6 @@ raw_data = "/mnt/datasets/raw"
 [options]
 bottleneck = "large"
 experiment = "test_samples"
-ntfy_url = "https://ntfy.sh/oliverpatterson-speechsplit2"
 trace = false
 
 [log]

@@ -31,6 +31,16 @@ class Experiment(object):
     experiment_dir: str
     dataset: DatasetParser
     audproc: AudioProcs
+    ret_item_t = Tuple[
+        str,
+        str,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]
 
     def __init__(
         self: Self,
@@ -212,7 +222,7 @@ class Experiment(object):
         loss: float,
         orig: Optional[torch.Tensor] = None,
         proc: Optional[torch.Tensor] = None,
-    ):
+    ) -> None:
         self.logger.info(
             "Elapsed [{}], Iteration [{}/{}], loss: {:.8f}".format(
                 str(datetime.timedelta(seconds=time.time() - self.start_time))[:-7],
@@ -232,7 +242,6 @@ class Experiment(object):
         **kwargs,
     ) -> None:
         self.data_loader = get_loader(self.config, **kwargs)
-        self.data_iter = iter(self.data_loader)
 
     def save_tensor(
         self: Self,
@@ -270,18 +279,41 @@ class Experiment(object):
         )
         return content_pitch_input_intrp_2
 
+    def filter_item(
+        self: Self,
+        item: ret_item_t,
+    ) -> ret_item_t:
+        (
+            fname,
+            spk_id_org,
+            spmel_gt,
+            rhythm_input,
+            content_input,
+            pitch_input,
+            timbre_input,
+            len_crop,
+        ) = item
+        # Move data to GPU if available
+        spmel_gt = spmel_gt.to(self.compute.device())
+        rhythm_input = rhythm_input.to(self.compute.device())
+        content_input = content_input.to(self.compute.device())
+        pitch_input = pitch_input.to(self.compute.device()).unsqueeze(-1)
+        timbre_input = timbre_input.to(self.compute.device())
+        len_crop = len_crop.to(self.compute.device())
+        return (
+            fname,
+            spk_id_org,
+            spmel_gt,
+            rhythm_input,
+            content_input,
+            pitch_input,
+            timbre_input,
+            len_crop,
+        )
+
     def get_next_data(
         self: Self,
-    ) -> Tuple[
-        str,
-        str,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-    ]:
+    ) -> ret_item_t:
         fname: str
         spk_id_org: str
         spmel_gt: torch.Tensor
@@ -290,6 +322,8 @@ class Experiment(object):
         pitch_input: torch.Tensor
         timbre_input: torch.Tensor
         len_crop: torch.Tensor
+        if not hasattr(self, "data_iter"):
+            self.data_iter = iter(self.data_loader)
         try:
             (
                 fname,
@@ -300,7 +334,7 @@ class Experiment(object):
                 pitch_input,
                 timbre_input,
                 len_crop,
-            ) = next(self.data_iter)
+            ) = self.filter_item(next(self.data_iter))
         except StopIteration:
             self.data_iter = iter(self.data_loader)
             (
@@ -312,17 +346,9 @@ class Experiment(object):
                 pitch_input,
                 timbre_input,
                 len_crop,
-            ) = next(self.data_iter)
+            ) = self.filter_item(next(self.data_iter))
         except AssertionError as e:
-            raise NanError(e)
-        finally:
-            # Move data to GPU if available
-            spmel_gt = spmel_gt.to(self.compute.device())
-            rhythm_input = rhythm_input.to(self.compute.device())
-            content_input = content_input.to(self.compute.device())
-            pitch_input = pitch_input.to(self.compute.device()).unsqueeze(-1)
-            timbre_input = timbre_input.to(self.compute.device())
-            len_crop = len_crop.to(self.compute.device())
+            raise NanError("Found NaNs in data") from e
         return (
             fname,
             spk_id_org,
@@ -343,47 +369,41 @@ class Experiment(object):
             desc=f"Verifying {self.config.options.dataset_name}",
         ):
             (
-                i_fname,
-                i_spk_id_org,
-                i_spmel_gt,
-                i_rhythm_input,
-                i_content_input,
-                i_pitch_input,
-                i_timbre_input,
-                i_len_crop,
-            ) = item
-            i_spmel_gt = i_spmel_gt.to(self.compute.device())
-            i_rhythm_input = i_rhythm_input.to(self.compute.device())
-            i_content_input = i_content_input.to(self.compute.device())
-            i_pitch_input = i_pitch_input.to(self.compute.device())
-            i_timbre_input = i_timbre_input.to(self.compute.device())
-            i_len_crop = i_len_crop.to(self.compute.device())
+                fname,
+                spk_id_org,
+                spmel_gt,
+                rhythm_input,
+                content_input,
+                pitch_input,
+                timbre_input,
+                len_crop,
+            ) = self.filter_item(item)
             # Prepare input data and apply random resampling
             try:
-                i_content_pitch_input = self.prepare_input(
-                    i_content_input,
-                    i_pitch_input,
-                    i_len_crop,
+                content_pitch_input = self.prepare_input(
+                    content_input,
+                    pitch_input,
+                    len_crop,
                 )
             except Exception as e:
-                self.logger.trace_tensor(i_spmel_gt, LogLevel.ERROR)
-                self.logger.trace_tensor(i_rhythm_input, LogLevel.ERROR)
-                self.logger.trace_tensor(i_content_input, LogLevel.ERROR)
-                self.logger.trace_tensor(i_pitch_input, LogLevel.ERROR)
-                self.logger.trace_tensor(i_timbre_input, LogLevel.ERROR)
-                self.logger.trace_tensor(i_len_crop, LogLevel.ERROR)
+                self.logger.trace_tensor(spmel_gt, LogLevel.ERROR)
+                self.logger.trace_tensor(rhythm_input, LogLevel.ERROR)
+                self.logger.trace_tensor(content_input, LogLevel.ERROR)
+                self.logger.trace_tensor(pitch_input, LogLevel.ERROR)
+                self.logger.trace_tensor(timbre_input, LogLevel.ERROR)
+                self.logger.trace_tensor(len_crop, LogLevel.ERROR)
                 self.logger.fatal(str(e.__cause__))
-                raise Exception(f"Failure during check_data for {i_fname}") from e
+                raise Exception(f"Failure during check_data for {fname}") from e
             found_nan = False
-            found_nan |= self.logger.log_if_nan_ret(i_spmel_gt)
-            found_nan |= self.logger.log_if_nan_ret(i_spmel_gt)
-            found_nan |= self.logger.log_if_nan_ret(i_rhythm_input)
-            found_nan |= self.logger.log_if_nan_ret(i_content_input)
-            found_nan |= self.logger.log_if_nan_ret(i_pitch_input)
-            found_nan |= self.logger.log_if_nan_ret(i_timbre_input)
-            found_nan |= self.logger.log_if_nan_ret(i_len_crop)
-            found_nan |= self.logger.log_if_nan_ret(i_content_pitch_input)
+            found_nan |= self.logger.log_if_nan_ret(spmel_gt)
+            found_nan |= self.logger.log_if_nan_ret(spmel_gt)
+            found_nan |= self.logger.log_if_nan_ret(rhythm_input)
+            found_nan |= self.logger.log_if_nan_ret(content_input)
+            found_nan |= self.logger.log_if_nan_ret(pitch_input)
+            found_nan |= self.logger.log_if_nan_ret(timbre_input)
+            found_nan |= self.logger.log_if_nan_ret(len_crop)
+            found_nan |= self.logger.log_if_nan_ret(content_pitch_input)
             if found_nan:
                 self.logger.error("Step has NaN loss")
-                self.logger.error(f"filename: {i_fname}")
-                raise NanError(f"{i_fname}")
+                self.logger.error(f"filename: {fname}")
+                raise NanError(f"{fname}")

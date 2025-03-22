@@ -71,6 +71,12 @@ class Logger(metaclass=Singleton):
         if flush is not None:
             self.__flush = flush
 
+    def __reduce__(
+        self: Self,
+    ):
+        print(f"attempted __reduce__ on {self.__class__.__name__}")
+        return (self.__class__, ())
+
     def __get_caller(
         self: Self,
         depth: int = 1,
@@ -366,5 +372,7 @@ class Logger(metaclass=Singleton):
 
     def manual_process_bar_end(self: Self, pbar):
         pbar.close()
+        self.__process_bar_running = False
+        return
         self.__process_bar_running = False
         return

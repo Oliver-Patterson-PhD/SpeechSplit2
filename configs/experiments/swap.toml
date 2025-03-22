@@ -2,12 +2,11 @@
 experiment = "swap"
 run_tests = ["save_latents", "swap_latents", "save_audios"]
 dataset_name = "smolspeech"
-num_iters = 1
-log_step = 1
-ckpt_save_step = 100000
 train = false
 return_latents = true
 regenerate_data = false
+parallelwavegan_name = "parallelwavegan-1000000"
+resume_iters = 6400000
 
 [dataloader]
 shuffle = false

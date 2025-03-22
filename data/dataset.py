@@ -5,10 +5,13 @@ __all__ = [
 
 import os
 from enum import Enum, auto
-from typing import Optional, Self, Set
+from typing import Optional, Self, Set, Dict
 
 from util import Config
 
+from meta_dicts import MetaDictType
+
+ua_uttrs: Dict[str, str]
 ua_uttrs = getattr(
     __import__("meta_dicts"),
     "uaspeech_uttrs",
@@ -21,6 +24,10 @@ class DType(Enum):
 
 
 class DatasetParser:
+    __raw_data_path: str
+    __dsettype: DType
+    __spk_meta: MetaDictType
+
     def __init__(
         self: Self,
         config: Optional[Config] = None,
@@ -62,7 +69,7 @@ class DatasetParser:
     def speakers(
         self: Self,
     ) -> Set[str]:
-        return self.__spk_meta.keys()
+        return set(self.__spk_meta.keys())
 
     def utterance(
         self: Self,
@@ -89,6 +96,12 @@ class DatasetParser:
                 return file_name.split("_")[0]
             case _:
                 raise ValueError
+
+    def samples(
+        self: Self,
+        spk: str,
+    ):
+        return
 
     def sample_name(
         self: Self,

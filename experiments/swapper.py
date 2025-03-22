@@ -1,15 +1,21 @@
 import os
 from glob import glob
 from itertools import product
-from typing import List, Self, Tuple
+from typing import List, Self, Tuple, Dict
+from time import time_ns
 
 import torch
 import torchaudio
 
-from data import get_loader
 from meta_dicts import MetaDictType, NamedMetaDictType
-from synthesizers import GriffinLim, MelGan, ParallelWaveGan, Synthesizer, Wavenet
-from utils import quantize_f0_torch
+from synthesizers import (
+    GriffinLim,
+    MelGan,
+    ParallelWaveGan,
+    Synthesizer,
+    Wavenet,
+    HiFiGAN,
+)
 from util.audio import norm_audio
 from util.tensor import save_tensor
 
@@ -18,10 +24,11 @@ from .experiment import Experiment
 
 class Swapper(Experiment):
     synthesizer: Synthesizer
+    use_synth_griffinlim: bool = True
+    use_synth_hifigan: bool = True
     use_synth_melgan: bool = True
     use_synth_parallelwavegan: bool = True
     use_synth_wavenet: bool = True
-    use_synth_griffinlim: bool = True
     latents = [
         "code_exp_1",
         "code_exp_2",
@@ -30,33 +37,10 @@ class Swapper(Experiment):
     ]
 
     @torch.no_grad()
-    def prepare_input(
-        self: Self,
-        content_input: torch.Tensor,
-        pitch_input: torch.Tensor,
-        len_crop: torch.Tensor,
-    ) -> torch.Tensor:
-        content_pitch_input = torch.cat(
-            (content_input, pitch_input), dim=-1
-        )  # [B, T, F+1]
-        content_pitch_input_intrp = self.intrp(
-            content_pitch_input, len_crop
-        )  # [B, T, F+1]
-        pitch_input_intrp = quantize_f0_torch(
-            content_pitch_input_intrp[:, :, -1],
-        )  # [B, T, 257]
-        content_pitch_input_intrp_2 = torch.cat(
-            # [B, T, F+257]
-            (content_pitch_input_intrp[:, :, :-1], pitch_input_intrp),
-            dim=-1,
-        )
-        return content_pitch_input_intrp_2
-
-    @torch.no_grad()
     def save_latents(self: Self) -> None:
         if os.path.exists(f"{self.config.paths.latents}/{self.latents[0]}"):
             return
-        self.data_loader = get_loader(config=self.config, singleitem=True)
+        self.load_data(singleitem=True, sequential=True)
         [self.save_single_latent(batch) for batch in self.data_loader]  # type: ignore [func-returns-value]
 
     @torch.no_grad()
@@ -85,14 +69,20 @@ class Swapper(Experiment):
         ) = batch
         main_name = fname[0]
         self.logger.debug(f"Saving Latents for: {main_name}")
-
         # Move data to GPU if available
         spmel_gt = spmel_gt.to(self.compute.device())
         rhythm_input = rhythm_input.to(self.compute.device())
         content_input = content_input.to(self.compute.device())
-        pitch_input = pitch_input.to(self.compute.device())
+        pitch_input = pitch_input.to(self.compute.device()).unsqueeze(-1)
         timbre_input = timbre_input.to(self.compute.device())
         len_crop = len_crop.to(self.compute.device())
+
+        self.logger.trace_tensor(spmel_gt, "DEBUG")
+        self.logger.trace_tensor(rhythm_input, "DEBUG")
+        self.logger.trace_tensor(content_input, "DEBUG")
+        self.logger.trace_tensor(pitch_input, "DEBUG")
+        self.logger.trace_tensor(timbre_input, "DEBUG")
+        self.logger.trace_tensor(len_crop, "DEBUG")
 
         # Prepare input data and apply random resampling
         content_pitch_input = self.prepare_input(
@@ -137,8 +127,10 @@ class Swapper(Experiment):
             __import__("meta_dicts"),
             f"named{dataset_name}",
         )
-        meta_file = os.path.join(self.config.paths.features, "metadata.pkl")
-        metadata: MetaDictType = torch.load(meta_file, weights_only=True)
+        metadata: MetaDictType = getattr(
+            __import__("meta_dicts"),
+            f"{dataset_name}",
+        )
 
         [
             self.swap_single_latent(uttr, spk, spk, "None")  # type: ignore [func-returns-value]
@@ -206,44 +198,69 @@ class Swapper(Experiment):
             f"{self.config.paths.spmels}/**/*_0.pt",
             recursive=True,
         )
-        filelist = glob(
+        filelist: List[str] = glob(
             f"{self.config.paths.latents}/out_spec/**/*_0.pt",
             recursive=True,
         )
 
         [self.spec_image(file, "orig") for file in ofilelist]
         [self.spec_image(file, "full") for file in filelist]
+        times: Dict[str, int] = {}
+        div = len(ofilelist)
+        self.logger.debug(f"Files in list: {div}")
 
-        self.compute.set_gpu()
-        if self.use_synth_griffinlim:
-            self.synthesizer = GriffinLim(self.device, config=self.config)
-            [self.orig_save(file, "griffinlim") for file in ofilelist]
-            [self.single_spmel_to_audio(file, "griffinlim") for file in filelist]
+        # self.compute.set_gpu()
+        # if self.use_synth_parallelwavegan:
+        #     self.synthesizer = ParallelWaveGan(
+        #         self.compute.device(), config=self.config
+        #     )
+        #     start_time = time_ns()
+        #     [self.orig_save(file, "parallelwavegan") for file in ofilelist]
+        #     [self.single_spmel_to_audio(file, "parallelwavegan") for file in filelist]
+        #     times["parallelwavegan"] = (time_ns() - start_time) // div
 
-        self.compute.set_gpu()
-        if self.use_synth_melgan:
-            self.synthesizer = MelGan(self.compute.device(), config=self.config)
-            [self.orig_save(file, "melgan") for file in ofilelist]
-            [self.single_spmel_to_audio(file, "melgan") for file in filelist]
+        # self.compute.set_gpu()
+        # if self.use_synth_melgan:
+        #     self.synthesizer = MelGan(self.compute.device(), config=self.config)
+        #     start_time = time_ns()
+        #     [self.orig_save(file, "melgan") for file in ofilelist]
+        #     [self.single_spmel_to_audio(file, "melgan") for file in filelist]
+        #     times["melgan"] = (time_ns() - start_time) // div
 
-        self.compute.set_gpu()
-        if self.use_synth_parallelwavegan:
-            self.synthesizer = ParallelWaveGan(
-                self.compute.device(), config=self.config
-            )
-            [self.orig_save(file, "parallelwavegan") for file in ofilelist]
-            [self.single_spmel_to_audio(file, "parallelwavegan") for file in filelist]
+        # self.compute.set_gpu()
+        # if self.use_synth_griffinlim:
+        #     self.synthesizer = GriffinLim(self.device, config=self.config)
+        #     start_time = time_ns()
+        #     [self.orig_save(file, "griffinlim") for file in ofilelist]
+        #     [self.single_spmel_to_audio(file, "griffinlim") for file in filelist]
+        #     times["griffinlim"] = (time_ns() - start_time) // div
+
+        # self.compute.set_gpu()
+        # if self.use_synth_hifigan:
+        #     self.synthesizer = HiFiGAN(self.device, config=self.config)
+        #     start_time = time_ns()
+        #     [self.orig_save(file, "hifigan") for file in ofilelist]
+        #     [self.single_spmel_to_audio(file, "hifigan") for file in filelist]
+        #     times["hifigan"] = (time_ns() - start_time) // div
 
         self.compute.set_gpu()
         if self.use_synth_wavenet:
             self.synthesizer = Wavenet(self.compute.device(), config=self.config)
-            [self.orig_save(file, "wavenet") for file in ofilelist]
+            start_time = time_ns()
+            [
+                self.orig_save(file, "wavenet")
+                for i, file in enumerate(ofilelist)
+                if i < 5
+            ]
             [
                 self.single_spmel_to_audio(file, "wavenet")
                 for i, file in enumerate(filelist)
                 if i < 5
             ]
+            times["wavenet"] = (time_ns() - start_time) // 5
 
+        for name, time in times.items():
+            self.logger.info(f"{name}: {time} (ns)")
         return
 
     @torch.no_grad()
