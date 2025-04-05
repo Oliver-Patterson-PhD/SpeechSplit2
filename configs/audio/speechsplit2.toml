@@ -1,7 +1,7 @@
 [audio-processing]
 sample_rate = 16000
 n_fft = 400
-hop_len = 160
+hop_len = 100
 chunk_length = 30
 
 vtlp_fft = 800

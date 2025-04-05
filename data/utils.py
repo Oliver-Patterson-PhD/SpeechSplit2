@@ -20,10 +20,7 @@ from .dataset import DatasetParser
 class AudioProcs:
     min_level = torch.exp(-100 / 20 * torch.log(torch.tensor(10)))
 
-    def __init__(
-        self: Self,
-        config: Optional[Config] = None,
-    ) -> None:
+    def __init__(self: Self, config: Optional[Config] = None) -> None:
         self.__parser = DatasetParser(config=config)
         if config is None:
             config = Config()
@@ -73,10 +70,7 @@ class AudioProcs:
         )
         return
 
-    def stft(
-        self: Self,
-        wav: torch.Tensor,
-    ) -> torch.Tensor:
+    def stft(self: Self, wav: torch.Tensor) -> torch.Tensor:
         return torch.stft(
             input=wav,
             n_fft=self.__n_fft,
@@ -90,10 +84,7 @@ class AudioProcs:
             return_complex=True,
         )
 
-    def istft(
-        self: Self,
-        spec: torch.Tensor,
-    ) -> torch.Tensor:
+    def istft(self: Self, spec: torch.Tensor) -> torch.Tensor:
         return torch.istft(
             input=spec,
             n_fft=self.__n_fft,
@@ -106,11 +97,7 @@ class AudioProcs:
             return_complex=False,
         )
 
-    def get_spenv(
-        self: Self,
-        wav: torch.Tensor,
-        cutoff: int = 3,
-    ) -> torch.Tensor:
+    def get_spenv(self: Self, wav: torch.Tensor, cutoff: int = 3) -> torch.Tensor:
         spec = torch.abs(self.stft(wav)).T
         ceps = torch.fft.irfft(torch.log(spec + 1e-6), axis=-1).to(dtype=torch.double)
         lifter = torch.zeros(ceps.shape[1], dtype=torch.double)
@@ -118,31 +105,25 @@ class AudioProcs:
         lifter[cutoff] = 0.5
         mmul = torch.matmul(ceps, torch.diag(lifter).to(ceps.device))
         expfft = torch.exp(torch.fft.rfft(mmul, axis=-1))
-        maxval = torch.maximum(self.min_level, torch.abs(expfft))
+        maxval = torch.maximum(
+            self.min_level.to(device=expfft.device), torch.abs(expfft)
+        )
         env = self.zero_one_norm((20 * torch.log10(maxval) - 16 + 100) / 100)
         retval = torch.nn.functional.pad(
             torchaudio.functional.resample(
-                env,
-                orig_freq=env.size(dim=-1),
-                new_freq=self.__dim_freq,
+                env, orig_freq=env.size(dim=-1), new_freq=self.__dim_freq
             ),
             (0, 0, 0, 1),
         )
-        return retval.to(dtype=wav.dtype)
+        return retval.to(dtype=wav.dtype, device=wav.device)
 
-    def rev_spmel(
-        self: Self,
-        logspec: torch.Tensor,
-    ) -> torch.Tensor:
+    def rev_spmel(self: Self, logspec: torch.Tensor) -> torch.Tensor:
         logspec = (logspec * 4) - 4
         melspec = torch.pow(10, logspec)
         mags = self.__demel(melspec)
         return mags
 
-    def get_spmel(
-        self: Self,
-        wav: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get_spmel(self: Self, wav: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         self.__melbasis = self.__melbasis.to(Compute().device())
         rawspec: torch.Tensor = self.stft(wav.float())
         mags: torch.Tensor = rawspec.abs()
@@ -156,19 +137,13 @@ class AudioProcs:
             phases,
         )
 
-    def zero_one_norm(
-        self: Self,
-        s: torch.Tensor,
-    ) -> torch.Tensor:
+    def zero_one_norm(self: Self, s: torch.Tensor) -> torch.Tensor:
         s_norm = s - torch.min(s)
         s_norm /= torch.max(s_norm)
         return s_norm
 
     def vtlp(
-        self: Self,
-        x: torch.Tensor,
-        fs: int,
-        alpha: Optional[float],
+        self: Self, x: torch.Tensor, fs: int, alpha: Optional[float]
     ) -> torch.Tensor:
         if alpha is None:
             alpha = 0.2 * torch.rand(1).item() + 0.9
@@ -271,12 +246,7 @@ class AudioProcs:
         else:
             mean_f0 = nonzero_rapt.mean().item()
             std_f0 = nonzero_rapt.std().item()
-        f0_norm = self.speaker_normalization(
-            f0_rapt,
-            index_nonzero,
-            mean_f0,
-            std_f0,
-        )
+        f0_norm = self.speaker_normalization(f0_rapt, index_nonzero, mean_f0, std_f0)
         return f0_norm
 
     def speaker_normalization(
@@ -293,14 +263,9 @@ class AudioProcs:
         f0[index_nonzero] = (f0[index_nonzero] + 1) / 2.0
         return f0
 
-    def filter_wav(
-        self: Self,
-        wav: torch.Tensor,
-    ) -> torch.Tensor:
+    def filter_wav(self: Self, wav: torch.Tensor) -> torch.Tensor:
         return torchaudio.functional.highpass_biquad(
-            wav,
-            self.__sample_rate,
-            self.__hi_pass_cutoff,
+            wav, self.__sample_rate, self.__hi_pass_cutoff
         )
 
     def get_monotonic_wav(
@@ -315,10 +280,7 @@ class AudioProcs:
             fs = self.__sample_rate
         y = torch.tensor(
             pyworld.synthesize(
-                f0.cpu().numpy(),
-                sp.cpu().numpy(),
-                ap.cpu().numpy(),
-                fs,
+                f0.cpu().numpy(), sp.cpu().numpy(), ap.cpu().numpy(), fs
             ),
             device=wav.device,
         )
@@ -328,14 +290,8 @@ class AudioProcs:
         return y[: len(wav)]
 
     def get_world_params(
-        self: Self,
-        wav: torch.Tensor,
-        fs: Optional[int] = None,
-    ) -> Tuple[
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-    ]:
+        self: Self, wav: torch.Tensor, fs: Optional[int] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if fs is None:
             fs = self.__sample_rate
         x = wav.squeeze().double().cpu().numpy()
@@ -349,10 +305,7 @@ class AudioProcs:
             torch.tensor(ap, device=wav.device),
         )
 
-    def get_f0_lohi(
-        self: Self,
-        speaker: str,
-    ) -> Tuple[int, int]:
+    def get_f0_lohi(self: Self, speaker: str) -> Tuple[int, int]:
         if self.__parser.sex(speaker) == "M":
             return self.__f0_m_lo, self.__f0_m_hi
         elif self.__parser.sex(speaker) == "F":
@@ -360,11 +313,7 @@ class AudioProcs:
         else:
             raise ValueError
 
-    def fold_pad(
-        self: Self,
-        item: torch.Tensor,
-        fold_size: int,
-    ) -> torch.Tensor:
+    def fold_pad(self: Self, item: torch.Tensor, fold_size: int) -> torch.Tensor:
         fold_step = fold_size // self.__fold_div
         fold_pad_len = floor((1 - (1 / self.__fold_div)) * fold_size)
         pads: Tuple[int, ...]
@@ -402,39 +351,30 @@ class AudioProcs:
             retval = torch.nn.functional.pad(item, opads).unsqueeze(0)
         return retval
 
-    def getraw(
-        self: Self,
-        full_fname: str | os.PathLike,
-    ) -> torch.Tensor:
-        x: torch.Tensor
+    def getraw(self: Self, full_fname: str | os.PathLike) -> torch.Tensor:
         inaud, sr = torchaudio.load(full_fname, channels_first=True)
         assert sr == self.__sample_rate
-        try:
-            x = self.clean_audio(inaud)
-        except Exception as e:
-            raise Exception(f"failed to load: {full_fname}") from e
-        if x.shape[0] % self.__hop_length == 0:
-            x = torch.cat(
-                (x, torch.tensor([1e-10], device=x.device)),
-                dim=0,
-            )
-        return x
+        return inaud
 
-    def clean_audio(
-        self: Self,
-        audio: torch.Tensor,
-    ):
-        return torchaudio.sox_effects.apply_effects_tensor(
-            self.__vad_transform(
-                torchaudio.sox_effects.apply_effects_tensor(
-                    self.__vad_transform(norm_audio(audio)),
-                    self.__sample_rate,
-                    [["reverse"]],
-                )[0]
-            ),
-            self.__sample_rate,
-            [["reverse"]],
-        )[0].squeeze()
+    def clean_audio(self: Self, audio: torch.Tensor) -> torch.Tensor:
+        def rev_audio(aud: torch.Tensor) -> torch.Tensor:
+            return torchaudio.sox_effects.apply_effects_tensor(
+                aud, self.__sample_rate, [["reverse"]]
+            )[0]
+
+        norm = norm_audio(audio)
+        vad_aud = self.__vad_transform(norm)
+        if vad_aud.size(dim=-1) == 0:
+            return torch.tensor([])
+        rev_aud = rev_audio(vad_aud)
+        rev_vad_aud = self.__vad_transform(rev_aud)
+        if rev_vad_aud.size(dim=-1) == 0:
+            return torch.tensor([])
+        rev_vad_out_aud = rev_audio(rev_vad_aud)
+        x = rev_vad_out_aud.squeeze()
+        if x.shape[0] % self.__hop_length == 0:
+            x = torch.cat((x, torch.tensor([1e-10], device=x.device)), dim=0)
+        return x
 
     def has_content(self: Self, audio: torch.Tensor) -> bool:
         return bool(
@@ -443,10 +383,7 @@ class AudioProcs:
             and (audio != 0).any()
         )
 
-    def combine(
-        self: Self,
-        listitem: List[torch.Tensor],
-    ) -> torch.Tensor:
+    def combine(self: Self, listitem: List[torch.Tensor]) -> torch.Tensor:
         fold_size = self.__max_len_pad
         fold_step = fold_size // self.__fold_div
         if len(listitem) == 1:

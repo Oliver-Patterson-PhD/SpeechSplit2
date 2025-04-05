@@ -9,7 +9,6 @@ if __name__ == "__main__":
         if dev is not None:
             torch.set_default_device(dev)
 
-    getattr(
-        __import__("main"),
-        "main",
-    )()
+    from main import main
+
+    main()

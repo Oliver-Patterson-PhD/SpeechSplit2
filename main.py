@@ -3,7 +3,7 @@ def main() -> None:
     from argparse import ArgumentParser
 
     from data import PreProcess
-    from experiments import Scratchpad, Swapper, TestSamples, Train
+    from experiments import Scratchpad, Swapper, TestSamples, Train, Immediate
     from util import Config, Logger, RunTests, Compute
 
     torch.backends.cudnn.benchmark = True
@@ -24,6 +24,12 @@ def main() -> None:
     logger.trace_var(modelfiles, level="DEBUG")
 
     try:
+        imm = Immediate(config)
+        imm.test()
+        if imm.exit_after:
+            logger.info("Returning from Immediate test")
+            return
+
         PreProcess(config)
 
         if doscratch:

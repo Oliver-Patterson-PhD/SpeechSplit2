@@ -34,6 +34,7 @@ class PreProcess(metaclass=Singleton):
         self.hop_length = self.config.audio.hop_len
         self.proc = AudioProcs(config=self.config)
         self.parser = DatasetParser(config=config)
+        self.logger.debug(f"Out Path: {self.out_path}")
         procdata_exists = all(
             [
                 os.path.exists(f"{self.out_path}/freqs/{speaker}")
@@ -57,26 +58,32 @@ class PreProcess(metaclass=Singleton):
         self.logger.info("Preprocessing Complete")
 
     def process_file(self: Self, spk_dir: str, fname: str) -> None:
-        wav = self.proc.filter_wav(
-            self.proc.getraw(os.path.join(self.in_path, spk_dir, fname))
-        )
+        self.logger.debug(f"Processing: {fname}")
+        rawwav = self.proc.getraw(os.path.join(self.in_path, spk_dir, fname))
+        if not self.proc.has_content(rawwav):
+            self.logger.error(f"could not read audio: {fname}")
+            return
+        wav = self.proc.filter_wav(rawwav)
         if not self.proc.has_content(wav):
-            self.logger.warn(f"No Content: {fname}")
+            self.logger.error(f"No Content after filtering: {fname}")
             return
         lo, hi = self.proc.get_f0_lohi(spk_dir)
         f0, sp, ap = self.proc.get_world_params(wav=wav)
 
         wav_mono = self.proc.get_monotonic_wav(wav=wav, f0=f0, sp=sp, ap=ap)
         if not self.proc.has_content(wav_mono):
-            raise ValueError
+            self.logger.error(f"Failed to get monotonic wav for: {spk_dir}/{fname}")
+            return
 
         spmel, phase = self.proc.get_spmel(wav)
         if not self.proc.has_content(spmel):
-            raise ValueError
+            self.logger.error(f"Failed to get mel spectrogram for: {spk_dir}/{fname}")
+            return
 
         f0_norm = self.proc.extract_f0(wav=wav, lo=lo, hi=hi)
         if not self.proc.has_content(f0_norm):
-            raise ValueError
+            self.logger.error(f"Failed to get f0 for: {spk_dir}/{fname}")
+            return
 
         if len(spmel) != len(f0_norm):
             if (len(spmel) - 1) == len(f0_norm):

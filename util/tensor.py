@@ -46,7 +46,7 @@ def try_image(
 # @param fp     A filename
 @torch.no_grad()
 def save_image(
-    tensor: Union[torch.Tensor, List[torch.Tensor]],
+    tensor: torch.Tensor,
     filename: Union[str, Path],
 ) -> None:
     grid = make_grid(tensor)

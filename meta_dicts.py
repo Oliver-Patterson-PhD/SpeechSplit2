@@ -90,8 +90,8 @@ uaspeech: MetaDictType = {
 }
 
 smolspeech: MetaDictType = {
-    # "CF02": uaspeech["CF02"],
-    "F05": uaspeech["F05"],
+    "CF03": uaspeech["CF03"],
+    # "F05": uaspeech["F05"],
 }
 
 smolvctk: MetaDictType = {
@@ -134,6 +134,7 @@ nameduaspeech: NamedMetaDictType = {
 
 namedsmolspeech: NamedMetaDictType = {
     "CF02": nameduaspeech["CF02"],
+    "CF03": nameduaspeech["CF03"],
     "F05": nameduaspeech["F05"],
 }
 

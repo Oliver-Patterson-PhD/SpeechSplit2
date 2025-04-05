@@ -50,4 +50,4 @@ class Synthesizer(object):
     def __str__(
         self: Self,
     ) -> str:
-        return self.model_name
+        return self.model_name.partition('/')[0]

@@ -215,7 +215,7 @@ def get_loader(
         num_workers=0 if singleitem else config.dataloader.num_workers,
         prefetch_factor=None if singleitem else config.dataloader.num_workers,
         drop_last=False,
-        pin_memory=dataset.pinnable(),
+        pin_memory=dataset.pinnable() and False,
         worker_init_fn=worker_init_fn,
     )
     logger.debug("Created DataLoader")

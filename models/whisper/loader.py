@@ -6,7 +6,7 @@ from typing import List, Union
 import torch
 from tqdm import tqdm
 
-from ...util.file import fread
+from util.file import fread
 
 from .model import ModelDimensions, Whisper
 
@@ -97,7 +97,8 @@ def load_model(
         map_location=device,
         weights_only=True,
     )
-    model = Whisper(**checkpoint["dims"])
+    dims = ModelDimensions(**checkpoint["dims"])
+    model = Whisper(dims)
     model.load_state_dict(checkpoint["model_state_dict"])
     if alignment_heads is not None:
         model.set_alignment_heads(alignment_heads)

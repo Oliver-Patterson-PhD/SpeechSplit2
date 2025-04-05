@@ -232,9 +232,11 @@ class Scratchpad(Experiment):
     def process_synth(
         self: Self, synt: Synthesizer, name: str, orig: torch.Tensor, proc: torch.Tensor
     ) -> None:
-        self.logger.debug(f"Synthesizing: {synt.model_name}")
+        self.logger.debug(f"Synthesizing: {synt}")
         synth_gt = os.path.join(self.wavsdir, f"{name}-{synt}-orig.wav")
         synth_out = os.path.join(self.wavsdir, f"{name}-{synt}-proc.wav")
+        os.makedirs(os.path.dirname(synth_gt), exist_ok=True)
+        os.makedirs(os.path.dirname(synth_out), exist_ok=True)
         self.logger.trace_tensor(orig)
         self.logger.trace_tensor(proc)
         self.single_spmel_to_audio(synth_gt, orig, synt)
