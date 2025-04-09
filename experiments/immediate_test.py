@@ -1,6 +1,9 @@
 import os
-from typing import Any, Self, Tuple
+from glob import glob
+from typing import Any, Self
 
+import matplotlib.backends.backend_pdf
+import matplotlib.pyplot
 import torch
 
 from data.dataset import DatasetParser
@@ -13,9 +16,17 @@ from .cack import TorchGate as TG
 class Immediate:
     config: Config
     exit_after: bool = True
+    batch_test: bool = True
+    batch_graph: bool = False
+    single_test: bool = False
 
     def __init__(self: Self, config: Config) -> None:
         self.config = config
+        self.experiment_dir = os.path.join(self.config.paths.artefacts, "immediate")
+        for root, _, files in os.walk(self.experiment_dir, topdown=False):
+            for name in files:
+                os.remove(os.path.join(root, name))
+        os.makedirs(self.experiment_dir, exist_ok=True)
         return
 
     def test(self: Self) -> None:
@@ -28,81 +39,168 @@ class Immediate:
         self.parser = DatasetParser(config=self.config)
         self.logger.debug(f"In  Path: {self.in_path}")
         self.logger.debug(f"Out Path: {self.out_path}")
-        spk_dir_list = next(os.walk(self.in_path))[1]
-        speakers = [spk for spk in spk_dir_list if spk in self.parser.speakers()]
+        speakers = set(
+            spk
+            for spk in next(os.walk(self.in_path))[1]
+            if spk in self.parser.speakers()
+        )
         self.logger.info(f"Found {len(speakers)} speakers")
-        [
-            self.process_file(spk_dir=spk_dir, fname=fname)
-            for spk_dir in sorted(speakers)
-            for fname in sorted(next(os.walk(os.path.join(self.in_path, spk_dir)))[-1])
-        ]
+        sample_rate = 16000
+        tg = TG(sr=sample_rate, nonstationary=True)
+        batches = set(
+            (
+                spk_dir,
+                os.path.join(self.in_path, spk_dir, fname[: len(fname) - 7]),
+            )
+            for spk_dir in speakers
+            for fname in set(next(os.walk(os.path.join(self.in_path, spk_dir)))[-1])
+        )
+        if self.batch_graph:
+            with matplotlib.backends.backend_pdf.PdfPages(
+                os.path.join(self.experiment_dir, "waveforms.pdf")
+            ) as pdf:
+                [
+                    pdf.savefig(
+                        self.graph_batch(
+                            spk,
+                            set(fname for fname in glob(filebase + "_M*.wav")),
+                            filebase.rpartition("/")[-1],
+                        )
+                    )
+                    for spk, filebase in self.logger.progress_bar(batches)
+                ]
+        if self.batch_test:
+            [
+                self.process_batch(
+                    spk,
+                    set(fname for fname in glob(filebase + "_M*.wav")),
+                    filebase.rpartition("/")[-1],
+                    tg,
+                )
+                for spk, filebase in sorted(batches, key=lambda c: c[1])
+            ]
+        if self.single_test:
+            [
+                self.process_file(filebase, tg)
+                for filebase in sorted(
+                    os.path.join(self.in_path, spk_dir, fname)
+                    for spk_dir in speakers
+                    for fname in next(os.walk(os.path.join(self.in_path, spk_dir)))[-1]
+                )
+            ]
+            return
         self.logger.info("Preprocessing Complete")
-        return
 
-    def process_file(
+    def process_batch(
         self: Self,
         spk_dir: str,
-        fname: str,
+        batch: set[str],
+        origname: str,
+        tg: TG,
     ) -> None:
-        rawwav = torch.tensor([])
-        clnwav = torch.tensor([])
+        rawwavs = torch.stack(
+            [
+                self.proc.getraw(
+                    os.path.join(self.in_path, spk_dir, fname.rpartition("/")[-1])
+                ).squeeze()
+                for fname in batch
+            ]
+        )
         wav = torch.tensor([])
-        energy = torch.tensor([float("nan")])
         wav_mono = torch.tensor([])
         spmel = torch.tensor([])
         f0_norm = torch.tensor([])
-        period = float("nan")
-        auto_corr = None
         try:
-            sample_rate = 16000
-            frame_length = 400
-            hop_length = 100
-            tg = TG(sr=sample_rate, nonstationary=True)
-            rawwav = tg(self.proc.getraw(os.path.join(self.in_path, spk_dir, fname)))
-            clnwav = self.proc.clean_audio(rawwav)
-            wav = self.proc.filter_wav(clnwav)
-            energy = short_time_energy(wav.squeeze(), frame_length, hop_length)
+            wav = self.proc.clean_audio(tg(rawwavs))
             lo, hi = self.proc.get_f0_lohi(spk_dir)
             f0, sp, ap = self.proc.get_world_params(wav=wav)
             wav_mono = self.proc.get_monotonic_wav(wav=wav, f0=f0, sp=sp, ap=ap)
             spmel, phase = self.proc.get_spmel(wav)
             f0_norm = self.proc.extract_f0(wav=wav, lo=lo, hi=hi)
-            threshold = adaptive_threshold(energy)
-            impulse_indices = torch.nonzero(energy > threshold).flatten()
-            refined_peaks = refine_peaks(
-                impulse_indices,
-                wav,
-                frame_length,
-                hop_length,
-                sample_rate,
-            )
-            p, auto_corr = analyze_periodicity(
-                refined_peaks.to("cpu"),
-                sample_rate,
-            )
-            period = p or 0.0
         except Exception:
             pass
-        if auto_corr is None:
-            auto_corr = torch.tensor([float("nan")])
         self.logger.info(
             format_log_message(
-                fname,
+                origname,
                 [
-                    auto_corr.std().item(),
-                    auto_corr.max().item(),
-                    auto_corr.min().item(),
-                    period,
+                    rawwavs.std().item(),
+                    rawwavs.max().item(),
+                    rawwavs.min().item(),
                 ],
                 [
-                    self.proc.has_content(rawwav),
+                    rawwavs.size(dim=-1),
+                    wav.size(dim=-1),
                     self.proc.has_content(wav),
                     self.proc.has_content(wav_mono),
                     self.proc.has_content(spmel),
                     self.proc.has_content(f0_norm),
-                    len(auto_corr),
-                    len(energy),
-                    len(wav),
+                ],
+            )
+        )
+
+    def graph_batch(
+        self: Self,
+        spk_dir: str,
+        batch: set[str],
+        origname: str,
+    ):
+        fig = matplotlib.pyplot.figure()
+        fig.set_size_inches(15.44, 27.45)
+        fig.suptitle(f"Sample: {origname}")
+        nrows: int = len(batch)
+        ncols: int = 1
+        fig.subplots(nrows, ncols)
+        for fname in batch:
+            idx = int(fname[-5:-4])
+            sample = (
+                self.proc.getraw(
+                    os.path.join(self.in_path, spk_dir, fname.rpartition("/")[-1])
+                )
+                .squeeze()
+                .numpy()
+            )
+            ax = matplotlib.pyplot.subplot(nrows, ncols, idx - 1)
+            ax.plot(sample)
+            ax.set_title(f"{origname}_M{idx}")
+            ax.set_xlim(0, len(sample))
+        return fig
+
+    def process_file(
+        self: Self,
+        fname: str,
+        tg: TG,
+    ) -> None:
+        spk_dir: str = fname.split("/")[-2]
+        rawwav = torch.tensor([])
+        wav = torch.tensor([])
+        wav_mono = torch.tensor([])
+        spmel = torch.tensor([])
+        f0_norm = torch.tensor([])
+        try:
+            rawwav = self.proc.getraw(os.path.join(self.in_path, spk_dir, fname))
+            wav = self.proc.clean_audio(tg(rawwav))
+            lo, hi = self.proc.get_f0_lohi(spk_dir)
+            f0, sp, ap = self.proc.get_world_params(wav=wav)
+            wav_mono = self.proc.get_monotonic_wav(wav=wav, f0=f0, sp=sp, ap=ap)
+            spmel, phase = self.proc.get_spmel(wav)
+            f0_norm = self.proc.extract_f0(wav=wav, lo=lo, hi=hi)
+        except Exception:
+            pass
+        self.logger.info(
+            format_log_message(
+                fname.rpartition("/")[-1],
+                [
+                    rawwav.std().item(),
+                    rawwav.max().item(),
+                    rawwav.min().item(),
+                ],
+                [
+                    rawwav.size(dim=-1),
+                    wav.size(dim=-1),
+                    self.proc.has_content(wav),
+                    self.proc.has_content(wav_mono),
+                    self.proc.has_content(spmel),
+                    self.proc.has_content(f0_norm),
                 ],
             )
         )
@@ -122,48 +220,6 @@ def short_time_energy(
     return energy
 
 
-def adaptive_threshold(
-    energy: torch.Tensor,
-    k: int = 2,
-) -> torch.Tensor:
-    mean_energy = torch.mean(energy)
-    std_energy = torch.std(energy)
-    threshold = mean_energy + k * std_energy
-    return threshold
-
-
-def refine_peaks(
-    impulse_indices: torch.Tensor,
-    audio_data: torch.Tensor,
-    frame_length: int,
-    hop_length: int,
-    sample_rate: int,
-    min_distance_ms: int = 10,
-) -> torch.Tensor:
-    min_distance_samples = int(min_distance_ms * sample_rate / 1000)
-    refined_peaks = []
-    for index in impulse_indices:
-        start = index * hop_length
-        end = start + frame_length
-        frame = audio_data[start:end]
-        peaks = (
-            torch.nonzero(
-                (torch.diff(torch.sign(torch.diff(torch.abs(frame)))) < 0)
-            ).flatten()
-            + 1
-        )
-        if len(peaks) > 0:
-            peak_index = peaks[torch.argmax(torch.abs(frame[peaks]))]
-            refined_peaks.append(start + peak_index)
-    final_peaks = []
-    if refined_peaks:
-        final_peaks.append(refined_peaks[0])
-        for peak in refined_peaks[1:]:
-            if peak - final_peaks[-1] >= min_distance_samples:
-                final_peaks.append(peak)
-    return torch.tensor(final_peaks, dtype=torch.long)
-
-
 def autocorrelation(signal: torch.Tensor) -> torch.Tensor:
     n = len(signal)
     signal_padded = torch.nn.functional.pad(signal, (0, n - 1))
@@ -174,26 +230,12 @@ def autocorrelation(signal: torch.Tensor) -> torch.Tensor:
     return correlation[:n]
 
 
-def analyze_periodicity(
-    peak_locations: torch.Tensor,
-    sample_rate: int,
-) -> Tuple[float | None, torch.Tensor | None]:
-    if len(peak_locations) < 2:
-        return None, None
-    impulse_train_len = int(peak_locations[-1] + sample_rate * 0.1)
-    impulse_train = torch.zeros(impulse_train_len)
-    impulse_train[peak_locations] = 1
-    auto_corr = autocorrelation(impulse_train)
-    peaks = (
-        torch.nonzero((torch.diff(torch.sign(torch.diff(auto_corr[1:]))) < 0)).flatten()
-        + 1
-    )
-    if len(peaks) > 0:
-        period_samples = peaks[0] + 1
-        period_seconds = period_samples / sample_rate
-        return period_seconds, auto_corr
-    else:
-        return None, auto_corr
+def iter_autocorrelation(signal: torch.Tensor) -> torch.Tensor:
+    n = len(signal)
+    correlation = torch.zeros(n, device=signal.device)
+    for lag in range(n):
+        correlation[lag] = torch.sum(signal[: n - lag] * signal[lag:])
+    return correlation
 
 
 def format_log_message(
@@ -201,10 +243,10 @@ def format_log_message(
     data_list: list[float],
     other: list[Any] = [],
 ) -> str:
-    precision = 5
+    precision = 3
     width = precision + 3
     format_string = "{:<25} " + " ".join(
-        ["{{:>{},.{}f}}".format(width, precision)] * len(data_list)
+        ["{{:>{}.{}f}}".format(width, precision)] * len(data_list)
         + ["{{!r:>{}}}".format(width)] * len(other)
     )
     log_message = format_string.format(fname, *data_list, *other)

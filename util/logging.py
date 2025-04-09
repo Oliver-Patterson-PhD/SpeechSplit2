@@ -7,6 +7,7 @@ import inspect
 from enum import IntEnum
 from os import makedirs
 from os.path import dirname
+from pprint import pformat
 from shutil import get_terminal_size
 from sys import _getframe
 from time import gmtime, strftime
@@ -194,7 +195,7 @@ class Logger(metaclass=Singleton):
         self.__log(
             level=self.__get_level(level),
             caller=self.__get_caller(),
-            message=f"{self.__get_passed_varnames()[0]}: ({var}) - type: {type(var)}",
+            message=f"{self.__get_passed_varnames()[0]}: {pformat(var, indent=4)}",
         )
 
     def trace_tensor(

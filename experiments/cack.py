@@ -1,5 +1,5 @@
 import tempfile
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 import torch
@@ -76,7 +76,7 @@ class TorchGate(torch.nn.Module):
         self.register_buffer("smoothing_filter", self._generate_mask_smoothing_filter())
 
     @torch.no_grad()
-    def _generate_mask_smoothing_filter(self) -> Union[torch.Tensor, None]:
+    def _generate_mask_smoothing_filter(self) -> Optional[torch.Tensor]:
         if self.freq_mask_smooth_hz is None and self.time_mask_smooth_ms is None:
             return None
 
@@ -577,3 +577,57 @@ def reduce_noise(
         device=device,
     )
     return sg.get_traces()
+
+
+def center(x):
+    mean = np.mean(x, axis=1, keepdims=True)
+    centered = x - mean
+    return centered, mean
+
+
+def covariance(x):
+    mean = np.mean(x, axis=1, keepdims=True)
+    n = np.shape(x)[1] - 1
+    m = x - mean
+    return (m.dot(m.T)) / n
+
+
+def whiten(x):
+    coVarM = covariance(x)
+    U, S, V = np.linalg.svd(coVarM)
+    d = np.diag(1.0 / np.sqrt(S))
+    whiteM = np.dot(U, np.dot(d, U.T))
+    Xw = np.dot(whiteM, x)
+    return Xw, whiteM
+
+
+def ica(
+    inp: torch.Tensor,
+    alpha=1,
+    thresh=1e-8,
+    iterations=5000,
+) -> torch.Tensor:
+    Xc, meanX = center(inp.numpy())
+    signals, whiteM = whiten(Xc)
+    print(np.round(covariance(signals)))
+    m, n = signals.shape
+    W = np.random.rand(m, m)
+    for c in range(m):
+        w = W[c, :].copy().reshape(m, 1)
+        w = w / np.sqrt((w**2).sum())
+        i = 0
+        lim = 100
+        while (lim > thresh) & (i < iterations):
+            ws = np.dot(w.T, signals)
+            wg = np.tanh(ws * alpha).T
+            wg_ = (1 - np.square(np.tanh(ws))) * alpha
+            wNew = (signals * wg.T).mean(axis=1) - wg_.mean() * w.squeeze()
+            wNew = wNew - np.dot(np.dot(wNew, W[:c].T), W[:c])
+            wNew = wNew / np.sqrt((wNew**2).sum())
+            lim = np.abs(np.abs((wNew * w).sum()) - 1)
+            w = wNew
+            i += 1
+        W[c, :] = w.T
+    print(W.dtype)
+    unMixed = signals.T.dot(W.T)
+    return torch.tensor((unMixed.T - meanX), dtype=torch.float32)

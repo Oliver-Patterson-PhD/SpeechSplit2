@@ -1,7 +1,9 @@
-from typing import Union, List
+from math import ceil
 from pathlib import Path
+
+import matplotlib.figure
+import matplotlib.pyplot
 import torch
-import math
 from PIL import Image
 
 __all__ = [
@@ -47,7 +49,7 @@ def try_image(
 @torch.no_grad()
 def save_image(
     tensor: torch.Tensor,
-    filename: Union[str, Path],
+    filename: str | Path,
 ) -> None:
     grid = make_grid(tensor)
     # Add 0.5 after unnormalizing to [0, 255] to round to the nearest integer
@@ -83,7 +85,7 @@ def make_grid(
     # make the mini-batch of images into a grid
     nmaps = tensor.size(0)
     xmaps = min(nrow, nmaps)
-    ymaps = int(math.ceil(float(nmaps) / xmaps))
+    ymaps = int(ceil(float(nmaps) / xmaps))
     height, width = int(tensor.size(2) + padding), int(tensor.size(3) + padding)
     num_channels = tensor.size(1)
     grid = tensor.new_full(
@@ -103,3 +105,17 @@ def make_grid(
             )
             k = k + 1
     return grid
+
+
+def plot_batch(batch: torch.Tensor, base: str) -> matplotlib.figure.Figure:
+    fig = matplotlib.pyplot.figure()
+    fig.set_size_inches(15.44, 27.45)
+    nrows: int = batch.shape[0]
+    ncols: int = 1
+    for i, sample in enumerate(batch):
+        idx = i + 1
+        ax = matplotlib.pyplot.add_subplot(nrows, ncols, idx)
+        ax.plot(sample.numpy())
+        ax.set_title(f"{base}_M{idx}")
+        ax.set_xlim(0, sample.size[-1])
+    return fig

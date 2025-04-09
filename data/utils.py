@@ -224,12 +224,10 @@ class AudioProcs:
         fs: Optional[int] = None,
         normalise: bool = True,
     ) -> torch.Tensor:
-        if fs is None:
-            fs = self.__sample_rate
         f0_rapt = torch.tensor(
             rapt(
                 wav.cpu().numpy() * 32768,
-                fs,
+                fs or self.__sample_rate,
                 self.__hop_length,
                 min=lo,
                 max=hi,
@@ -276,11 +274,12 @@ class AudioProcs:
         ap: torch.Tensor,
         fs: Optional[int] = None,
     ) -> torch.Tensor:
-        if fs is None:
-            fs = self.__sample_rate
         y = torch.tensor(
             pyworld.synthesize(
-                f0.cpu().numpy(), sp.cpu().numpy(), ap.cpu().numpy(), fs
+                f0.cpu().numpy(),
+                sp.cpu().numpy(),
+                ap.cpu().numpy(),
+                fs or self.__sample_rate,
             ),
             device=wav.device,
         )
@@ -294,7 +293,7 @@ class AudioProcs:
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if fs is None:
             fs = self.__sample_rate
-        x = wav.squeeze().double().cpu().numpy()
+        x = wav.cpu().double().squeeze().numpy()
         _f0, t = pyworld.dio(x, fs)
         f0 = pyworld.stonemask(x, _f0, t, fs)
         sp = pyworld.cheaptrick(x, f0, t, fs)
