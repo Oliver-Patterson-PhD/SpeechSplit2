@@ -9,6 +9,7 @@ import torch
 from data.dataset import DatasetParser
 from data.utils import AudioProcs
 from util import Config, Logger
+from util.file import basename, strip_path, walkdirs, walkfiles
 
 
 class Immediate:
@@ -38,9 +39,7 @@ class Immediate:
         self.logger.debug(f"In  Path: {self.in_path}")
         self.logger.debug(f"Out Path: {self.out_path}")
         speakers = set(
-            spk
-            for spk in next(os.walk(self.in_path))[1]
-            if spk in self.parser.speakers()
+            spk for spk in walkdirs(self.in_path) if spk in self.parser.speakers()
         )
         self.logger.info(f"Found {len(speakers)} speakers")
         batches = set(
@@ -49,7 +48,7 @@ class Immediate:
                 os.path.join(self.in_path, spk_dir, fname[: len(fname) - 7]),
             )
             for spk_dir in speakers
-            for fname in set(next(os.walk(os.path.join(self.in_path, spk_dir)))[-1])
+            for fname in set(walkfiles(os.path.join(self.in_path, spk_dir)))
         )
         if self.batch_graph:
             try:
@@ -61,7 +60,7 @@ class Immediate:
                             self.graph_batch(
                                 spk,
                                 set(fname for fname in glob(filebase + "_M*.wav")),
-                                filebase.rpartition("/")[-1],
+                                strip_path(filebase),
                             )
                         )
                         for spk, filebase in self.logger.progress_bar(batches)
@@ -74,7 +73,7 @@ class Immediate:
                     self.process_batch(
                         spk,
                         set(fname for fname in glob(filebase + "_M*.wav")),
-                        filebase.rpartition("/")[-1],
+                        strip_path(filebase),
                     )
                     for spk, filebase in sorted(batches, key=lambda c: c[1])
                 ]
@@ -87,7 +86,7 @@ class Immediate:
                     for filebase in sorted(
                         os.path.join(self.in_path, spk_dir, fname)
                         for spk_dir in speakers
-                        for fname in next(os.walk(os.path.join(self.in_path, spk_dir)))[-1]
+                        for fname in walkfiles(os.path.join(self.in_path, spk_dir))
                     )
                 ]
             except Exception:
@@ -103,12 +102,11 @@ class Immediate:
         wav = torch.stack(
             [
                 self.proc.load_audio(
-                    os.path.join(self.in_path, spk_dir, fname.rpartition("/")[-1])
+                    os.path.join(self.in_path, spk_dir, strip_path(fname))
                 ).squeeze()
                 for fname in batch
             ]
         )
-        wav = torch.tensor([])
         wav_mono = torch.tensor([])
         spmel = torch.tensor([])
         f0_norm = torch.tensor([])
@@ -154,7 +152,7 @@ class Immediate:
             idx = int(fname[-5:-4])
             sample = (
                 self.proc.load_audio(
-                    os.path.join(self.in_path, spk_dir, fname.rpartition("/")[-1])
+                    os.path.join(self.in_path, spk_dir, strip_path(fname))
                 )
                 .squeeze()
                 .numpy()
@@ -186,7 +184,7 @@ class Immediate:
         energy_prc = torch.tensor([])
         if self.proc.has_content(wav_prc):
             energy_prc = self.proc.short_time_energy(wav_prc)
-        sfname = fname.rpartition("/")[-1].rpartition(".")[0]
+        sfname = basename(fname)
         fig = matplotlib.pyplot.figure()
         fig.set_size_inches(15.44, 27.45)
         fig.suptitle(f"Sample: {sfname}")
@@ -203,7 +201,7 @@ class Immediate:
         matplotlib.pyplot.close()
         self.logger.info(
             format_log_message(
-                fname.rpartition("/")[-1],
+                strip_path(fname),
                 [
                     wav_prc.std().item(),
                     wav_prc.max().item(),

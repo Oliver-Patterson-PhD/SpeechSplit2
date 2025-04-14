@@ -48,7 +48,7 @@ class Transcriber:
         device: torch.device,
         model_name: str,
         config,
-    ):
+    ) -> None:
         self.device = device
         self.model_name = model_name
         self.model = load_model(
