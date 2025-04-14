@@ -59,11 +59,7 @@ class PreProcess(metaclass=Singleton):
 
     def process_file(self: Self, spk_dir: str, fname: str) -> None:
         self.logger.debug(f"Processing: {fname}")
-        rawwav = self.proc.getraw(os.path.join(self.in_path, spk_dir, fname))
-        if not self.proc.has_content(rawwav):
-            self.logger.error(f"could not read audio: {fname}")
-            return
-        wav = self.proc.filter_wav(rawwav)
+        wav = self.proc.load_audio(os.path.join(self.in_path, spk_dir, fname))
         if not self.proc.has_content(wav):
             self.logger.error(f"No Content after filtering: {fname}")
             return

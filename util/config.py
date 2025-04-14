@@ -362,11 +362,11 @@ class Config(metaclass=Singleton):
 
         if not hasattr(self.paths, "raw_uaspeech"):
             self.paths.raw_uaspeech = (
-                f"{self.paths.raw_data}/UASpeech/audio/noisereduce"
+                f"{self.paths.raw_data}/UASpeech/audio/original"
             )
         if not hasattr(self.paths, "dataset_uaspeech"):
             self.paths.dataset_uaspeech = (
-                f"{self.paths.proc_data}/UASpeech/audio/noisereduce"
+                f"{self.paths.proc_data}/UASpeech/audio/original"
             )
 
         if not hasattr(self.paths, "raw_smolspeech"):

@@ -10,15 +10,13 @@ from data.dataset import DatasetParser
 from data.utils import AudioProcs
 from util import Config, Logger
 
-from .cack import TorchGate as TG
-
 
 class Immediate:
     config: Config
-    exit_after: bool = True
+    exit_after: bool = False
     batch_test: bool = True
     batch_graph: bool = False
-    single_test: bool = False
+    single_test: bool = True
 
     def __init__(self: Self, config: Config) -> None:
         self.config = config
@@ -31,7 +29,7 @@ class Immediate:
 
     def test(self: Self) -> None:
         self.logger = Logger()
-        self.in_path = "/mnt/datasets/raw/UASpeech/audio/original"
+        self.in_path = self.config.paths.raw_wavs
         self.out_path = self.config.paths.features
         self.max_len_pad = self.config.audio.max_len_pad
         self.hop_length = self.config.audio.hop_len
@@ -45,8 +43,6 @@ class Immediate:
             if spk in self.parser.speakers()
         )
         self.logger.info(f"Found {len(speakers)} speakers")
-        sample_rate = 16000
-        tg = TG(sr=sample_rate, nonstationary=True)
         batches = set(
             (
                 spk_dir,
@@ -56,51 +52,57 @@ class Immediate:
             for fname in set(next(os.walk(os.path.join(self.in_path, spk_dir)))[-1])
         )
         if self.batch_graph:
-            with matplotlib.backends.backend_pdf.PdfPages(
-                os.path.join(self.experiment_dir, "waveforms.pdf")
-            ) as pdf:
-                [
-                    pdf.savefig(
-                        self.graph_batch(
-                            spk,
-                            set(fname for fname in glob(filebase + "_M*.wav")),
-                            filebase.rpartition("/")[-1],
+            try:
+                with matplotlib.backends.backend_pdf.PdfPages(
+                    os.path.join(self.experiment_dir, "waveforms.pdf")
+                ) as pdf:
+                    [
+                        pdf.savefig(
+                            self.graph_batch(
+                                spk,
+                                set(fname for fname in glob(filebase + "_M*.wav")),
+                                filebase.rpartition("/")[-1],
+                            )
                         )
-                    )
-                    for spk, filebase in self.logger.progress_bar(batches)
-                ]
+                        for spk, filebase in self.logger.progress_bar(batches)
+                    ]
+            except Exception:
+                pass
         if self.batch_test:
-            [
-                self.process_batch(
-                    spk,
-                    set(fname for fname in glob(filebase + "_M*.wav")),
-                    filebase.rpartition("/")[-1],
-                    tg,
-                )
-                for spk, filebase in sorted(batches, key=lambda c: c[1])
-            ]
+            try:
+                [
+                    self.process_batch(
+                        spk,
+                        set(fname for fname in glob(filebase + "_M*.wav")),
+                        filebase.rpartition("/")[-1],
+                    )
+                    for spk, filebase in sorted(batches, key=lambda c: c[1])
+                ]
+            except Exception:
+                pass
         if self.single_test:
-            [
-                self.process_file(filebase, tg)
-                for filebase in sorted(
-                    os.path.join(self.in_path, spk_dir, fname)
-                    for spk_dir in speakers
-                    for fname in next(os.walk(os.path.join(self.in_path, spk_dir)))[-1]
-                )
-            ]
-            return
-        self.logger.info("Preprocessing Complete")
+            try:
+                [
+                    self.process_file(filebase)
+                    for filebase in sorted(
+                        os.path.join(self.in_path, spk_dir, fname)
+                        for spk_dir in speakers
+                        for fname in next(os.walk(os.path.join(self.in_path, spk_dir)))[-1]
+                    )
+                ]
+            except Exception:
+                pass
+        self.logger.info("Immediate Test Complete")
 
     def process_batch(
         self: Self,
         spk_dir: str,
         batch: set[str],
         origname: str,
-        tg: TG,
     ) -> None:
-        rawwavs = torch.stack(
+        wav = torch.stack(
             [
-                self.proc.getraw(
+                self.proc.load_audio(
                     os.path.join(self.in_path, spk_dir, fname.rpartition("/")[-1])
                 ).squeeze()
                 for fname in batch
@@ -111,24 +113,22 @@ class Immediate:
         spmel = torch.tensor([])
         f0_norm = torch.tensor([])
         try:
-            wav = self.proc.clean_audio(tg(rawwavs))
             lo, hi = self.proc.get_f0_lohi(spk_dir)
             f0, sp, ap = self.proc.get_world_params(wav=wav)
             wav_mono = self.proc.get_monotonic_wav(wav=wav, f0=f0, sp=sp, ap=ap)
             spmel, phase = self.proc.get_spmel(wav)
             f0_norm = self.proc.extract_f0(wav=wav, lo=lo, hi=hi)
-        except Exception:
-            pass
+        except Exception as e:
+            raise e
         self.logger.info(
             format_log_message(
                 origname,
                 [
-                    rawwavs.std().item(),
-                    rawwavs.max().item(),
-                    rawwavs.min().item(),
+                    wav.std().item(),
+                    wav.max().item(),
+                    wav.min().item(),
                 ],
                 [
-                    rawwavs.size(dim=-1),
                     wav.size(dim=-1),
                     self.proc.has_content(wav),
                     self.proc.has_content(wav_mono),
@@ -147,13 +147,13 @@ class Immediate:
         fig = matplotlib.pyplot.figure()
         fig.set_size_inches(15.44, 27.45)
         fig.suptitle(f"Sample: {origname}")
-        nrows: int = len(batch)
+        nrows: int = 7
         ncols: int = 1
         fig.subplots(nrows, ncols)
         for fname in batch:
             idx = int(fname[-5:-4])
             sample = (
-                self.proc.getraw(
+                self.proc.load_audio(
                     os.path.join(self.in_path, spk_dir, fname.rpartition("/")[-1])
                 )
                 .squeeze()
@@ -168,56 +168,59 @@ class Immediate:
     def process_file(
         self: Self,
         fname: str,
-        tg: TG,
     ) -> None:
         spk_dir: str = fname.split("/")[-2]
-        rawwav = torch.tensor([])
-        wav = torch.tensor([])
+        wav_prc = torch.tensor([])
         wav_mono = torch.tensor([])
         spmel = torch.tensor([])
         f0_norm = torch.tensor([])
         try:
-            rawwav = self.proc.getraw(os.path.join(self.in_path, spk_dir, fname))
-            wav = self.proc.clean_audio(tg(rawwav))
+            wav_prc = self.proc.load_audio(os.path.join(self.in_path, spk_dir, fname))
             lo, hi = self.proc.get_f0_lohi(spk_dir)
-            f0, sp, ap = self.proc.get_world_params(wav=wav)
-            wav_mono = self.proc.get_monotonic_wav(wav=wav, f0=f0, sp=sp, ap=ap)
-            spmel, phase = self.proc.get_spmel(wav)
-            f0_norm = self.proc.extract_f0(wav=wav, lo=lo, hi=hi)
+            f0, sp, ap = self.proc.get_world_params(wav=wav_prc)
+            wav_mono = self.proc.get_monotonic_wav(wav=wav_prc, f0=f0, sp=sp, ap=ap)
+            spmel, phase = self.proc.get_spmel(wav_prc)
+            f0_norm = self.proc.extract_f0(wav=wav_prc, lo=lo, hi=hi)
         except Exception:
             pass
+        energy_prc = torch.tensor([])
+        if self.proc.has_content(wav_prc):
+            energy_prc = self.proc.short_time_energy(wav_prc)
+        sfname = fname.rpartition("/")[-1].rpartition(".")[0]
+        fig = matplotlib.pyplot.figure()
+        fig.set_size_inches(15.44, 27.45)
+        fig.suptitle(f"Sample: {sfname}")
+        nrows = 5
+        ncols = 1
+        fig.subplots(nrows, ncols)
+        plot_thing((nrows, ncols, 1), wav_prc, "waveform")
+        plot_thing((nrows, ncols, 2), energy_prc, "energy")
+        plot_thing((nrows, ncols, 3), wav_mono, "wav_mono")
+        plot_thing((nrows, ncols, 4), spmel.mT, "spmel")
+        plot_thing((nrows, ncols, 5), f0_norm, "f0_norm")
+        outpath = os.path.join(self.experiment_dir, f"energy-{sfname}.pdf")
+        fig.savefig(outpath)
+        matplotlib.pyplot.close()
         self.logger.info(
             format_log_message(
                 fname.rpartition("/")[-1],
                 [
-                    rawwav.std().item(),
-                    rawwav.max().item(),
-                    rawwav.min().item(),
+                    wav_prc.std().item(),
+                    wav_prc.max().item(),
+                    wav_prc.min().item(),
                 ],
                 [
-                    rawwav.size(dim=-1),
-                    wav.size(dim=-1),
-                    self.proc.has_content(wav),
+                    tuple(wav_prc.size()),
+                    tuple(wav_mono.size()),
+                    tuple(spmel.size()),
+                    tuple(f0_norm.size()),
+                    self.proc.has_content(wav_prc),
                     self.proc.has_content(wav_mono),
                     self.proc.has_content(spmel),
                     self.proc.has_content(f0_norm),
                 ],
             )
         )
-
-
-def short_time_energy(
-    audio_data: torch.Tensor,
-    frame_length: int,
-    hop_length: int,
-):
-    if len(audio_data.shape) == 1:
-        audio_data = audio_data.unsqueeze(0)
-    window = torch.ones(1, 1, frame_length, device=audio_data.device)
-    energy = torch.nn.functional.conv1d(
-        audio_data.unsqueeze(1) ** 2, window, stride=hop_length, padding=0
-    ).squeeze()
-    return energy
 
 
 def autocorrelation(signal: torch.Tensor) -> torch.Tensor:
@@ -243,11 +246,28 @@ def format_log_message(
     data_list: list[float],
     other: list[Any] = [],
 ) -> str:
-    precision = 3
-    width = precision + 3
+    precision = 5
+    width = precision + 5
     format_string = "{:<25} " + " ".join(
         ["{{:>{}.{}f}}".format(width, precision)] * len(data_list)
         + ["{{!r:>{}}}".format(width)] * len(other)
     )
     log_message = format_string.format(fname, *data_list, *other)
     return log_message
+
+
+def plot_thing(subp: tuple[int, int, int], thing: torch.Tensor, title: str) -> None:
+    ax = matplotlib.pyplot.subplot(*subp)
+    if thing.dim() == 1:
+        ax.plot(thing.squeeze().cpu().numpy())
+        ax.set_xlim(0, thing.size(dim=-1))
+    elif thing.dim() == 2:
+        ax.imshow(
+            thing.squeeze().cpu().numpy(),
+            interpolation="none",
+            aspect="auto",
+            origin="lower",
+        )
+    else:
+        raise RuntimeError(f"Invalid Tensor has shape: {thing.size()}")
+    ax.set_title(title)

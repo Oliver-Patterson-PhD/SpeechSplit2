@@ -6,10 +6,11 @@ import os
 from math import floor
 from typing import List, Optional, Self, Tuple
 
+from pysptk.sptk import rapt
+from torch.types import Number
 import pyworld
 import torch
 import torchaudio
-from pysptk.sptk import rapt
 
 from util import Compute, Config
 from util.audio import norm_audio
@@ -67,6 +68,10 @@ class AudioProcs:
             norm=None,
             mel_scale="htk",
             driver="gels",
+        )
+        self.__noisereducer = TorchGate(
+            sr=self.__sample_rate,
+            nonstationary=True,
         )
         return
 
@@ -350,10 +355,45 @@ class AudioProcs:
             retval = torch.nn.functional.pad(item, opads).unsqueeze(0)
         return retval
 
+    def full_load(self: Self, fullname: str | os.PathLike) -> torch.Tensor:
+        return self.clean_keep(self.kill_pop(self.noisereduce(self.getraw(fullname))))
+
+    def load_audio(self: Self, fullname: str | os.PathLike) -> torch.Tensor:
+        return self.clean_audio(self.kill_pop(self.noisereduce(self.getraw(fullname))))
+
     def getraw(self: Self, full_fname: str | os.PathLike) -> torch.Tensor:
         inaud, sr = torchaudio.load(full_fname, channels_first=True)
         assert sr == self.__sample_rate
         return inaud
+
+    def clean_keep(self: Self, audio: torch.Tensor) -> torch.Tensor:
+        def rev_audio(aud: torch.Tensor) -> torch.Tensor:
+            return torchaudio.sox_effects.apply_effects_tensor(
+                aud, self.__sample_rate, [["reverse"]]
+            )[0]
+
+        norm = norm_audio(audio)
+        vad_aud = self.__vad_transform(norm)
+        if vad_aud.size(dim=-1) == 0:
+            return torch.tensor([])
+        rev_aud = rev_audio(vad_aud)
+        rev_vad_aud = self.__vad_transform(rev_aud)
+        if rev_vad_aud.size(dim=-1) == 0:
+            return torch.tensor([])
+        rev_vad_out_aud = rev_audio(rev_vad_aud)
+        x = torch.nn.functional.pad(
+            norm_audio(rev_vad_out_aud.squeeze()),
+            (
+                audio.size(dim=-1) - vad_aud.size(dim=-1),
+                rev_aud.size(dim=-1) - rev_vad_aud.size(dim=-1),
+            ),
+            mode="constant",
+            value=0,
+        )
+        assert x.size(dim=-1) == audio.size(dim=-1)
+        if x.shape[0] % self.__hop_length == 0:
+            x = torch.cat((x, torch.tensor([1e-10], device=x.device)), dim=0)
+        return x
 
     def clean_audio(self: Self, audio: torch.Tensor) -> torch.Tensor:
         def rev_audio(aud: torch.Tensor) -> torch.Tensor:
@@ -379,7 +419,7 @@ class AudioProcs:
         return bool(
             (audio.size(dim=-1) > 1)
             and (audio.max().item() > 1e-03)
-            and (audio != 0).any()
+            and (audio != 0.0).any()
         )
 
     def combine(self: Self, listitem: List[torch.Tensor]) -> torch.Tensor:
@@ -397,3 +437,258 @@ class AudioProcs:
         folded = fold_fn(item_mod).squeeze(1).squeeze(1).T
         out_norm = fold_fn(norm_mod).squeeze(1).squeeze(1).T
         return folded / out_norm
+
+    def noisereduce(self: Self, x: torch.Tensor) -> torch.Tensor:
+        return self.__noisereducer(x)
+
+    def short_time_energy(
+        self: Self,
+        audio_data: torch.Tensor,
+        frame_len: int = 400,
+        hop_len: int = 100,
+    ):
+        if len(audio_data.shape) == 1:
+            audio_data = audio_data.unsqueeze(0)
+        window = torch.ones(1, 1, frame_len, device=audio_data.device)
+        energy = torch.nn.functional.conv1d(
+            audio_data.unsqueeze(1) ** 2,
+            window,
+            stride=hop_len,
+            padding=0,
+        ).squeeze()
+        return energy
+
+    def kill_pop(self: Self, audio: torch.Tensor) -> torch.Tensor:
+        energy = self.short_time_energy(audio)
+        split_beg: int = energy.size(dim=-1) // 4
+        split_end: int = 3 * (energy.size(dim=-1) // 4)
+        begidx = energy[0 : split_beg - 1].min(dim=-1).indices
+        endidx = (
+            energy[split_end : energy.size(dim=-1) - 1].min(dim=-1).indices + split_end
+        )
+        scale = audio.size(dim=-1) / energy.size(dim=-1)
+        cropped = audio.clone().squeeze(0)
+        cropped[0 : int(begidx * scale)] = 0.0
+        cropped[int(endidx * scale) : audio.size(dim=-1)] = 0.0
+        return cropped.unsqueeze(0)
+
+
+@torch.no_grad()
+def amp_to_db(
+    x: torch.Tensor, eps=torch.finfo(torch.float64).eps, top_db=40
+) -> torch.Tensor:
+    x_db = 20 * torch.log10(x.abs() + eps)
+    return torch.max(x_db, (x_db.max(-1).values - top_db).unsqueeze(-1))
+
+
+@torch.no_grad()
+def temperature_sigmoid(x: torch.Tensor, x0: float, temp_coeff: float) -> torch.Tensor:
+    return torch.sigmoid((x - x0) / temp_coeff)
+
+
+@torch.no_grad()
+def linspace(
+    start: Number, stop: Number, num: int = 50, endpoint: bool = True, **kwargs
+) -> torch.Tensor:
+    if endpoint:
+        return torch.linspace(start, stop, num, **kwargs)
+    else:
+        return torch.linspace(start, stop, num + 1, **kwargs)[:-1]
+
+
+class TorchGate(torch.nn.Module):
+    @torch.no_grad()
+    def __init__(
+        self,
+        sr: int,
+        nonstationary: bool = False,
+        n_std_thresh_stationary: float = 1.5,
+        n_thresh_nonstationary: float = 1.3,
+        temp_coeff_nonstationary: float = 0.1,
+        n_movemean_nonstationary: int = 20,
+        prop_decrease: float = 1.0,
+        n_fft: int = 1024,
+        win_length: Optional[int] = None,
+        hop_length: Optional[int] = None,
+        freq_mask_smooth_hz: float = 500,
+        time_mask_smooth_ms: float = 50,
+    ):
+        super().__init__()
+
+        # General Params
+        self.sr = sr
+        self.nonstationary = nonstationary
+        assert 0.0 <= prop_decrease <= 1.0
+        self.prop_decrease = prop_decrease
+
+        # STFT Params
+        self.n_fft = n_fft
+        self.win_length = win_length or self.n_fft
+        self.hop_length = hop_length or self.win_length // 4
+
+        # Stationary Params
+        self.n_std_thresh_stationary = n_std_thresh_stationary
+
+        # Non-Stationary Params
+        self.temp_coeff_nonstationary = temp_coeff_nonstationary
+        self.n_movemean_nonstationary = n_movemean_nonstationary
+        self.n_thresh_nonstationary = n_thresh_nonstationary
+
+        # Smooth Mask Params
+        self.freq_mask_smooth_hz = freq_mask_smooth_hz
+        self.time_mask_smooth_ms = time_mask_smooth_ms
+        self.register_buffer("smoothing_filter", self._generate_mask_smoothing_filter())
+
+    @torch.no_grad()
+    def _generate_mask_smoothing_filter(self) -> Optional[torch.Tensor]:
+        if self.freq_mask_smooth_hz is None and self.time_mask_smooth_ms is None:
+            return None
+
+        n_grad_freq = (
+            1
+            if self.freq_mask_smooth_hz is None
+            else int(self.freq_mask_smooth_hz / (self.sr / (self.n_fft / 2)))
+        )
+        if n_grad_freq < 1:
+            raise ValueError(
+                f"freq_mask_smooth_hz needs to be at least {int((self.sr / (self._n_fft / 2)))} Hz"  # type: ignore[operator]
+            )
+
+        n_grad_time = (
+            1
+            if self.time_mask_smooth_ms is None
+            else int(self.time_mask_smooth_ms / ((self.hop_length / self.sr) * 1000))
+        )
+        if n_grad_time < 1:
+            raise ValueError(
+                f"time_mask_smooth_ms needs to be at least {int((self.hop_length / self.sr) * 1000)} ms"
+            )
+
+        if n_grad_time == 1 and n_grad_freq == 1:
+            return None
+
+        v_f = torch.cat(
+            [
+                linspace(0, 1, n_grad_freq + 1, endpoint=False),
+                linspace(1, 0, n_grad_freq + 2),
+            ]
+        )[1:-1]
+        v_t = torch.cat(
+            [
+                linspace(0, 1, n_grad_time + 1, endpoint=False),
+                linspace(1, 0, n_grad_time + 2),
+            ]
+        )[1:-1]
+        smoothing_filter = torch.outer(v_f, v_t).unsqueeze(0).unsqueeze(0)
+
+        return smoothing_filter / smoothing_filter.sum()
+
+    @torch.no_grad()
+    def _stationary_mask(
+        self, X_db: torch.Tensor, xn: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        if xn is not None:
+            XN = torch.stft(
+                xn,
+                n_fft=self.n_fft,
+                hop_length=self.hop_length,
+                win_length=self.win_length,
+                return_complex=True,
+                pad_mode="constant",
+                center=True,
+                window=torch.hann_window(self.win_length).to(xn.device),
+            )
+
+            XN_db = amp_to_db(XN).to(dtype=X_db.dtype)
+        else:
+            XN_db = X_db
+
+        # calculate mean and standard deviation along the frequency axis
+        std_freq_noise, mean_freq_noise = torch.std_mean(XN_db, dim=-1)
+
+        # compute noise threshold
+        noise_thresh = mean_freq_noise + std_freq_noise * self.n_std_thresh_stationary
+
+        # create binary mask by thresholding the spectrogram
+        sig_mask = torch.gt(X_db, noise_thresh.unsqueeze(2))
+        return sig_mask
+
+    @torch.no_grad()
+    def _nonstationary_mask(self, X_abs: torch.Tensor) -> torch.Tensor:
+        X_smoothed = (
+            torch.nn.functional.conv1d(
+                X_abs.reshape(-1, 1, X_abs.shape[-1]),
+                torch.ones(
+                    self.n_movemean_nonstationary,
+                    dtype=X_abs.dtype,
+                    device=X_abs.device,
+                ).view(1, 1, -1),
+                padding="same",
+            ).view(X_abs.shape)
+            / self.n_movemean_nonstationary
+        )
+
+        # Compute slowness ratio and apply temperature sigmoid
+        slowness_ratio = (X_abs - X_smoothed) / X_smoothed
+        sig_mask = temperature_sigmoid(
+            slowness_ratio, self.n_thresh_nonstationary, self.temp_coeff_nonstationary
+        )
+
+        return sig_mask
+
+    def forward(
+        self, x: torch.Tensor, xn: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        assert x.ndim == 2
+        if x.shape[-1] < self.win_length * 2:
+            raise Exception(f"x must be bigger than {self.win_length * 2}")
+
+        assert xn is None or xn.ndim == 1 or xn.ndim == 2
+        if xn is not None and xn.shape[-1] < self.win_length * 2:
+            raise Exception(f"xn must be bigger than {self.win_length * 2}")
+
+        # Compute short-time Fourier transform (STFT)
+        X = torch.stft(
+            x,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            return_complex=True,
+            pad_mode="constant",
+            center=True,
+            window=torch.hann_window(self.win_length).to(x.device),
+        )
+
+        # Compute signal mask based on stationary or nonstationary assumptions
+        if self.nonstationary:
+            sig_mask = self._nonstationary_mask(X.abs())
+        else:
+            sig_mask = self._stationary_mask(amp_to_db(X), xn)
+
+        # Propagate decrease in signal power
+        sig_mask = self.prop_decrease * (sig_mask * 1.0 - 1.0) + 1.0
+
+        # Smooth signal mask with 2D convolution
+        if self.smoothing_filter is not None:
+            inp: torch.Tensor = self.smoothing_filter.to(
+                device=sig_mask.device,
+                dtype=sig_mask.dtype,
+            )  # type: ignore[assignment]
+            sig_mask = torch.nn.functional.conv2d(
+                sig_mask.unsqueeze(1), inp, padding="same"
+            )
+
+        # Apply signal mask to STFT magnitude and phase components
+        Y = X * sig_mask.squeeze(1)
+
+        # Inverse STFT to obtain time-domain signal
+        y = torch.istft(
+            Y,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            center=True,
+            window=torch.hann_window(self.win_length).to(Y.device),
+        )
+
+        return y.to(dtype=x.dtype)

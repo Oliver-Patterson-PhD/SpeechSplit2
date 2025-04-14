@@ -1,7 +1,7 @@
 [options]
 experiment = "trainswitch"
 run_tests = ["save_latents", "swap_latents"]
-dataset_name = "smolspeech"
+dataset_name = "uaspeech"
 num_iters = 6400000
 log_step = 10000
 ckpt_save_step = 10000
