@@ -5,6 +5,7 @@ from typing import Any, Self
 import matplotlib.backends.backend_pdf
 import matplotlib.pyplot
 import torch
+import torchaudio
 
 from data.dataset import DatasetParser
 from data.utils import AudioProcs
@@ -15,9 +16,10 @@ from util.file import basename, strip_path, walkdirs, walkfiles
 class Immediate:
     config: Config
     exit_after: bool = False
-    batch_test: bool = True
+    batch_test: bool = False
     batch_graph: bool = False
-    single_test: bool = True
+    single_test: bool = False
+    make_clean: bool = False
 
     def __init__(self: Self, config: Config) -> None:
         self.config = config
@@ -42,56 +44,88 @@ class Immediate:
             spk for spk in walkdirs(self.in_path) if spk in self.parser.speakers()
         )
         self.logger.info(f"Found {len(speakers)} speakers")
-        batches = set(
-            (
-                spk_dir,
-                os.path.join(self.in_path, spk_dir, fname[: len(fname) - 7]),
+        for spk_idx, spk_dir in enumerate(speakers):
+            self.logger.info(
+                f"Processing {spk_idx + 1:>2}/{len(speakers):>2} {spk_dir}"
             )
-            for spk_dir in speakers
-            for fname in set(walkfiles(os.path.join(self.in_path, spk_dir)))
-        )
-        if self.batch_graph:
-            try:
-                with matplotlib.backends.backend_pdf.PdfPages(
-                    os.path.join(self.experiment_dir, "waveforms.pdf")
-                ) as pdf:
+            batches = set(
+                (
+                    spk_dir,
+                    os.path.join(self.in_path, spk_dir, fname[: len(fname) - 7]),
+                )
+                for fname in set(walkfiles(os.path.join(self.in_path, spk_dir)))
+            )
+            if self.batch_graph:
+                try:
+                    with matplotlib.backends.backend_pdf.PdfPages(
+                        os.path.join(self.experiment_dir, f"waveforms-{spk_dir}.pdf")
+                    ) as pdf:
+                        [
+                            pdf.savefig(
+                                self.graph_batch(
+                                    spk,
+                                    set(fname for fname in glob(filebase + "_M*.wav")),
+                                    strip_path(filebase),
+                                )
+                            )
+                            for spk, filebase in self.logger.progress_bar(batches)
+                        ]
+                except Exception as e:
+                    self.logger.error(f"Failure in batch_graph: {e.__str__()}")
+            if self.batch_test:
+                try:
                     [
-                        pdf.savefig(
-                            self.graph_batch(
-                                spk,
-                                set(fname for fname in glob(filebase + "_M*.wav")),
-                                strip_path(filebase),
+                        self.process_batch(
+                            spk,
+                            set(fname for fname in glob(filebase + "_M*.wav")),
+                            strip_path(filebase),
+                        )
+                        for spk, filebase in sorted(batches, key=lambda c: c[1])
+                    ]
+                except Exception as e:
+                    self.logger.error(f"Failure in batch_test: {e.__str__()}")
+            if self.single_test:
+                try:
+                    [
+                        self.process_file(filebase)
+                        for filebase in sorted(
+                            os.path.join(self.in_path, spk_dir, fname)
+                            for fname in walkfiles(os.path.join(self.in_path, spk_dir))
+                        )
+                    ]
+                except Exception as e:
+                    self.logger.error(f"Failure in single_test: {e.__str__()}")
+            if self.make_clean:
+                try:
+                    dset_path = os.path.join(self.experiment_dir, "clean_dataset")
+                    os.makedirs(dset_path, exist_ok=True)
+                    [
+                        self.save_cleaned_audio(filebase)
+                        for filebase in self.logger.progress_bar(
+                            sorted(
+                                os.path.join(self.in_path, spk_dir, fname)
+                                for fname in walkfiles(
+                                    os.path.join(self.in_path, spk_dir)
+                                )
                             )
                         )
-                        for spk, filebase in self.logger.progress_bar(batches)
                     ]
-            except Exception:
-                pass
-        if self.batch_test:
-            try:
-                [
-                    self.process_batch(
-                        spk,
-                        set(fname for fname in glob(filebase + "_M*.wav")),
-                        strip_path(filebase),
-                    )
-                    for spk, filebase in sorted(batches, key=lambda c: c[1])
-                ]
-            except Exception:
-                pass
-        if self.single_test:
-            try:
-                [
-                    self.process_file(filebase)
-                    for filebase in sorted(
-                        os.path.join(self.in_path, spk_dir, fname)
-                        for spk_dir in speakers
-                        for fname in walkfiles(os.path.join(self.in_path, spk_dir))
-                    )
-                ]
-            except Exception:
-                pass
+                except Exception as e:
+                    self.logger.error(f"Failure in make_clean: {e.__str__()}")
+                    raise e
         self.logger.info("Immediate Test Complete")
+
+    def save_cleaned_audio(self: Self, fname: str) -> None:
+        spk_dir = fname.split("/")[-2]
+        fullpath = os.path.join(self.in_path, spk_dir, fname)
+        sfname = basename(fname)
+        outpath = os.path.join(self.experiment_dir, "clean_dataset", f"{sfname}.wav")
+        clean_wav = self.proc.load_audio(fullpath).unsqueeze(0).cpu()
+        torchaudio.save(
+            uri=outpath,
+            src=clean_wav,
+            sample_rate=16000,
+        )
 
     def process_batch(
         self: Self,
@@ -179,26 +213,12 @@ class Immediate:
             wav_mono = self.proc.get_monotonic_wav(wav=wav_prc, f0=f0, sp=sp, ap=ap)
             spmel, phase = self.proc.get_spmel(wav_prc)
             f0_norm = self.proc.extract_f0(wav=wav_prc, lo=lo, hi=hi)
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.error(f"Failed to generate: {fname}, {e.__str__()}")
+            return
         energy_prc = torch.tensor([])
         if self.proc.has_content(wav_prc):
             energy_prc = self.proc.short_time_energy(wav_prc)
-        sfname = basename(fname)
-        fig = matplotlib.pyplot.figure()
-        fig.set_size_inches(15.44, 27.45)
-        fig.suptitle(f"Sample: {sfname}")
-        nrows = 5
-        ncols = 1
-        fig.subplots(nrows, ncols)
-        plot_thing((nrows, ncols, 1), wav_prc, "waveform")
-        plot_thing((nrows, ncols, 2), energy_prc, "energy")
-        plot_thing((nrows, ncols, 3), wav_mono, "wav_mono")
-        plot_thing((nrows, ncols, 4), spmel.mT, "spmel")
-        plot_thing((nrows, ncols, 5), f0_norm, "f0_norm")
-        outpath = os.path.join(self.experiment_dir, f"energy-{sfname}.pdf")
-        fig.savefig(outpath)
-        matplotlib.pyplot.close()
         self.logger.info(
             format_log_message(
                 strip_path(fname),
@@ -219,6 +239,25 @@ class Immediate:
                 ],
             )
         )
+        try:
+            sfname = basename(fname)
+            fig = matplotlib.pyplot.figure()
+            fig.set_size_inches(15.44, 27.45)
+            fig.suptitle(f"Sample: {sfname}")
+            nrows = 5
+            ncols = 1
+            fig.subplots(nrows, ncols)
+            plot_thing((nrows, ncols, 1), wav_prc, "waveform")
+            plot_thing((nrows, ncols, 2), energy_prc, "energy")
+            plot_thing((nrows, ncols, 3), wav_mono, "wav_mono")
+            if spmel.dim() == 2:
+                plot_thing((nrows, ncols, 4), spmel.mT, "spmel")
+            plot_thing((nrows, ncols, 5), f0_norm, "f0_norm")
+            outpath = os.path.join(self.experiment_dir, f"energy-{sfname}.pdf")
+            fig.savefig(outpath)
+            matplotlib.pyplot.close()
+        except Exception as e:
+            self.logger.error(f"Failed to plot: {fname}, {e.__str__()}")
 
 
 def autocorrelation(signal: torch.Tensor) -> torch.Tensor:
@@ -255,17 +294,21 @@ def format_log_message(
 
 
 def plot_thing(subp: tuple[int, int, int], thing: torch.Tensor, title: str) -> None:
-    ax = matplotlib.pyplot.subplot(*subp)
-    if thing.dim() == 1:
-        ax.plot(thing.squeeze().cpu().numpy())
-        ax.set_xlim(0, thing.size(dim=-1))
-    elif thing.dim() == 2:
-        ax.imshow(
-            thing.squeeze().cpu().numpy(),
-            interpolation="none",
-            aspect="auto",
-            origin="lower",
-        )
-    else:
-        raise RuntimeError(f"Invalid Tensor has shape: {thing.size()}")
-    ax.set_title(title)
+    try:
+        ax = matplotlib.pyplot.subplot(*subp)
+        if thing.dim() == 1:
+            ax.plot(thing.squeeze().cpu().numpy())
+            ax.set_xlim(0, thing.size(dim=-1))
+        elif thing.dim() == 2:
+            ax.imshow(
+                thing.squeeze().cpu().numpy(),
+                interpolation="none",
+                aspect="auto",
+                origin="lower",
+            )
+        else:
+            raise RuntimeError(f"Invalid Tensor has shape: {thing.size()}")
+        ax.set_title(title)
+    except Exception as e:
+        Logger().error(f"Failed at: {title}, {e.__str__()}")
+        return

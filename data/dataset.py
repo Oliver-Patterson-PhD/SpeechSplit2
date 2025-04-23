@@ -60,6 +60,12 @@ class DatasetParser:
     ) -> DType:
         return self.__dsettype
 
+    def is_uaspeech(self: Self) -> bool:
+        return self.dataset_type() == DType.UASPEECH
+
+    def is_vctk(self: Self) -> bool:
+        return self.dataset_type() == DType.VCTK
+
     def sex(
         self: Self,
         speaker: str,

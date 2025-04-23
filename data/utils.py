@@ -356,10 +356,14 @@ class AudioProcs:
         return retval
 
     def full_load(self: Self, fullname: str | os.PathLike) -> torch.Tensor:
-        return self.clean_keep(self.kill_pop(self.noisereduce(self.getraw(fullname))))
+        nonoise = self.noisereduce(self.getraw(fullname))
+        nopop = self.kill_pop(nonoise) if self.__parser.is_uaspeech() else nonoise
+        return self.clean_keep(nopop)
 
     def load_audio(self: Self, fullname: str | os.PathLike) -> torch.Tensor:
-        return self.clean_audio(self.kill_pop(self.noisereduce(self.getraw(fullname))))
+        nonoise = self.noisereduce(self.getraw(fullname))
+        nopop = self.kill_pop(nonoise) if self.__parser.is_uaspeech() else nonoise
+        return self.clean_audio(nopop)
 
     def getraw(self: Self, full_fname: str | os.PathLike) -> torch.Tensor:
         inaud, sr = torchaudio.load(full_fname, channels_first=True)
