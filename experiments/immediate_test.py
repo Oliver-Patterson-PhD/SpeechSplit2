@@ -15,20 +15,24 @@ from util.file import basename, strip_path, walkdirs, walkfiles
 
 class Immediate:
     config: Config
-    exit_after: bool = False
+    exit_after: bool = True
     batch_test: bool = False
     batch_graph: bool = False
     single_test: bool = False
-    make_clean: bool = False
+    make_clean: bool = True
+    graph_clean: bool = True
 
     def __init__(self: Self, config: Config) -> None:
         self.config = config
         self.experiment_dir = os.path.join(self.config.paths.artefacts, "immediate")
-        for root, _, files in os.walk(self.experiment_dir, topdown=False):
+        return
+
+    def clean_subdir(self: Self, subdir: str) -> None:
+        subpath = os.path.join(self.experiment_dir, subdir)
+        for root, _, files in os.walk(subpath, topdown=False):
             for name in files:
                 os.remove(os.path.join(root, name))
-        os.makedirs(self.experiment_dir, exist_ok=True)
-        return
+        os.makedirs(subpath, exist_ok=True)
 
     def test(self: Self) -> None:
         self.logger = Logger()
@@ -97,8 +101,7 @@ class Immediate:
                     self.logger.error(f"Failure in single_test: {e.__str__()}")
             if self.make_clean:
                 try:
-                    dset_path = os.path.join(self.experiment_dir, "clean_dataset")
-                    os.makedirs(dset_path, exist_ok=True)
+                    self.clean_subdir("clean_dataset")
                     [
                         self.save_cleaned_audio(filebase)
                         for filebase in self.logger.progress_bar(
@@ -113,6 +116,23 @@ class Immediate:
                 except Exception as e:
                     self.logger.error(f"Failure in make_clean: {e.__str__()}")
                     raise e
+            if self.graph_clean:
+                try:
+                    self.clean_subdir("cleanup")
+                    [
+                        self.graph_cleaned_audio(filebase)
+                        for filebase in self.logger.progress_bar(
+                            sorted(
+                                os.path.join(self.in_path, spk_dir, fname)
+                                for fname in walkfiles(
+                                    os.path.join(self.in_path, spk_dir)
+                                )
+                            )
+                        )
+                    ]
+                except Exception as e:
+                    self.logger.error(f"Failure in graph_clean: {e.__str__()}")
+                    raise e
         self.logger.info("Immediate Test Complete")
 
     def save_cleaned_audio(self: Self, fname: str) -> None:
@@ -126,6 +146,35 @@ class Immediate:
             src=clean_wav,
             sample_rate=16000,
         )
+
+    def graph_cleaned_audio(self: Self, fname: str) -> None:
+        spk_dir = fname.split("/")[-2]
+        sfname = basename(fname)
+        rawpath = os.path.join(self.in_path, spk_dir, fname)
+        clnpath = os.path.join(self.experiment_dir, "clean_dataset", f"{sfname}.wav")
+        raw_wav = self.proc.getraw(rawpath)
+        cln_wav = self.proc.getraw(clnpath)
+        raw_spec, _ = self.proc.get_spmel(raw_wav)
+        cln_spec, _ = self.proc.get_spmel(cln_wav)
+        raw_energy = self.proc.short_time_energy(raw_wav)
+        cln_energy = self.proc.short_time_energy(cln_wav)
+        try:
+            fig = matplotlib.pyplot.figure()
+            fig.set_size_inches(15.44, 27.45)
+            fig.suptitle(f"Sample: {sfname}")
+            nrows = 6
+            ncols = 1
+            fig.subplots(nrows, ncols)
+            plot_thing((nrows, ncols, 1), raw_wav, "Raw Audio")
+            plot_thing((nrows, ncols, 3), raw_spec, "Raw Spectrum")
+            plot_thing((nrows, ncols, 5), raw_energy, "Raw Energy")
+            plot_thing((nrows, ncols, 2), cln_wav, "Clean Audio")
+            plot_thing((nrows, ncols, 4), cln_spec, "Clean Spectrum")
+            plot_thing((nrows, ncols, 6), cln_energy, "Clean Energy")
+            fig.savefig(os.path.join(self.experiment_dir, "cleanup", f"{sfname}.pdf"))
+            matplotlib.pyplot.close()
+        except Exception as e:
+            self.logger.error(f"Failed to plot: {fname}, {e.__str__()}")
 
     def process_batch(
         self: Self,
