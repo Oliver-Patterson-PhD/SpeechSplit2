@@ -450,7 +450,7 @@ class AudioProcs:
         audio_data: torch.Tensor,
         frame_len: int = 400,
         hop_len: int = 100,
-    ):
+    ) -> torch.Tensor:
         if len(audio_data.shape) == 1:
             audio_data = audio_data.unsqueeze(0)
         window = torch.ones(1, 1, frame_len, device=audio_data.device)

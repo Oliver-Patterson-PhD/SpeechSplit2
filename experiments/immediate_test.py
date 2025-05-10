@@ -19,7 +19,7 @@ class Immediate:
     batch_test: bool = False
     batch_graph: bool = False
     single_test: bool = False
-    make_clean: bool = True
+    make_clean: bool = False
     graph_clean: bool = True
 
     def __init__(self: Self, config: Config) -> None:
@@ -148,28 +148,30 @@ class Immediate:
         )
 
     def graph_cleaned_audio(self: Self, fname: str) -> None:
-        spk_dir = fname.split("/")[-2]
-        sfname = basename(fname)
-        rawpath = os.path.join(self.in_path, spk_dir, fname)
-        clnpath = os.path.join(self.experiment_dir, "clean_dataset", f"{sfname}.wav")
-        raw_wav = self.proc.getraw(rawpath)
-        cln_wav = self.proc.getraw(clnpath)
-        raw_spec, _ = self.proc.get_spmel(raw_wav)
-        cln_spec, _ = self.proc.get_spmel(cln_wav)
-        raw_energy = self.proc.short_time_energy(raw_wav)
-        cln_energy = self.proc.short_time_energy(cln_wav)
         try:
+            spk_dir = fname.split("/")[-2]
+            sfname = basename(fname)
+            rawpath = os.path.join(self.in_path, spk_dir, fname)
+            clnpath = os.path.join(self.experiment_dir, "clean_dataset", f"{sfname}.wav")
+            if not (os.path.exists(rawpath) and os.path.exists(clnpath)):
+                return
+            raw_wav = self.proc.getraw(rawpath)
+            cln_wav = self.proc.getraw(clnpath)
+            raw_spec, _ = self.proc.get_spmel(raw_wav)
+            cln_spec, _ = self.proc.get_spmel(cln_wav)
+            raw_energy = self.proc.short_time_energy(raw_wav)
+            cln_energy = self.proc.short_time_energy(cln_wav)
             fig = matplotlib.pyplot.figure()
             fig.set_size_inches(15.44, 27.45)
             fig.suptitle(f"Sample: {sfname}")
             nrows = 6
             ncols = 1
             fig.subplots(nrows, ncols)
-            plot_thing((nrows, ncols, 1), raw_wav, "Raw Audio")
-            plot_thing((nrows, ncols, 3), raw_spec, "Raw Spectrum")
+            plot_thing((nrows, ncols, 1), raw_wav.squeeze(), "Raw Audio")
+            plot_thing((nrows, ncols, 3), raw_spec.squeeze(), "Raw Spectrum")
             plot_thing((nrows, ncols, 5), raw_energy, "Raw Energy")
-            plot_thing((nrows, ncols, 2), cln_wav, "Clean Audio")
-            plot_thing((nrows, ncols, 4), cln_spec, "Clean Spectrum")
+            plot_thing((nrows, ncols, 2), cln_wav.squeeze(), "Clean Audio")
+            plot_thing((nrows, ncols, 4), cln_spec.squeeze(), "Clean Spectrum")
             plot_thing((nrows, ncols, 6), cln_energy, "Clean Energy")
             fig.savefig(os.path.join(self.experiment_dir, "cleanup", f"{sfname}.pdf"))
             matplotlib.pyplot.close()
