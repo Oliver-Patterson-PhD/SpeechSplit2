@@ -22,6 +22,8 @@ class ConfigPaths:
     spmels: str
     monowavs: str
     fullwavs: str
+    phases: str
+    cleanwavs: str
 
     full_models: str
     models: str
@@ -95,6 +97,7 @@ class ConfigModel:
 class ConfigLogging:
     level: LogLevel = LogLevel.INFO
     file: Optional[str] = None
+    callgraph: bool = False
 
 
 class RunTests(Flag):
@@ -323,6 +326,8 @@ class Config(metaclass=Singleton):
                 f"{self.paths.logging}/{self.start_time}-{self.options.experiment}.log"
             )
             Logger().set_file(self.__logging.file)
+        if self.__logging.callgraph:
+            Logger().enable_callgraph()
 
     def __set_artefact_paths(
         self: Self,
@@ -346,6 +351,10 @@ class Config(metaclass=Singleton):
             self.paths.monowavs = f"{self.paths.features}/monowavs"
         if not hasattr(self.paths, "fullwavs"):
             self.paths.fullwavs = f"{self.paths.features}/fullwavs"
+        if not hasattr(self.paths, "phases"):
+            self.paths.phases = f"{self.paths.features}/phases"
+        if not hasattr(self.paths, "cleanwavs"):
+            self.paths.cleanwavs = f"{self.paths.features}/cleanwavs"
 
     def __set_dataset_paths(
         self: Self,
@@ -361,9 +370,7 @@ class Config(metaclass=Singleton):
             self.paths.dataset_vctk = f"{self.paths.proc_data}/VCTK-Corpus"
 
         if not hasattr(self.paths, "raw_uaspeech"):
-            self.paths.raw_uaspeech = (
-                f"{self.paths.raw_data}/UASpeech/audio/original"
-            )
+            self.paths.raw_uaspeech = f"{self.paths.raw_data}/UASpeech/audio/original"
         if not hasattr(self.paths, "dataset_uaspeech"):
             self.paths.dataset_uaspeech = (
                 f"{self.paths.proc_data}/UASpeech/audio/original"

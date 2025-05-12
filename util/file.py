@@ -61,3 +61,9 @@ def strip_ext(fullpath: PathVar) -> str:
 
 def basename(fullpath: PathVar) -> str:
     return strip_path(strip_ext(fullpath))
+
+
+def newpath(*args: str) -> str:
+    path = os.path.join(*args)
+    os.makedirs(path, exist_ok=True)
+    return path

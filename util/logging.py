@@ -11,6 +11,7 @@ from pprint import pformat
 from shutil import get_terminal_size
 from sys import _getframe
 from time import gmtime, strftime
+from types import FrameType
 from typing import Any, List, Optional, Self, TextIO, overload
 
 from torch import Tensor
@@ -61,6 +62,8 @@ class Logger(metaclass=Singleton):
     __file: Optional[TextIO] = None
     __flush: bool = False
     __process_bar_running: bool = False
+    __print_callgraph: bool = False
+    __date_format: str = "%Y/%m/%d %H:%M:%S"
 
     def __init__(
         self: Self, level: Optional[LogLevel] = None, flush: Optional[bool] = None
@@ -70,19 +73,58 @@ class Logger(metaclass=Singleton):
         if flush is not None:
             self.__flush = flush
 
+    def enable_callgraph(self) -> None:
+        self.__print_callgraph = True
+
     def __reduce__(self: Self):
         print(f"attempted __reduce__ on {self.__class__.__name__}")
         return (self.__class__, ())
 
+    def __format_caller(self: Self, frame: FrameType) -> str:
+        base = "/SpeechSplit2/"
+        name = frame.f_code.co_qualname
+        fname = frame.f_code.co_filename.partition(base)[2]
+        return f"[{fname}:{frame.f_lineno}] {name}"
+
+    def __format_callgraph(self: Self, callgraph: str) -> str:
+        # add spaces equal to additional characters in the prefix of the format string
+        prefix_str = "\n" + (" " * (len(self.__date_format) + 13))
+        calls = [call.strip("'") for call in callgraph.strip("[]").split(", ")]
+        return prefix_str.join(calls) + prefix_str
+
     def __get_caller(self: Self, depth: int = 1) -> str:
-        tmp_frame = _getframe(depth).f_back
-        assert tmp_frame is not None
-        return tmp_frame.f_code.co_qualname
+        if self.__print_callgraph:
+            frame: FrameType | None = inspect.currentframe()
+            assert frame is not None
+            names = []
+            while True:
+                frame = frame.f_back
+                if frame is None:
+                    break
+                name = frame.f_code.co_qualname
+                if name == "<module>":
+                    break
+                if name.startswith("Logger"):
+                    continue
+                names.append(self.__format_caller(frame))
+            return f"{list(reversed(names))}"
+        else:
+            tmp_frame = _getframe(depth).f_back
+            assert tmp_frame is not None
+            return tmp_frame.f_code.co_qualname
 
     def __format_msg(self: Self, level: LogLevel, caller: str, message: str) -> str:
-        return "{} - {:>26} - {} - {}".format(
-            strftime("%Y/%m/%d %H:%M:%S", gmtime()), caller, str(level), message
-        )
+        if self.__print_callgraph:
+            return "{} - {} - {} - {}".format(
+                strftime("%Y/%m/%d %H:%M:%S", gmtime()),
+                str(level),
+                self.__format_callgraph(caller),
+                message,
+            )
+        else:
+            return "{} - {:>26} - {} - {}".format(
+                strftime("%Y/%m/%d %H:%M:%S", gmtime()), caller, str(level), message
+            )
 
     def __log(self: Self, level: LogLevel, caller: str, message: str) -> None:
         if self.__file is not None or level >= self.__level:
