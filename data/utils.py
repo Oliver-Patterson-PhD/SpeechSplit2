@@ -6,11 +6,11 @@ import os
 from math import floor
 from typing import List, Optional, Self, Tuple
 
-from pysptk.sptk import rapt
-from torch.types import Number
 import pyworld
 import torch
 import torchaudio
+from pysptk.sptk import rapt
+from torch.types import Number
 
 from util import Compute, Config
 from util.audio import norm_audio
@@ -355,15 +355,38 @@ class AudioProcs:
             retval = torch.nn.functional.pad(item, opads).unsqueeze(0)
         return retval
 
-    def full_load(self: Self, fullname: str | os.PathLike) -> torch.Tensor:
-        nonoise = self.noisereduce(self.getraw(fullname))
-        nopop = self.kill_pop(nonoise) if self.__parser.is_uaspeech() else nonoise
-        return self.clean_keep(nopop)
+    def full_load_check(
+        self: Self,
+        raw: torch.Tensor,
+        nonoise: torch.Tensor,
+        nopop: torch.Tensor,
+        clean: torch.Tensor,
+        keep: bool = False,
+    ) -> str | None:
+        if not self.is_valid(raw):
+            return "Loading File"
+        if not self.is_valid(nonoise):
+            return "Noise Reduction"
+        if not self.is_valid(nopop):
+            return "Pop-Removal"
+        if keep:
+            if not self.is_valid(clean):
+                return "Clean"
+        else:
+            if not self.only_content(clean):
+                return "Clean"
+        return None
 
-    def load_audio(self: Self, fullname: str | os.PathLike) -> torch.Tensor:
-        nonoise = self.noisereduce(self.getraw(fullname))
+    def full_load_parts(
+        self: Self,
+        fullname: str | os.PathLike,
+        keep: bool = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        raw = norm_audio(self.getraw(fullname))
+        nonoise = self.noisereduce(raw)
         nopop = self.kill_pop(nonoise) if self.__parser.is_uaspeech() else nonoise
-        return self.clean_audio(nopop)
+        clean = self.clean_keep(nopop) if keep else self.clean_audio(nopop)
+        return raw, nonoise, nopop, clean
 
     def getraw(self: Self, full_fname: str | os.PathLike) -> torch.Tensor:
         inaud, sr = torchaudio.load(full_fname, channels_first=True)
@@ -379,11 +402,11 @@ class AudioProcs:
         norm = norm_audio(audio)
         vad_aud = self.__vad_transform(norm)
         if vad_aud.size(dim=-1) == 0:
-            return torch.tensor([])
+            return torch.zeros_like(audio)
         rev_aud = rev_audio(vad_aud)
         rev_vad_aud = self.__vad_transform(rev_aud)
         if rev_vad_aud.size(dim=-1) == 0:
-            return torch.tensor([])
+            return torch.zeros_like(audio)
         rev_vad_out_aud = rev_audio(rev_vad_aud)
         x = torch.nn.functional.pad(
             norm_audio(rev_vad_out_aud.squeeze()),
@@ -419,11 +442,18 @@ class AudioProcs:
             x = torch.cat((x, torch.tensor([1e-10], device=x.device)), dim=0)
         return x
 
-    def has_content(self: Self, audio: torch.Tensor) -> bool:
+    def only_content(self: Self, audio: torch.Tensor) -> bool:
         return bool(
             (audio.size(dim=-1) > 1)
             and (audio.max().item() > 1e-03)
             and (audio != 0.0).any()
+        )
+
+    def is_valid(self: Self, audio: torch.Tensor) -> bool:
+        return bool(
+            (audio.size(dim=-1) > 1)
+            and (audio.max().item() > 1e-03)
+            and not (audio == 0.0).all()
         )
 
     def combine(self: Self, listitem: List[torch.Tensor]) -> torch.Tensor:
