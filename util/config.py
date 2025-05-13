@@ -231,7 +231,7 @@ class Config(metaclass=Singleton):
         config_dict: dict,
     ) -> None:
         Logger().info(
-            "config:\n"
+            f"config: {self.original_config}\n"
             + "\n".join(
                 [
                     "\n".join(

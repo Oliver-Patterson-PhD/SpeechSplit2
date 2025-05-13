@@ -106,6 +106,7 @@ class Immediate:
             from data.preprocess import preprocess_data
 
             preprocess_data(self.config)
+            self.clean_path = self.config.paths.cleanwavs
 
             out_dir = self.subdir("cleanup")
             bad_dir = self.subdir("bad")

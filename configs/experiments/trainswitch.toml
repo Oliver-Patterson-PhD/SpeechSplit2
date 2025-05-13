@@ -7,7 +7,7 @@ log_step = 10000
 ckpt_save_step = 10000
 train = true
 return_latents = true
-regenerate_data = true
+regenerate_data = false
 
 [dataloader]
 shuffle = true
