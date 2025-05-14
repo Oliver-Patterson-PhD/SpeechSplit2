@@ -1,9 +1,6 @@
 import os
-from glob import glob
 from typing import Any, Self
 
-import matplotlib.backends.backend_pdf
-import matplotlib.pyplot
 import torch
 import torchaudio
 
@@ -11,12 +8,14 @@ from data.dataset import DatasetParser
 from data.utils import AudioProcs
 from util import Config, Logger
 from util.file import basename, newpath, strip_path, walkdirs, walkfiles
+from util.plot import plot_things
 
 
 class Immediate:
-    clean_data_before_run: bool = False
+    run: bool = False
     config: Config
-    exit_after: bool = True
+    clean_data_before_run: bool = False
+    exit_after: bool = False
     batch_test: bool = False
     batch_graph: bool = False
     single_test: bool = False
@@ -38,6 +37,8 @@ class Immediate:
         return subpath
 
     def test(self: Self) -> None:
+        if not self.run:
+            return
         self.logger = Logger()
         self.in_path = self.config.paths.raw_wavs
         self.out_path = self.config.paths.features
@@ -198,9 +199,6 @@ class Immediate:
         except Exception as e:
             self.logger.error(f"Failed to generate: {fname}, {e.__str__()}")
             return
-        energy_prc = torch.tensor([])
-        if self.proc.only_content(wav_prc):
-            energy_prc = self.proc.short_time_energy(wav_prc)
         self.logger.info(
             format_log_message(
                 strip_path(fname),
@@ -221,25 +219,6 @@ class Immediate:
                 ],
             )
         )
-        try:
-            sfname = basename(fname)
-            fig = matplotlib.pyplot.figure()
-            fig.set_size_inches(15.44, 27.45)
-            fig.suptitle(f"Sample: {sfname}")
-            nrows = 5
-            ncols = 1
-            fig.subplots(nrows, ncols)
-            plot_thing((nrows, ncols, 1), wav_prc, "waveform")
-            plot_thing((nrows, ncols, 2), energy_prc, "energy")
-            plot_thing((nrows, ncols, 3), wav_mono, "wav_mono")
-            if spmel.dim() == 2:
-                plot_thing((nrows, ncols, 4), spmel.mT, "spmel")
-            plot_thing((nrows, ncols, 5), f0_norm, "f0_norm")
-            outpath = os.path.join(self.experiment_dir, f"energy-{sfname}.pdf")
-            fig.savefig(outpath)
-            matplotlib.pyplot.close()
-        except Exception as e:
-            self.logger.error(f"Failed to plot: {fname}, {e.__str__()}")
 
 
 def autocorrelation(signal: torch.Tensor) -> torch.Tensor:
@@ -273,37 +252,3 @@ def format_log_message(
     )
     log_message = format_string.format(fname, *data_list, *other)
     return log_message
-
-
-def plot_thing(subp: tuple[int, int, int], thing: torch.Tensor, title: str) -> None:
-    try:
-        ax = matplotlib.pyplot.subplot(*subp)
-        if thing.dim() == 1:
-            ax.plot(thing.squeeze().cpu().numpy())
-            ax.set_xlim(0, thing.size(dim=-1))
-        elif thing.dim() == 2:
-            ax.imshow(
-                thing.squeeze().cpu().numpy(),
-                interpolation="none",
-                aspect="auto",
-                origin="lower",
-            )
-        else:
-            raise RuntimeError(f"Invalid Tensor has shape: {thing.size()}")
-        ax.set_title(title)
-    except Exception as e:
-        Logger().error(f"Failed at: {title}, {e.__str__()}")
-        return
-
-
-def plot_things(plot_out: str, sample: str, things: list[tuple[torch.Tensor, str]]):
-    nrows = len(things)
-    ncols = 1
-    fig = matplotlib.pyplot.figure()
-    fig.set_size_inches(15.44, 27.45)
-    fig.suptitle(f"Sample: {sample}")
-    fig.subplots(nrows, ncols)
-    for i, (item, name) in enumerate(things):
-        plot_thing((nrows, ncols, i + 1), item, name)
-    fig.savefig(os.path.join(plot_out, f"{sample}.pdf"))
-    matplotlib.pyplot.close()

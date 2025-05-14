@@ -1,10 +1,12 @@
 def main() -> None:
-    import torch
     from argparse import ArgumentParser
 
+    import torch
+
     from data import PreProcess
-    from experiments import Scratchpad, Swapper, TestSamples, Train, Immediate
-    from util import Config, Logger, RunTests, Compute
+    from experiments import (Immediate, Scratchpad, Swapper,
+                             SyllableEstimation, TestSamples, Train)
+    from util import Compute, Config, Logger, RunTests
 
     torch.backends.cudnn.benchmark = True
     parser = ArgumentParser()
@@ -37,6 +39,10 @@ def main() -> None:
             scratch.run()
             exit(0)
 
+        if RunTests.SYLLABLE_ESTIMATION in config.options.run_tests:
+            syllable = SyllableEstimation(config)
+            syllable.run()
+
         if RunTests.TEST in config.options.run_tests:
             tester = TestSamples(config)
             tester.test()
@@ -56,7 +62,8 @@ def main() -> None:
             if RunTests.SWAP_LATENTS in config.options.run_tests:
                 swapper.swap_latents()
             if RunTests.SAVE_AUDIOS in config.options.run_tests:
-                swapper.save_audios()
+                pass
+                # swapper.save_audios()
         logger.debug("Finished main")
     except Exception as e:
         logger.fatal(str(e.__cause__))

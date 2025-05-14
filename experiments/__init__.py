@@ -5,6 +5,7 @@ __all__ = [
     "TestSamples",
     "Train",
     "Immediate",
+    "SyllableEstimation",
 ]
 
 from .experiment import Experiment
@@ -14,3 +15,4 @@ from .swap_only import Swapper
 from .test_samples import TestSamples
 from .train import Train
 from .immediate_test import Immediate
+from .syllable_estimation import SyllableEstimation

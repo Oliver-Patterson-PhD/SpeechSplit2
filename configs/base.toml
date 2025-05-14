@@ -3,8 +3,8 @@ proc_data = "/mnt/datasets/processed"
 raw_data = "/mnt/datasets/raw"
 
 [options]
-bottleneck = "switch"
-experiment = "trainswitch"
+bottleneck = "large"
+experiment = "syllable_estimation"
 audio = "speechsplit2"
 trace = false
 

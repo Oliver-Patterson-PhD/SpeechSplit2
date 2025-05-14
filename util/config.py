@@ -103,6 +103,7 @@ class ConfigLogging:
 class RunTests(Flag):
     NOTHING = 0
     TRAIN = auto()
+    SYLLABLE_ESTIMATION = auto()
     SAVE_LATENTS = auto()
     SWAP_LATENTS = auto()
     SAVE_AUDIOS = auto()

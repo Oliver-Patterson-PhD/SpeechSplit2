@@ -103,7 +103,7 @@ class AudioProcs:
         )
 
     def get_spenv(self: Self, wav: torch.Tensor, cutoff: int = 3) -> torch.Tensor:
-        spec = torch.abs(self.stft(wav)).T
+        spec = torch.abs(self.stft(wav)).mT
         ceps = torch.fft.irfft(torch.log(spec + 1e-6), axis=-1).to(dtype=torch.double)
         lifter = torch.zeros(ceps.shape[1], dtype=torch.double)
         lifter[:cutoff] = 1
@@ -133,7 +133,7 @@ class AudioProcs:
         rawspec: torch.Tensor = self.stft(wav.float())
         mags: torch.Tensor = rawspec.abs()
         phases: torch.Tensor = rawspec.angle()
-        mel_spec = self.__melbasis(mags.to(Compute().device())).T
+        mel_spec = self.__melbasis(mags.to(Compute().device())).mT
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
@@ -158,7 +158,7 @@ class AudioProcs:
             n_fft=self.__vtlp_fft,
             window=vtlp_window,
             return_complex=True,
-        ).T
+        ).mT
         dtype = vtlp_stft.dtype
         shape_t, shape_k = vtlp_stft.shape
         f_warps = self.warp_freq(
@@ -183,7 +183,7 @@ class AudioProcs:
                 new_S[:, pos] += warp_down * vtlp_stft[:, k]
                 new_S[:, pos + 1] += warp_up * vtlp_stft[:, k]
         y = torch.istft(
-            new_S.T,
+            new_S.mT,
             n_fft=self.__vtlp_fft,
             window=vtlp_window,
         )
@@ -228,15 +228,17 @@ class AudioProcs:
         hi: int,
         fs: Optional[int] = None,
         normalise: bool = True,
+        hop_len: Optional[int] = None,
+        otype: int = 2,
     ) -> torch.Tensor:
         f0_rapt = torch.tensor(
             rapt(
                 wav.cpu().numpy() * 32768,
                 fs or self.__sample_rate,
-                self.__hop_length,
+                hop_len or self.__hop_length,
                 min=lo,
                 max=hi,
-                otype=2,
+                otype=otype,
             ),
             device=wav.device,
         )
@@ -468,8 +470,8 @@ class AudioProcs:
             stride=(1, fold_step),
         )
         norm_mod = torch.ones_like(item_mod)
-        folded = fold_fn(item_mod).squeeze(1).squeeze(1).T
-        out_norm = fold_fn(norm_mod).squeeze(1).squeeze(1).T
+        folded = fold_fn(item_mod).squeeze(1).squeeze(1).mT
+        out_norm = fold_fn(norm_mod).squeeze(1).squeeze(1).mT
         return folded / out_norm
 
     def noisereduce(self: Self, x: torch.Tensor) -> torch.Tensor:

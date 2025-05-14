@@ -67,3 +67,7 @@ def newpath(*args: str) -> str:
     path = os.path.join(*args)
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def path(*args: str) -> str:
+    return os.path.join(*args)

@@ -5,11 +5,10 @@ __all__ = [
 
 import os
 from enum import Enum, auto
-from typing import Optional, Self, Set, Dict
-
-from util import Config
+from typing import Dict, Optional, Self, Set
 
 from meta_dicts import MetaDictType
+from util import Config
 
 ua_uttrs: Dict[str, str]
 ua_uttrs = getattr(
@@ -21,6 +20,15 @@ ua_uttrs = getattr(
 class DType(Enum):
     VCTK = auto()
     UASPEECH = auto()
+
+    def __str__(self) -> str:
+        match self:
+            case self.VCTK:
+                return "VCTK"
+            case self.UASPEECH:
+                return "UASpeech"
+            case _:
+                raise ValueError
 
 
 class DatasetParser:
