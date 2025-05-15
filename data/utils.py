@@ -474,6 +474,9 @@ class AudioProcs:
         out_norm = fold_fn(norm_mod).squeeze(1).squeeze(1).mT
         return folded / out_norm
 
+    ## Noise reduction using stationary spectral gating
+    # Explanation: [@sainburg_t_2021_computationalneuroethology]
+    # Source:
     def noisereduce(self: Self, x: torch.Tensor) -> torch.Tensor:
         return self.__noisereducer(x)
 
