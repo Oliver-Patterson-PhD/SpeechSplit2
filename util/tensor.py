@@ -3,18 +3,19 @@ from pathlib import Path
 
 import torch
 from matplotlib.figure import Figure
-from matplotlib.pyplot import add_subplot, figure
+from matplotlib.pyplot import figure
 from PIL import Image
 from torch import Tensor
 
 from .file import strip_ext
 
 __all__ = [
-    "save_tensor",
     "Tensor",
     "TensorPair",
     "TensorTriple",
     "TensorQuad",
+    "save_tensor",
+    "pad_to",
 ]
 
 TensorPair = tuple[Tensor, Tensor]
@@ -115,8 +116,21 @@ def plot_batch(batch: Tensor, base: str) -> Figure:
     ncols: int = 1
     for i, sample in enumerate(batch):
         idx = i + 1
-        ax = add_subplot(nrows, ncols, idx)
+        ax = fig.add_subplot(nrows, ncols, idx)
         ax.plot(sample.numpy())
         ax.set_title(f"{base}_M{idx}")
         ax.set_xlim(0, sample.size[-1])
     return fig
+
+
+def pad_like(x: Tensor, ref: Tensor) -> TensorPair:
+    assert all(x.shape <= ref.shape)
+    return torch.nn.functional.pad(x, (0, ref.size(dim=-1) - x.size(dim=-1)))
+
+
+def pad_to(x: Tensor, y: Tensor) -> TensorPair:
+    if x.size(dim=-1) < y.size(dim=-1):
+        x = torch.nn.functional.pad(x, (0, y.size(dim=-1) - x.size(dim=-1)))
+    if x.size(dim=-1) > y.size(dim=-1):
+        y = torch.nn.functional.pad(y, (0, x.size(dim=-1) - y.size(dim=-1)))
+    return x, y

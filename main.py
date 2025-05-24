@@ -5,7 +5,8 @@ def main() -> None:
 
     from data import PreProcess
     from experiments import (Immediate, Scratchpad, Swapper,
-                             SyllableEstimation, TestSamples, Train)
+                             SyllableEstimation, TestSamples, Train,
+                             TranscriptionLoss)
     from util import Compute, Config, Logger, RunTests
 
     torch.backends.cudnn.benchmark = True
@@ -42,6 +43,10 @@ def main() -> None:
         if RunTests.SYLLABLE_ESTIMATION in config.options.run_tests:
             syllable = SyllableEstimation(config)
             syllable.run()
+
+        if RunTests.TRANSCRIPTION_LOSS in config.options.run_tests:
+            transcription = TranscriptionLoss(config)
+            transcription.run()
 
         if RunTests.TEST in config.options.run_tests:
             tester = TestSamples(config)

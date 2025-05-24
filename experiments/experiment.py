@@ -27,7 +27,7 @@ class Experiment(object):
     writer: SummaryWriter
     tb_prefix: str
     experiment_dir: str
-    dataset: DatasetParser
+    parser: DatasetParser
     audproc: AudioProcs
     ret_item_t = tuple[
         str,
@@ -83,7 +83,7 @@ class Experiment(object):
             config.paths.artefacts,
             config.options.experiment,
         )
-        self.dataset = DatasetParser(config)
+        self.parser = DatasetParser(config)
         self.audproc = AudioProcs(config)
         os.makedirs(self.experiment_dir, exist_ok=True)
         self.config = config

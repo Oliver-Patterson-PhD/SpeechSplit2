@@ -9,7 +9,7 @@ from enum import Enum, auto
 
 from util import Config
 from util.file import (basename, dirname, freadline, freadlist, myglob, path,
-                       strip_ext, walkfiles)
+                       strip_ext)
 
 from .dataset_detail import (smolspeech_speakers, smolvctk_speakers,
                              timit_speakers, timit_spk_path, uaspeech_speakers,
@@ -168,7 +168,7 @@ class DatasetParser:
     def get_fullpath(self, spk: str, uttr: str) -> str:
         match self.dataset_type():
             case DType.UASPEECH:
-                return path(self.get_spkdir(spk), f"{spk}_{strip_ext(uttr)}")
+                return path(self.get_spkdir(spk), f"{spk}_{strip_ext(uttr)}_M2")
             case DType.VCTK:
                 return path(self.get_spkdir(spk), f"{spk}_{strip_ext(uttr)}")
             case DType.TIMIT:
@@ -238,9 +238,9 @@ class DatasetParser:
     def raw_samples(self, spk: str) -> list[str]:
         match self.dataset_type():
             case DType.UASPEECH:
-                return myglob(path(self.__raw_uaspeech, spk), "*.wav")
+                return myglob(path(self.__raw_uaspeech, self.get_spkdir(spk)), "*.wav")
             case DType.VCTK:
-                return myglob(path(self.__raw_vctk, spk), "*.wav")
+                return myglob(path(self.__raw_vctk, self.get_spkdir(spk)), "*.wav")
             case DType.TIMIT:
                 return myglob(path(self.__raw_timit, self.get_spkdir(spk)), "*.WAV")
             case _:
@@ -270,7 +270,7 @@ class DatasetParser:
     def get_real_text(self, fpath: str) -> str:
         match self.dataset_type():
             case DType.UASPEECH:
-                return uaspeech_uttrs[self.utterance(self.sample_name(fpath))]
+                return uaspeech_uttrs[self.utterance(fpath)]
             case DType.VCTK:
                 spk = self.speaker(fpath)
                 txtfile = f"{self.sample_name(fpath)}.txt"
@@ -323,4 +323,4 @@ class DatasetParser:
                 raise ValueError
 
     def get_utterances(self, speaker: str) -> set[str]:
-        return set(basename(file) for file in walkfiles(self.get_spkdir(speaker)))
+        return set(self.utterance(file) for file in self.raw_samples(speaker))

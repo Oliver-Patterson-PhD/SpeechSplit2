@@ -68,8 +68,8 @@ def _download(url: str, root: str) -> str:
 
     with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
         with tqdm(
+            desc="Downloading Whisper",
             total=int(source.info().get("Content-Length")),
-            ncols=80,
             unit="iB",
             unit_scale=True,
             unit_divisor=1024,

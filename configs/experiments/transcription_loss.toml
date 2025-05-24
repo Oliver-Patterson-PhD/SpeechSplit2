@@ -1,0 +1,15 @@
+[options]
+experiment = "transcription_loss"
+run_tests = ["transcription_loss"]
+dataset_name = "timit"
+train = false
+return_latents = false
+regenerate_data = false
+whisper_type = "tiny.en"
+
+[dataloader]
+shuffle = true
+batch_size = 32
+num_workers = 24
+samplier = 32
+drop_and_pad = true

@@ -1,4 +1,3 @@
-import os
 from typing import Self
 
 import torch
@@ -8,6 +7,7 @@ from models.whisper.loader import load_model
 from models.whisper.model import Whisper
 from models.whisper.transcribe import transcribe
 from models.whisper.utils import ResultWriter
+from util.file import path
 
 
 class Transcriber:
@@ -43,25 +43,16 @@ class Transcriber:
     writer: ResultWriter
     model: Whisper
 
-    def __init__(
-        self: Self,
-        device: torch.device,
-        model_name: str,
-        config,
-    ) -> None:
+    def __init__(self: Self, device: torch.device, config) -> None:
         self.device = device
-        self.model_name = model_name
+        self.model_name = config.options.whisper_type
         self.model = load_model(
             name=self.model_name,
             device=self.device,
-            download_root=os.path.join(config.paths.full_models, "whisper"),
+            download_root=path(config.paths.full_models, "whisper"),
         )
 
-    def transcribe(
-        self: Self,
-        melspec: torch.Tensor,
-        name: str,
-    ):
+    def transcribe(self: Self, melspec: torch.Tensor, name: str):
         if melspec.shape[-1] == self.model.dims.n_mels:
             melspec = melspec.mT
         bigsize: int = max(melspec.size())
@@ -70,16 +61,17 @@ class Transcriber:
             melspec.squeeze(),
             (0, padding),
         )
-        from util import Logger
-
-        logger = Logger()
         result = transcribe(
             self.model,
             mel=padded_melspec,
             **self.model_args,
         )
         if len(result["text"]) == 0:
-            logger.trace(f"Unable to transcribe: {tuple(padded_melspec.shape)}, {name}")
+            from util import Logger
+
+            Logger().trace(
+                f"Unable to transcribe: {tuple(padded_melspec.shape)}, {name}"
+            )
 
         out_str = ""
         for segment in result["segments"]:

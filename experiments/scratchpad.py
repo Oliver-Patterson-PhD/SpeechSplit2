@@ -4,9 +4,8 @@ import torch
 import torchaudio
 
 from synthesizers import Synthesizer
-from transcribers import Transcriber
-from util import CompareItem
-from util.tensor import save_tensor, Tensor, TensorPair
+from transcribers import CompareItem, Transcriber
+from util.tensor import Tensor, TensorPair, save_tensor
 
 from .experiment import Experiment
 
@@ -77,7 +76,7 @@ class Scratchpad(Experiment):
         proc_data = [item for item in self.data_loader]
         proc_data = sorted(proc_data, key=lambda i: i[0])[:5]
         proc_name: set[str]
-        proc_name = set(self.dataset.sample_name(item[0][0]) for item in proc_data)
+        proc_name = set(self.parser.sample_name(item[0][0]) for item in proc_data)
         self.logger.trace_var(proc_name, "DEBUG")
         for name in proc_name:
             items: list[DataType] = sorted(
@@ -121,11 +120,11 @@ class Scratchpad(Experiment):
                 source=orig,
                 destin=proc,
                 model=self.transcriber,
-                text=self.dataset.get_real_text(name),
+                text=self.parser.get_real_text(name),
             ).__str__()
         )
         raw_audio_file = os.path.join(
-            self.config.paths.raw_wavs, self.dataset.speaker(name), f"{name}.wav"
+            self.config.paths.raw_wavs, self.parser.speaker(name), f"{name}.wav"
         )
         raw_aud_raw, _ = torchaudio.load(raw_audio_file)
         raws, _ = self.audproc.get_spmel(
@@ -141,7 +140,7 @@ class Scratchpad(Experiment):
         raw_phase_file = os.path.join(
             self.config.paths.features,
             "phases",
-            self.dataset.speaker(name),
+            self.parser.speaker(name),
             f"{name}.pt",
         )
         raw_phases = torch.load(
@@ -163,7 +162,7 @@ class Scratchpad(Experiment):
         raw_mags_proc = torch.sqrt(procmt)
 
         raw_audio_file = os.path.join(
-            self.config.paths.raw_wavs, self.dataset.speaker(name), f"{name}.wav"
+            self.config.paths.raw_wavs, self.parser.speaker(name), f"{name}.wav"
         )
         raw_aud_raw, _ = torchaudio.load(raw_audio_file)
         raw_raw_stft = self.audproc.stft(raw_aud_raw.squeeze())
@@ -242,9 +241,7 @@ class Scratchpad(Experiment):
         self.single_spmel_to_audio(synth_out, proc, synt)
 
     @torch.no_grad()
-    def single_spmel_to_audio(
-        self, file: str, spec: Tensor, synt: Synthesizer
-    ) -> None:
+    def single_spmel_to_audio(self, file: str, spec: Tensor, synt: Synthesizer) -> None:
         wav = synt.spect2wav(spec).unsqueeze(dim=0)
         self.logger.trace_tensor(wav)
         torchaudio.save(

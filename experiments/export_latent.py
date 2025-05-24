@@ -37,7 +37,7 @@ class ExportLatents(Experiment):
     def process(self: Self) -> None:
         self.load_data(singleitem=True, sequential=True)
         proc_data = sorted([item for item in self.data_loader], key=lambda i: i[0])
-        proc_name = set(self.dataset.sample_name(item[0][0]) for item in proc_data)
+        proc_name = set(self.parser.sample_name(item[0][0]) for item in proc_data)
         self.logger.trace_var(proc_name, "DEBUG")
         for name in proc_name:
             items: list[DataType] = sorted(

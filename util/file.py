@@ -21,6 +21,11 @@ def fread(file: PathVar, binary: bool = False) -> str:
         return f.read()
 
 
+def fwrite(file: PathVar, buffer: str, binary: bool = False) -> int:
+    with open(file, "wb" if binary else "w") as f:
+        return f.write(buffer)
+
+
 def freadlist(file: PathVar, binary: bool = False) -> list[str]:
     with open(file, "rb" if binary else "r") as f:
         return [line for line in f]
@@ -74,14 +79,14 @@ def dirname(fullpath: PathVar) -> str:
     return os.path.dirname(str(fullpath))
 
 
-def newpath(*args: str) -> str:
-    path = os.path.join(*args)
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
 def path(*args: str) -> str:
     return os.path.join(*args)
+
+
+def newpath(*args: str) -> str:
+    dir = path(*args)
+    os.makedirs(dir, exist_ok=True)
+    return dir
 
 
 def exists(dir: str) -> bool:

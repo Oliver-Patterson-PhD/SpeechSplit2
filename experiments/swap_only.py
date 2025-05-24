@@ -75,7 +75,7 @@ class Swapper(Experiment):
         if os.path.exists(f"{self.config.paths.latents}/out_spec"):
             return
 
-        speakers = self.dataset.speakers()
+        speakers = self.parser.speakers()
 
         [
             self.swap_single_latent(uttr, spk, spk, "None")  # type: ignore [func-returns-value]
@@ -83,8 +83,8 @@ class Swapper(Experiment):
             for uttr in self.get_valid(spk, spk)
         ]
 
-        con_speakers = set(spk for spk in speakers if self.dataset.dysarthric(spk))
-        dys_speakers = set(spk for spk in speakers if not self.dataset.dysarthric(spk))
+        con_speakers = set(spk for spk in speakers if self.parser.dysarthric(spk))
+        dys_speakers = set(spk for spk in speakers if not self.parser.dysarthric(spk))
         [
             (
                 self.swap_single_latent(uttr, dys, con, latent),  # type: ignore [func-returns-value]
@@ -123,8 +123,8 @@ class Swapper(Experiment):
         save_tensor(code_spec.flip(-1).mT, spec_file)
 
     def get_valid(self, dys: str, con: str) -> set:
-        dys_uttrs = self.dataset.get_utterances(dys)
-        con_uttrs = self.dataset.get_utterances(con)
+        dys_uttrs = self.parser.get_utterances(dys)
+        con_uttrs = self.parser.get_utterances(con)
         return dys_uttrs and con_uttrs
 
 
