@@ -1,10 +1,9 @@
-from typing import Self
-
 import torch
 
 from util.file import basename, newpath, path
 from util.math import find_peaks
 from util.plot import plot_things
+from util.tensor import Tensor
 
 from .experiment import Experiment
 
@@ -15,7 +14,7 @@ class SyllableEstimation(Experiment):
     kernel_time: float = 0.02
     dims_log: str = "TRACE"
 
-    def run(self: Self) -> None:
+    def run(self) -> None:
         self.logger.debug("Running Syllable Estimation")
         self.kernel_size = int(self.config.audio.sample_rate * self.kernel_time)
         self.kernel_hop = int(self.kernel_size * self.kernel_overlap)
@@ -28,13 +27,13 @@ class SyllableEstimation(Experiment):
         speakers = self.dataset.phonetic_labelled_speakers()
         self.logger.info(f"Found {len(speakers)} speakers")
         [
-            self.run_estimation(speaker, fname)
+            self.run_estimation(speaker, fname)  # type: ignore[func-returns-value]
             for speaker in self.logger.progress_bar(speakers, desc="speakers")
             for fname in sorted(self.dataset.raw_samples(speaker))
         ]
         return
 
-    def run_estimation(self: Self, speaker: str, fname: str) -> None:
+    def run_estimation(self, speaker: str, fname: str) -> None:
         fullpath = self.dataset.get_fullpath(speaker, basename(fname))
         wav = self.load_audio(speaker, fname)
         spmel = self.spectrum(wav)
@@ -63,13 +62,13 @@ class SyllableEstimation(Experiment):
         except RuntimeError:
             return
 
-    def intensity(self: Self, audio: torch.Tensor) -> torch.Tensor:
+    def intensity(self, audio: Tensor) -> Tensor:
         intensity = torch.nn.functional.avg_pool1d(audio.abs(), **self.fold_params)
         norm_intensity = intensity / intensity.max()
         self.logger.trace_tensor(norm_intensity, self.dims_log)
         return norm_intensity
 
-    def load_audio(self: Self, speaker: str, fname: str) -> torch.Tensor:
+    def load_audio(self, speaker: str, fname: str) -> Tensor:
         subpath = self.dataset.get_wavfile(speaker, basename(fname))
         fullpath = path(self.config.paths.raw_wavs, subpath)
         wav = self.audproc.full_load_parts(fullpath, True)[-1]
@@ -77,17 +76,17 @@ class SyllableEstimation(Experiment):
         self.logger.trace_tensor(wav, self.dims_log)
         return wav
 
-    def spectrum(self: Self, wav: torch.Tensor) -> torch.Tensor:
+    def spectrum(self, wav: Tensor) -> Tensor:
         spmel, _ = self.audproc.get_spmel(wav)
         self.logger.trace_tensor(spmel, self.dims_log)
         return spmel
 
-    def peaks(self: Self, intensity: torch.Tensor) -> torch.Tensor:
+    def peaks(self, intensity: Tensor) -> Tensor:
         intensity_peaks = find_peaks(intensity, 8) * (intensity > intensity.median())
         self.logger.trace_tensor(intensity_peaks, self.dims_log)
         return intensity_peaks
 
-    def pitch_contour(self: Self, wav: torch.Tensor, speaker: str) -> torch.Tensor:
+    def pitch_contour(self, wav: Tensor, speaker: str) -> Tensor:
         lo, hi = self.audproc.get_f0_lohi(self.dataset.sex(speaker))
         self.logger.trace_var(lo, self.dims_log)
         self.logger.trace_var(hi, self.dims_log)

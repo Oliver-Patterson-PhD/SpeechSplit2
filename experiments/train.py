@@ -1,18 +1,18 @@
 import time
-from typing import Self
 
 import torch
 
 from util import NanError
+from util.tensor import Tensor
 
 from .experiment import Experiment
 
 
-def masked_mse(prediction: torch.Tensor, ground_t: torch.Tensor) -> torch.Tensor:
+def masked_mse(prediction: Tensor, ground_t: Tensor) -> Tensor:
     prediction = prediction.flatten()
     ground_t = ground_t.flatten()
-    mask: torch.Tensor = ground_t != 0.0
-    sum: torch.Tensor = torch.nn.functional.mse_loss(
+    mask: Tensor = ground_t != 0.0
+    sum: Tensor = torch.nn.functional.mse_loss(
         prediction,
         ground_t,
         reduction="sum",
@@ -22,7 +22,7 @@ def masked_mse(prediction: torch.Tensor, ground_t: torch.Tensor) -> torch.Tensor
 
 ## Solver for training
 class Train(Experiment):
-    def train(self: Self) -> None:
+    def train(self) -> None:
         # Start training from scratch or resume training.
         self.compute.set_gpu()
         self.load_data()
@@ -60,17 +60,17 @@ class Train(Experiment):
         while i <= self.config.options.num_iters:
             fname: str
             spk_id_org: str
-            spmel_gt: torch.Tensor
-            rhythm_input: torch.Tensor
-            content_input: torch.Tensor
-            pitch_input: torch.Tensor
-            timbre_input: torch.Tensor
-            len_crop: torch.Tensor
-            spmel_output: torch.Tensor
-            code_exp_1: torch.Tensor
-            code_exp_2: torch.Tensor
-            code_exp_3: torch.Tensor
-            code_exp_4: torch.Tensor
+            spmel_gt: Tensor
+            rhythm_input: Tensor
+            content_input: Tensor
+            pitch_input: Tensor
+            timbre_input: Tensor
+            len_crop: Tensor
+            spmel_output: Tensor
+            code_exp_1: Tensor
+            code_exp_2: Tensor
+            code_exp_3: Tensor
+            code_exp_4: Tensor
 
             # =============================================================== #
             #                   1. Load input data                            #
@@ -123,11 +123,11 @@ class Train(Experiment):
                     timbre_input,
                 )
 
-            loss_id: torch.Tensor
+            loss_id: Tensor
             loss_id = self.loss_fn(spmel_output, spmel_gt)
 
             # Backward and optimize.
-            loss: torch.Tensor = loss_id
+            loss: Tensor = loss_id
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()

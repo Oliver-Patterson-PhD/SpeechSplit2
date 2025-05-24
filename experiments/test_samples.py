@@ -1,5 +1,4 @@
 import time
-from typing import List, Optional, Self
 
 import torch
 
@@ -10,16 +9,16 @@ from .experiment import Experiment
 
 class TestSamples(Experiment):
     def __init__(
-        self: Self, config: Optional[Config] = None, currtime: int = int(time.time())
+        self, config: Config | None = None, currtime: int = int(time.time())
     ) -> None:
         self.config = config or Config()
 
     @torch.no_grad()
-    def test(self: Self) -> None:
+    def test(self) -> None:
         self.load_data(singleitem=True, full_process=True)
         self.logger.info("Start eval...")
         self.logfile = open("normlog.csv", "wt")
-        items: List[str] = [
+        items: list[str] = [
             "spmel_gt",
             "rhythm_input",
             "content_input",

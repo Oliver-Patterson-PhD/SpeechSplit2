@@ -1,36 +1,42 @@
 from math import ceil
 from pathlib import Path
 
-import matplotlib.figure
-import matplotlib.pyplot
 import torch
+from matplotlib.figure import Figure
+from matplotlib.pyplot import add_subplot, figure
 from PIL import Image
+from torch import Tensor
+
+from .file import strip_ext
 
 __all__ = [
     "save_tensor",
+    "Tensor",
+    "TensorPair",
+    "TensorTriple",
+    "TensorQuad",
 ]
+
+TensorPair = tuple[Tensor, Tensor]
+TensorTriple = tuple[Tensor, Tensor, Tensor]
+TensorQuad = tuple[Tensor, Tensor, Tensor, Tensor]
 
 
 @torch.no_grad()
-def save_tensor(
-    tensor: torch.Tensor,
-    save_path: str,
-) -> None:
-    image = try_image(tensor.abs())
+def save_tensor(tensor: Tensor, save_path: str) -> None:
+    image = _try_resize(tensor.abs())
     if image is not None:
         im_min = image.min()
         im_max = image.max()
         norm_image = 1.0 / (im_max - im_min) * image + 1.0 * im_min / (im_min - im_max)
         save_image(norm_image, save_path)
     else:
-        torch.save(tensor, save_path.rsplit(".", 1)[0] + ".pth")
+        torch.save(tensor, strip_ext(save_path) + ".pth")
     return
 
 
 @torch.no_grad()
-def try_image(
-    tensor: torch.Tensor,
-) -> torch.Tensor | None:
+def _try_resize(tensor: Tensor) -> Tensor | None:
     if tensor is None:
         return None
     elif tensor.dim() == 2:
@@ -39,7 +45,7 @@ def try_image(
         return None
     elif tensor.dim() > 2 and tensor.size(0) == 1:
         for in_tensor in tensor:
-            return try_image(in_tensor)
+            return _try_resize(in_tensor)
     return None
 
 
@@ -47,10 +53,7 @@ def try_image(
 # @param tensor Image to be saved. If given a mini-batch tensor, saves the tensor as a grid of images by calling ``make_grid``.
 # @param fp     A filename
 @torch.no_grad()
-def save_image(
-    tensor: torch.Tensor,
-    filename: str | Path,
-) -> None:
+def save_image(tensor: Tensor, filename: str | Path) -> None:
     grid = make_grid(tensor)
     # Add 0.5 after unnormalizing to [0, 255] to round to the nearest integer
     ndarr = (
@@ -66,9 +69,7 @@ def save_image(
 
 
 @torch.no_grad()
-def make_grid(
-    tensor: torch.Tensor,
-) -> torch.Tensor:
+def make_grid(tensor: Tensor) -> Tensor:
     nrow: int = 8
     padding: int = 2
     pad_value: float = 0.0
@@ -107,14 +108,14 @@ def make_grid(
     return grid
 
 
-def plot_batch(batch: torch.Tensor, base: str) -> matplotlib.figure.Figure:
-    fig = matplotlib.pyplot.figure()
+def plot_batch(batch: Tensor, base: str) -> Figure:
+    fig = figure()
     fig.set_size_inches(15.44, 27.45)
     nrows: int = batch.shape[0]
     ncols: int = 1
     for i, sample in enumerate(batch):
         idx = i + 1
-        ax = matplotlib.pyplot.add_subplot(nrows, ncols, idx)
+        ax = add_subplot(nrows, ncols, idx)
         ax.plot(sample.numpy())
         ax.set_title(f"{base}_M{idx}")
         ax.set_xlim(0, sample.size[-1])

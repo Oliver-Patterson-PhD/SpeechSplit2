@@ -24,21 +24,19 @@ class ExportLatents(Experiment):
     @torch.no_grad()
     def export(self: Self) -> None:
         self.logger.info("Running export")
-        model_name = path(
-            "speechsplit2-large", "trainmask-large-SpeechSplit2-2024-11-07.ckpt"
+        self.load_trained(
+            path("speechsplit2-large", "trainmask-large-SpeechSplit2-2024-11-07.ckpt")
         )
-        self.load_trained(model_name)
         self.logger.info("Full Process On")
         self.compute.set_gpu()
-        ddir = newpath(self.experiment_dir, self.config.options.dataset_name)
-        self.experiment_dir = ddir
+        self.experiment_dir = newpath(
+            self.experiment_dir, self.config.options.dataset_name
+        )
         self.process()
 
     def process(self: Self) -> None:
         self.load_data(singleitem=True, sequential=True)
-        proc_data = [item for item in self.data_loader]
-        proc_data = sorted(proc_data, key=lambda i: i[0])
-        proc_name: set[str]
+        proc_data = sorted([item for item in self.data_loader], key=lambda i: i[0])
         proc_name = set(self.dataset.sample_name(item[0][0]) for item in proc_data)
         self.logger.trace_var(proc_name, "DEBUG")
         for name in proc_name:

@@ -6,7 +6,6 @@ import datetime
 import os
 import time
 from collections import OrderedDict
-from typing import Optional, Self, Tuple
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -30,7 +29,7 @@ class Experiment(object):
     experiment_dir: str
     dataset: DatasetParser
     audproc: AudioProcs
-    ret_item_t = Tuple[
+    ret_item_t = tuple[
         str,
         str,
         torch.Tensor,
@@ -42,7 +41,7 @@ class Experiment(object):
     ]
 
     def __init__(
-        self: Self, config: Optional[Config] = None, currtime: int = int(time.time())
+        self, config: Config | None = None, currtime: int = int(time.time())
     ) -> None:
         config = config or Config()
         self.logger = Logger()
@@ -89,21 +88,21 @@ class Experiment(object):
         os.makedirs(self.experiment_dir, exist_ok=True)
         self.config = config
 
-    def tb_add_scalar(self: Self, name: str, value: float, step: int) -> None:
+    def tb_add_scalar(self, name: str, value: float, step: int) -> None:
         self.writer.add_scalar(
             tag=f"{self.tb_prefix}/{name}",
             scalar_value=value,
             global_step=step,
         )
 
-    def tb_add_melspec(self: Self, name: str, tensor: torch.Tensor, step: int) -> None:
+    def tb_add_melspec(self, name: str, tensor: torch.Tensor, step: int) -> None:
         self.writer.add_image(
             tag=f"{self.tb_prefix}/melspec/{name}",
             img_tensor=tensor,
             global_step=step,
         )
 
-    def print_model_info(self: Self) -> None:
+    def print_model_info(self) -> None:
         num_params = 0
         for p in self.model.parameters():
             num_params += p.numel()
@@ -111,7 +110,7 @@ class Experiment(object):
         self.logger.info(self.model_type, depth=2)
         self.logger.info("The number of parameters: {}".format(num_params), depth=2)
 
-    def load_trained(self: Self, model_name: str) -> None:
+    def load_trained(self, model_name: str) -> None:
         model_path = os.path.join(self.full_models_path, model_name)
         self.logger.info(
             f"Loading the trained model {model_path}",
@@ -131,9 +130,9 @@ class Experiment(object):
             self.model.load_state_dict(new_state_dict)
 
     def restore_model(
-        self: Self,
+        self,
         resume_iters: int = 0,
-        model_name: Optional[str] = None,
+        model_name: str | None = None,
         load_optim: bool = False,
     ) -> None:
         if resume_iters == 0:
@@ -167,7 +166,7 @@ class Experiment(object):
                 new_state_dict[k[7:]] = v
             self.model.load_state_dict(new_state_dict)
 
-    def save_checkpoint(self: Self, current_iter: int, save_optim: bool = True) -> None:
+    def save_checkpoint(self, current_iter: int, save_optim: bool = True) -> None:
         os.makedirs(self.train_models_path, exist_ok=True)
         self.logger.info(
             f"Saving model checkpoint into {self.train_models_path}...", depth=2
@@ -188,11 +187,11 @@ class Experiment(object):
         )
 
     def log_training_step(
-        self: Self,
+        self,
         step: int,
         loss: float,
-        orig: Optional[torch.Tensor] = None,
-        proc: Optional[torch.Tensor] = None,
+        orig: torch.Tensor | None = None,
+        proc: torch.Tensor | None = None,
     ) -> None:
         self.logger.info(
             "Elapsed [{}], Iteration [{}/{}], loss: {:.8f}".format(
@@ -208,15 +207,15 @@ class Experiment(object):
             self.tb_add_melspec(name="proc", tensor=proc, step=step)
             self.writer.flush()
 
-    def load_data(self: Self, **kwargs) -> None:
+    def load_data(self, **kwargs) -> None:
         self.data_loader = get_loader(self.config, **kwargs)
 
-    def save_tensor(self: Self, tensor: torch.Tensor, fname: str) -> None:
+    def save_tensor(self, tensor: torch.Tensor, fname: str) -> None:
         save_tensor(tensor, path(self.experiment_dir, fname))
         return
 
     def prepare_input(
-        self: Self,
+        self,
         content_input: torch.Tensor,
         pitch_input: torch.Tensor,
         len_crop: torch.Tensor,
@@ -235,7 +234,7 @@ class Experiment(object):
         )  # [B, T, F+257]
         return content_pitch_input_intrp_2
 
-    def filter_item(self: Self, item: ret_item_t) -> ret_item_t:
+    def filter_item(self, item: ret_item_t) -> ret_item_t:
         (
             fname,
             spk_id_org,
@@ -264,7 +263,7 @@ class Experiment(object):
             len_crop,
         )
 
-    def get_next_data(self: Self) -> ret_item_t:
+    def get_next_data(self) -> ret_item_t:
         fname: str
         spk_id_org: str
         spmel_gt: torch.Tensor
@@ -312,7 +311,7 @@ class Experiment(object):
         )
 
     @torch.no_grad()
-    def check_data(self: Self) -> None:
+    def check_data(self) -> None:
         for item in self.logger.progress_bar(
             self.data_loader, desc=f"Verifying {self.dataset_name}"
         ):

@@ -1,11 +1,9 @@
 import os
 from itertools import product
-from typing import List, Self, Tuple
 
 import torch
 
-from meta_dicts import MetaDictType, NamedMetaDictType
-from util.tensor import save_tensor
+from util.tensor import Tensor, save_tensor
 
 from .experiment import Experiment
 
@@ -18,27 +16,19 @@ class Swapper(Experiment):
         "code_exp_4",
     ]
 
+    DataItem = tuple[
+        list[str], list[str], Tensor, Tensor, Tensor, Tensor, Tensor, Tensor
+    ]
+
     @torch.no_grad()
-    def save_latents(self: Self) -> None:
+    def save_latents(self) -> None:
         if os.path.exists(f"{self.config.paths.latents}/{self.latents[0]}"):
             return
         self.load_data(singleitem=True, sequential=True)
         [self.save_single_latent(batch) for batch in self.data_loader]  # type: ignore [func-returns-value]
 
     @torch.no_grad()
-    def save_single_latent(
-        self: Self,
-        batch: Tuple[
-            List[str],
-            List[str],
-            torch.Tensor,
-            torch.Tensor,
-            torch.Tensor,
-            torch.Tensor,
-            torch.Tensor,
-            torch.Tensor,
-        ],
-    ) -> None:
+    def save_single_latent(self, batch: DataItem) -> None:
         (
             fname,
             spk_id_org,
@@ -67,23 +57,11 @@ class Swapper(Experiment):
         self.logger.trace_tensor(len_crop, "DEBUG")
 
         # Prepare input data and apply random resampling
-        content_pitch_input = self.prepare_input(
-            content_input,
-            pitch_input,
-            len_crop,
-        )
+        content_pitch_input = self.prepare_input(content_input, pitch_input, len_crop)
 
         # Run model
-        (
-            spmel_output,
-            code_exp_1,
-            code_exp_2,
-            code_exp_3,
-            code_exp_4,
-        ) = self.model(
-            content_pitch_input,
-            rhythm_input,
-            timbre_input,
+        (spmel_output, code_exp_1, code_exp_2, code_exp_3, code_exp_4) = self.model(
+            content_pitch_input, rhythm_input, timbre_input
         )
 
         for latent in self.latents:
@@ -93,54 +71,32 @@ class Swapper(Experiment):
             torch.save(eval(latent), latentfile)
 
     @torch.no_grad()
-    def swap_latents(self: Self) -> None:
+    def swap_latents(self) -> None:
         if os.path.exists(f"{self.config.paths.latents}/out_spec"):
             return
 
-        if "smol" in self.config.options.dataset_name:
-            if self.config.options.dataset_name == "smolspeech":
-                dataset_name = "uaspeech"
-            if self.config.options.dataset_name == "smolvctk":
-                raise NotImplementedError()
-        else:
-            dataset_name = self.config.options.dataset_name
-
-        speaker_data: NamedMetaDictType = getattr(
-            __import__("meta_dicts"),
-            f"named{dataset_name}",
-        )
-        metadata: MetaDictType = getattr(
-            __import__("meta_dicts"),
-            f"{dataset_name}",
-        )
+        speakers = self.dataset.speakers()
 
         [
             self.swap_single_latent(uttr, spk, spk, "None")  # type: ignore [func-returns-value]
-            for spk in speaker_data.keys()
-            for uttr in get_valid(metadata, spk, spk)
+            for spk in speakers
+            for uttr in self.get_valid(spk, spk)
         ]
 
-        for dys, con in product(
-            [speaker for speaker, data in speaker_data.items() if data.dysarthric],
-            [speaker for speaker, data in speaker_data.items() if not data.dysarthric],
-        ):
-            [
-                (
-                    self.swap_single_latent(uttr, dys, con, latent),  # type: ignore [func-returns-value]
-                    self.swap_single_latent(uttr, con, dys, latent),  # type: ignore [func-returns-value]
-                )
-                for latent in self.latents
-                for uttr in get_valid(metadata, dys, con)
-            ]
+        con_speakers = set(spk for spk in speakers if self.dataset.dysarthric(spk))
+        dys_speakers = set(spk for spk in speakers if not self.dataset.dysarthric(spk))
+        [
+            (
+                self.swap_single_latent(uttr, dys, con, latent),  # type: ignore [func-returns-value]
+                self.swap_single_latent(uttr, con, dys, latent),  # type: ignore [func-returns-value]
+            )
+            for dys, con in product(dys_speakers, con_speakers)
+            for latent in self.latents
+            for uttr in self.get_valid(dys, con)
+        ]
 
     @torch.no_grad()
-    def swap_single_latent(
-        self: Self,
-        uttr: str,
-        dys: str,
-        con: str,
-        latent: str,
-    ) -> None:
+    def swap_single_latent(self, uttr: str, dys: str, con: str, latent: str) -> None:
         fstring = self.config.paths.latents + "/{0}/{1}/{1}_" + uttr + ".pt"
         c1, code_1 = get_code(fstring, "code_exp_1", latent, dys, con)
         c2, code_2 = get_code(fstring, "code_exp_2", latent, dys, con)
@@ -156,13 +112,7 @@ class Swapper(Experiment):
             swapped = "Speaker-Embedding"
         else:
             swapped = "None"
-        code_spec = self.model.decode(
-            code_1,
-            code_2,
-            code_3,
-            code_4,
-            192,
-        )
+        code_spec = self.model.decode(code_1, code_2, code_3, code_4, 192)
         code_file = "{}/out_spec/{}-to-{}-{}/{}.pt".format(
             self.config.paths.latents, con, dys, swapped, uttr
         )
@@ -172,18 +122,16 @@ class Swapper(Experiment):
         os.makedirs(os.path.dirname(spec_file), exist_ok=True)
         save_tensor(code_spec.flip(-1).mT, spec_file)
 
-
-@torch.no_grad()
-def get_valid(meta: MetaDictType, dys: str, con: str) -> set:
-    dys_uttrs = set(item[-1].split("/")[1][4:-3] for item in meta if item[0] == dys)
-    con_uttrs = set(item[-1].split("/")[1][5:-3] for item in meta if item[0] == con)
-    return dys_uttrs and con_uttrs
+    def get_valid(self, dys: str, con: str) -> set:
+        dys_uttrs = self.dataset.get_utterances(dys)
+        con_uttrs = self.dataset.get_utterances(con)
+        return dys_uttrs and con_uttrs
 
 
 @torch.no_grad()
 def get_code(
     fstring: str, name: str, latent: str, swap: str, orig: str
-) -> Tuple[bool, torch.Tensor]:
+) -> tuple[bool, Tensor]:
     speaker_code, swapped = (swap, True) if latent == name else (orig, False)
     filename = fstring.format(name, speaker_code)
     code = torch.load(filename, weights_only=True)

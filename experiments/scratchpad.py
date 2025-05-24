@@ -1,5 +1,4 @@
 import os
-from typing import List, Self, Set, Tuple
 
 import torch
 import torchaudio
@@ -7,24 +6,23 @@ import torchaudio
 from synthesizers import Synthesizer
 from transcribers import Transcriber
 from util import CompareItem
-from util.audio import norm_audio
-from util.tensor import save_tensor
+from util.tensor import save_tensor, Tensor, TensorPair
 
 from .experiment import Experiment
 
-DataType = Tuple[
+DataType = tuple[
     str,  # Filename
     str,  # Speaker ID string
-    torch.Tensor,  # Mel Spectrogram
-    torch.Tensor,  # Rhythm Input
-    torch.Tensor,  # Content Input
-    torch.Tensor,  # Pitch Input
-    torch.Tensor,  # Timbre Input
-    torch.Tensor,  # len_crop (required in padding)
+    Tensor,  # Mel Spectrogram
+    Tensor,  # Rhythm Input
+    Tensor,  # Content Input
+    Tensor,  # Pitch Input
+    Tensor,  # Timbre Input
+    Tensor,  # len_crop (required in padding)
 ]
 
 
-def zero_one_norm(s: torch.Tensor) -> torch.Tensor:
+def zero_one_norm(s: Tensor) -> Tensor:
     s_norm = s - torch.min(s)
     s_norm /= torch.max(s_norm)
     return s_norm
@@ -33,10 +31,10 @@ def zero_one_norm(s: torch.Tensor) -> torch.Tensor:
 class Scratchpad(Experiment):
     retries: int = 5
     transcriber: Transcriber
-    synth_list: List[Synthesizer]
+    synth_list: list[Synthesizer]
 
     @torch.no_grad()
-    def run(self: Self) -> None:
+    def run(self) -> None:
         self.transcriber = Transcriber(
             device=self.compute.device(),
             model_name=self.config.options.whisper_type,
@@ -74,20 +72,20 @@ class Scratchpad(Experiment):
         self.process()
 
     @torch.no_grad()
-    def process(self: Self) -> None:
+    def process(self) -> None:
         self.load_data(singleitem=True, sequential=True)
         proc_data = [item for item in self.data_loader]
         proc_data = sorted(proc_data, key=lambda i: i[0])[:5]
-        proc_name: Set[str]
+        proc_name: set[str]
         proc_name = set(self.dataset.sample_name(item[0][0]) for item in proc_data)
         self.logger.trace_var(proc_name, "DEBUG")
         for name in proc_name:
-            items: List[DataType] = sorted(
+            items: list[DataType] = sorted(
                 [item for item in proc_data if str(item[0][0]).find(name) != -1],
                 key=lambda i: i[0],
             )
-            list_gt: List[torch.Tensor] = []
-            list_out: List[torch.Tensor] = []
+            list_gt: list[Tensor] = []
+            list_out: list[Tensor] = []
             for (
                 fname,
                 spk_id_org,
@@ -115,9 +113,7 @@ class Scratchpad(Experiment):
             self.save_item(name, orig_spmel, proc_spmel)
 
     @torch.no_grad()
-    def save_item(
-        self: Self, name: str, orig: torch.Tensor, proc: torch.Tensor
-    ) -> None:
+    def save_item(self, name: str, orig: Tensor, proc: Tensor) -> None:
         self.logger.debug(f"Processing: {name}")
         open(os.path.join(self.lossdir, name + ".txt"), "w").write(
             CompareItem(
@@ -141,7 +137,7 @@ class Scratchpad(Experiment):
         [self.process_synth(synth, name, orig, proc) for synth in self.synth_list]
         # self.full_convert(name, orig, proc)
 
-    def get_phases(self: Self, name: str) -> torch.Tensor:
+    def get_phases(self, name: str) -> Tensor:
         raw_phase_file = os.path.join(
             self.config.paths.features,
             "phases",
@@ -154,9 +150,7 @@ class Scratchpad(Experiment):
         ).to(self.compute.device())
         return raw_phases
 
-    def full_convert(
-        self: Self, name: str, orig: torch.Tensor, proc: torch.Tensor
-    ) -> None:
+    def full_convert(self, name: str, orig: Tensor, proc: Tensor) -> None:
         self.logger.trace_tensor(orig, "DEBUG")
         self.logger.trace_tensor(proc, "DEBUG")
         self.logger.debug(f"orig: {orig.device.__str__()}")
@@ -218,7 +212,7 @@ class Scratchpad(Experiment):
         )
         return
 
-    def save_audio(self: Self, wav: torch.Tensor, file: str) -> None:
+    def save_audio(self, wav: Tensor, file: str) -> None:
         torchaudio.save(
             file,
             wav.cpu(),
@@ -227,7 +221,7 @@ class Scratchpad(Experiment):
         )
         torchaudio.save(
             file.replace(self.wavsdir, self.normdir),
-            norm_audio(wav).cpu(),
+            self.audproc.norm_audio(wav).cpu(),
             sample_rate=self.config.audio.sample_rate,
             backend="sox",
         )
@@ -235,7 +229,7 @@ class Scratchpad(Experiment):
 
     @torch.no_grad()
     def process_synth(
-        self: Self, synt: Synthesizer, name: str, orig: torch.Tensor, proc: torch.Tensor
+        self, synt: Synthesizer, name: str, orig: Tensor, proc: Tensor
     ) -> None:
         self.logger.debug(f"Synthesizing: {synt}")
         synth_gt = os.path.join(self.wavsdir, f"{name}-{synt}-orig.wav")
@@ -249,7 +243,7 @@ class Scratchpad(Experiment):
 
     @torch.no_grad()
     def single_spmel_to_audio(
-        self: Self, file: str, spec: torch.Tensor, synt: Synthesizer
+        self, file: str, spec: Tensor, synt: Synthesizer
     ) -> None:
         wav = synt.spect2wav(spec).unsqueeze(dim=0)
         self.logger.trace_tensor(wav)
@@ -261,21 +255,21 @@ class Scratchpad(Experiment):
         )
         torchaudio.save(
             file.replace(self.wavsdir, self.normdir),
-            norm_audio(wav).cpu(),
+            self.audproc.norm_audio(wav).cpu(),
             sample_rate=self.config.audio.sample_rate,
             backend="sox",
         )
 
     @torch.no_grad()
     def process_item(
-        self: Self,
-        spmel_gt: torch.Tensor,
-        rhythm_input: torch.Tensor,
-        content_input: torch.Tensor,
-        pitch_input: torch.Tensor,
-        timbre_input: torch.Tensor,
-        len_crop: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        self,
+        spmel_gt: Tensor,
+        rhythm_input: Tensor,
+        content_input: Tensor,
+        pitch_input: Tensor,
+        timbre_input: Tensor,
+        len_crop: Tensor,
+    ) -> TensorPair:
         spmel_gt = spmel_gt.to(self.compute.device())
         rhythm_input = rhythm_input.to(self.compute.device())
         content_input = content_input.to(self.compute.device())

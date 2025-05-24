@@ -6,11 +6,10 @@ __all__ = [
 ]
 
 from enum import Enum, auto
-from typing import Optional, Self
 
 from util import Config
 from util.file import (basename, dirname, freadline, freadlist, myglob, path,
-                       strip_ext)
+                       strip_ext, walkfiles)
 
 from .dataset_detail import (smolspeech_speakers, smolvctk_speakers,
                              timit_speakers, timit_spk_path, uaspeech_speakers,
@@ -22,18 +21,18 @@ class Phoneme:
     end: int
     phon: str
 
-    def __init__(self: Self, start: int, end: int, phon: str):
+    def __init__(self, start: int, end: int, phon: str):
         self.start = start
         self.end = end
         self.phon = self.__fold_phon(phon)
 
-    def __str__(self: Self) -> str:
+    def __str__(self) -> str:
         return f"{self.start}-{self.end}: {self.phon}"
 
-    def __repr__(self: Self) -> str:
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def __fold_phon(self: Self, phon: str) -> str:
+    def __fold_phon(self, phon: str) -> str:
         match phon:
             case "sil" | "h#":
                 return "sil"
@@ -47,16 +46,16 @@ class Utterance:
     end: int
     phones: list[Phoneme]
 
-    def __init__(self: Self, word: str, phones: list[Phoneme]):
+    def __init__(self, word: str, phones: list[Phoneme]):
         self.word = word
         self.phones = phones
         self.start = min(phone.start for phone in self.phones)
         self.end = max(phone.end for phone in self.phones)
 
-    def __str__(self: Self) -> str:
+    def __str__(self) -> str:
         return f"{self.word}: {self.phones}"
 
-    def __repr__(self: Self) -> str:
+    def __repr__(self) -> str:
         return self.__str__()
 
 
@@ -98,13 +97,14 @@ class DatasetParser:
     __dsettype: DType
     __ua_phone_labels: dict[str, Utterance]
 
-    def __init__(self: Self, config: Optional[Config] = None) -> None:
+    def __init__(self, config: Config | None = None) -> None:
         config = config or Config()
         self.__dsettype = self.__get_type(config.options.dataset_name)
         self.__is_smol = config.options.dataset_name.lower().startswith("smol")
         self.__raw_timit = config.paths.raw_timit
         self.__raw_uaspeech = config.paths.raw_uaspeech
         self.__raw_vctk = config.paths.raw_vctk
+        self.__dim_spk_emb = config.model.dim_spk_emb
         if self.is_uaspeech():
             self.__ua_phone_labels = self.__load_uaspeech_phones()
 
@@ -131,7 +131,7 @@ class DatasetParser:
                     raise Exception(f"Failed on line: {i}") from e
         return phones
 
-    def __get_type(self: Self, dname: str) -> DType:
+    def __get_type(self, dname: str) -> DType:
         match dname.lower().removeprefix("smol"):
             case "uaspeech":
                 return DType.UASPEECH
@@ -142,19 +142,19 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def dataset_type(self: Self) -> DType:
+    def dataset_type(self) -> DType:
         return self.__dsettype
 
-    def is_uaspeech(self: Self) -> bool:
+    def is_uaspeech(self) -> bool:
         return self.dataset_type() == DType.UASPEECH
 
-    def is_vctk(self: Self) -> bool:
+    def is_vctk(self) -> bool:
         return self.dataset_type() == DType.VCTK
 
-    def is_timit(self: Self) -> bool:
+    def is_timit(self) -> bool:
         return self.dataset_type() == DType.TIMIT
 
-    def get_spkdir(self: Self, spk: str) -> str:
+    def get_spkdir(self, spk: str) -> str:
         match self.dataset_type():
             case DType.UASPEECH:
                 return spk
@@ -165,7 +165,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def get_fullpath(self: Self, spk: str, uttr: str) -> str:
+    def get_fullpath(self, spk: str, uttr: str) -> str:
         match self.dataset_type():
             case DType.UASPEECH:
                 return path(self.get_spkdir(spk), f"{spk}_{strip_ext(uttr)}")
@@ -176,7 +176,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def sex(self: Self, speaker: str) -> str:
+    def sex(self, speaker: str) -> str:
         match self.dataset_type():
             case DType.UASPEECH:
                 return speaker.removeprefix("C")[0]
@@ -187,7 +187,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def dysarthric(self: Self, speaker: str) -> bool:
+    def dysarthric(self, speaker: str) -> bool:
         match self.dataset_type():
             case DType.UASPEECH:
                 return speaker[0] != "C"
@@ -198,7 +198,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def speakers(self: Self) -> set[str]:
+    def speakers(self) -> set[str]:
         match self.dataset_type():
             case DType.UASPEECH:
                 return smolspeech_speakers if self.__is_smol else uaspeech_speakers
@@ -209,7 +209,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def utterance(self: Self, fpath: str) -> str:
+    def utterance(self, fpath: str) -> str:
         match self.dataset_type():
             case DType.UASPEECH:
                 spk, blk, uttr, mic = basename(fpath).split("_")
@@ -222,7 +222,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def speaker(self: Self, fpath: str) -> str:
+    def speaker(self, fpath: str) -> str:
         match self.dataset_type():
             case DType.UASPEECH:
                 spk, blk, uttr, mic = basename(fpath).split("_")
@@ -235,7 +235,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def raw_samples(self: Self, spk: str) -> list[str]:
+    def raw_samples(self, spk: str) -> list[str]:
         match self.dataset_type():
             case DType.UASPEECH:
                 return myglob(path(self.__raw_uaspeech, spk), "*.wav")
@@ -246,7 +246,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def phonetic_labelled_speakers(self: Self) -> set[str]:
+    def phonetic_labelled_speakers(self) -> set[str]:
         match self.dataset_type():
             case DType.UASPEECH:
                 return {"M16"}
@@ -255,7 +255,7 @@ class DatasetParser:
             case DType.TIMIT:
                 return self.speakers()
 
-    def sample_name(self: Self, fpath: str) -> str:
+    def sample_name(self, fpath: str) -> str:
         fname = basename(fpath)
         match self.dataset_type():
             case DType.UASPEECH:
@@ -267,7 +267,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def get_real_text(self: Self, fpath: str) -> str:
+    def get_real_text(self, fpath: str) -> str:
         match self.dataset_type():
             case DType.UASPEECH:
                 return uaspeech_uttrs[self.utterance(self.sample_name(fpath))]
@@ -284,7 +284,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def get_wavfile(self: Self, spk: str, uttr: str) -> str:
+    def get_wavfile(self, spk: str, uttr: str) -> str:
         match self.dataset_type():
             case DType.UASPEECH:
                 return self.get_fullpath(spk, uttr) + ".wav"
@@ -295,7 +295,7 @@ class DatasetParser:
             case _:
                 raise ValueError
 
-    def get_utterance(self: Self, fpath: str) -> Utterance:
+    def get_utterance(self, fpath: str) -> Utterance:
         match self.dataset_type():
             case DType.UASPEECH:
                 return self.__ua_phone_labels[self.utterance(fpath)]
@@ -307,3 +307,20 @@ class DatasetParser:
                 return parse_phonemes(phones, self.get_real_text(fpath))
             case _:
                 raise ValueError
+
+    def get_speaker_id(self, speaker: str) -> int:
+        match self.dataset_type():
+            case DType.UASPEECH:
+                assert speaker in uaspeech_speakers
+                return list(uaspeech_speakers).index(speaker)
+            case DType.VCTK:
+                assert speaker in vctk_speakers
+                return list(vctk_speakers).index(speaker)
+            case DType.TIMIT:
+                assert speaker in timit_speakers
+                return list(timit_speakers).index(speaker)
+            case _:
+                raise ValueError
+
+    def get_utterances(self, speaker: str) -> set[str]:
+        return set(basename(file) for file in walkfiles(self.get_spkdir(speaker)))

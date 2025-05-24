@@ -3,7 +3,6 @@ __all__ = [
 ]
 
 from math import floor
-from typing import List, Optional, Self, Tuple
 
 import pyworld
 import torch
@@ -12,16 +11,15 @@ from pysptk.sptk import rapt
 from torch.types import Number
 
 from util import Compute, Config
-from util.audio import norm_audio
+from util.tensor import Tensor, TensorQuad, TensorTriple
 
 from .dataset import DatasetParser
 
 
 class AudioProcs:
     min_level = torch.exp(-100 / 20 * torch.log(torch.tensor(10)))
-    QuadTensor = tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 
-    def __init__(self: Self, config: Optional[Config] = None) -> None:
+    def __init__(self, config: Config | None = None) -> None:
         self.__parser = DatasetParser(config=config)
         if config is None:
             config = Config()
@@ -70,7 +68,7 @@ class AudioProcs:
         )
         return
 
-    def stft(self: Self, wav: torch.Tensor) -> torch.Tensor:
+    def stft(self, wav: Tensor) -> Tensor:
         return torch.stft(
             input=wav,
             n_fft=self.__n_fft,
@@ -84,7 +82,7 @@ class AudioProcs:
             return_complex=True,
         )
 
-    def istft(self: Self, spec: torch.Tensor) -> torch.Tensor:
+    def istft(self, spec: Tensor) -> Tensor:
         return torch.istft(
             input=spec,
             n_fft=self.__n_fft,
@@ -97,7 +95,7 @@ class AudioProcs:
             return_complex=False,
         )
 
-    def get_spenv(self: Self, wav: torch.Tensor, cutoff: int = 3) -> torch.Tensor:
+    def get_spenv(self, wav: Tensor, cutoff: int = 3) -> Tensor:
         spec = torch.abs(self.stft(wav)).mT
         ceps = torch.fft.irfft(torch.log(spec + 1e-6), axis=-1).to(dtype=torch.double)
         lifter = torch.zeros(ceps.shape[1], dtype=torch.double)
@@ -117,17 +115,17 @@ class AudioProcs:
         )
         return retval.to(dtype=wav.dtype, device=wav.device)
 
-    def rev_spmel(self: Self, logspec: torch.Tensor) -> torch.Tensor:
+    def rev_spmel(self, logspec: Tensor) -> Tensor:
         logspec = (logspec * 4) - 4
         melspec = torch.pow(10, logspec)
         mags = self.__demel(melspec)
         return mags
 
-    def get_spmel(self: Self, wav: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get_spmel(self, wav: Tensor) -> tuple[Tensor, Tensor]:
         self.__melbasis = self.__melbasis.to(Compute().device())
-        rawspec: torch.Tensor = self.stft(wav.float())
-        mags: torch.Tensor = rawspec.abs()
-        phases: torch.Tensor = rawspec.angle()
+        rawspec: Tensor = self.stft(wav.float())
+        mags: Tensor = rawspec.abs()
+        phases: Tensor = rawspec.angle()
         mel_spec = self.__melbasis(mags.to(Compute().device())).mT
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
@@ -135,12 +133,12 @@ class AudioProcs:
         outspec = torch.nn.functional.pad(log_spec, (0, 0, 0, 1)).to(dtype=wav.dtype)
         return (outspec, phases)
 
-    def zero_one_norm(self: Self, s: torch.Tensor) -> torch.Tensor:
+    def zero_one_norm(self, s: Tensor) -> Tensor:
         s_norm = s - torch.min(s)
         s_norm /= torch.max(s_norm)
         return s_norm
 
-    def vtlp(self: Self, x: torch.Tensor, fs: int, alpha: float) -> torch.Tensor:
+    def vtlp(self, x: Tensor, fs: int, alpha: float) -> Tensor:
         vtlp_window = torch.hann_window(self.__vtlp_fft, device=x.device)
         vtlp_stft = torch.stft(
             x, n_fft=self.__vtlp_fft, window=vtlp_window, return_complex=True
@@ -170,8 +168,8 @@ class AudioProcs:
         return y
 
     def warp_freq(
-        self: Self, n_fft: int, fs: int, fhi: int = 4800, alpha: float = 0.9
-    ) -> torch.Tensor:
+        self, n_fft: int, fs: int, fhi: int = 4800, alpha: float = 0.9
+    ) -> Tensor:
         bins = torch.linspace(0, 1, n_fft)
         f_warps = []
         scale = fhi * min(alpha, 1)
@@ -185,18 +183,18 @@ class AudioProcs:
                 sub = (fs_half - scale) / (fs_half - f_boundary) * (fs_half - f_ori)
                 f_warp = fs_half - sub
             f_warps.append(f_warp)
-        return torch.Tensor(f_warps)
+        return Tensor(f_warps)
 
     def extract_f0(
-        self: Self,
-        wav: torch.Tensor,
+        self,
+        wav: Tensor,
         lo: int,
         hi: int,
-        fs: Optional[int] = None,
+        fs: int | None = None,
         normalise: bool = True,
-        hop_len: Optional[int] = None,
+        hop_len: int | None = None,
         otype: int = 2,
-    ) -> torch.Tensor:
+    ) -> Tensor:
         fs = fs or self.__sample_rate
         hop_len = hop_len or self.__hop_length
         wav_int = wav.cpu().numpy() * 32768
@@ -215,7 +213,7 @@ class AudioProcs:
         f0_norm = self.speaker_normalization(f0_rapt, index_nonzero, mean_f0, std_f0)
         return f0_norm
 
-    def quantize_f0(self: Self, x: torch.Tensor, num_bins: int = 256) -> torch.Tensor:
+    def quantize_f0(self, x: Tensor, num_bins: int = 256) -> Tensor:
         # x is logf0
         B = x.size(0)
         x = x.view(-1).clone()
@@ -230,12 +228,12 @@ class AudioProcs:
         return enc.view(B, -1, num_bins + 1)
 
     def speaker_normalization(
-        self: Self,
-        f0: torch.Tensor,
-        index_nonzero: torch.Tensor,
+        self,
+        f0: Tensor,
+        index_nonzero: Tensor,
         mean_f0: float,
         std_f0: float,
-    ) -> torch.Tensor:
+    ) -> Tensor:
         f0.dtype
         std_f0 += 1e-6
         f0[index_nonzero] = (f0[index_nonzero] - mean_f0) / std_f0 / 4.0
@@ -243,19 +241,19 @@ class AudioProcs:
         f0[index_nonzero] = (f0[index_nonzero] + 1) / 2.0
         return f0
 
-    def filter_wav(self: Self, wav: torch.Tensor) -> torch.Tensor:
+    def filter_wav(self, wav: Tensor) -> Tensor:
         return torchaudio.functional.highpass_biquad(
             wav, self.__sample_rate, self.__hi_pass_cutoff
         )
 
     def get_monotonic_wav(
-        self: Self,
-        wav: torch.Tensor,
-        f0: torch.Tensor,
-        sp: torch.Tensor,
-        ap: torch.Tensor,
-        fs: Optional[int] = None,
-    ) -> torch.Tensor:
+        self,
+        wav: Tensor,
+        f0: Tensor,
+        sp: Tensor,
+        ap: Tensor,
+        fs: int | None = None,
+    ) -> Tensor:
         y = torch.tensor(
             pyworld.synthesize(
                 f0.cpu().numpy(),
@@ -270,9 +268,7 @@ class AudioProcs:
         assert len(y) >= len(wav)
         return y[: len(wav)]
 
-    def get_world_params(
-        self: Self, wav: torch.Tensor, fs: Optional[int] = None
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def get_world_params(self, wav: Tensor, fs: int | None = None) -> TensorTriple:
         if fs is None:
             fs = self.__sample_rate
         x = wav.cpu().double().squeeze().numpy()
@@ -286,7 +282,7 @@ class AudioProcs:
             torch.tensor(ap, device=wav.device),
         )
 
-    def get_f0_lohi(self: Self, sex: str) -> Tuple[int, int]:
+    def get_f0_lohi(self, sex: str) -> tuple[int, int]:
         if sex == "M":
             return self.__f0_m_lo, self.__f0_m_hi
         elif sex == "F":
@@ -294,11 +290,11 @@ class AudioProcs:
         else:
             raise ValueError
 
-    def fold_pad(self: Self, item: torch.Tensor, fold_size: int) -> torch.Tensor:
+    def fold_pad(self, item: Tensor, fold_size: int) -> Tensor:
         fold_step = fold_size // self.__fold_div
         fold_pad_len = floor((1 - (1 / self.__fold_div)) * fold_size)
-        pads: Tuple[int, ...]
-        opads: Tuple[int, ...]
+        pads: tuple[int, ...]
+        opads: tuple[int, ...]
         item.squeeze_()
         if item.ndim == 1:
             dim = -1
@@ -333,11 +329,11 @@ class AudioProcs:
         return retval
 
     def full_load_check(
-        self: Self,
-        raw: torch.Tensor,
-        nonoise: torch.Tensor,
-        nopop: torch.Tensor,
-        clean: torch.Tensor,
+        self,
+        raw: Tensor,
+        nonoise: Tensor,
+        nopop: Tensor,
+        clean: Tensor,
         keep: bool = False,
     ) -> str | None:
         if not self.is_valid(raw):
@@ -354,25 +350,25 @@ class AudioProcs:
                 return "Clean"
         return None
 
-    def full_load_parts(self: Self, fullname: str, keep: bool = False) -> QuadTensor:
-        raw = norm_audio(self.getraw(fullname))
+    def full_load_parts(self, fullname: str, keep: bool = False) -> TensorQuad:
+        raw = self.norm_audio(self.getraw(fullname))
         nonoise = self.noisereduce(raw)
         nopop = self.kill_pop(nonoise) if self.__parser.is_uaspeech() else nonoise
         clean = self.clean_keep(nopop) if keep else self.clean_audio(nopop)
         return raw, nonoise, nopop, clean
 
-    def getraw(self: Self, full_fname: str) -> torch.Tensor:
+    def getraw(self, full_fname: str) -> Tensor:
         inaud, sr = torchaudio.load(full_fname, channels_first=True)
         assert sr == self.__sample_rate
         return inaud
 
-    def reverse_audio(self: Self, aud: torch.Tensor) -> torch.Tensor:
+    def reverse_audio(self, aud: Tensor) -> Tensor:
         return torchaudio.sox_effects.apply_effects_tensor(
             aud, self.__sample_rate, [["reverse"]]
         )[0]
 
-    def clean_keep(self: Self, audio: torch.Tensor) -> torch.Tensor:
-        norm = norm_audio(audio)
+    def clean_keep(self, audio: Tensor) -> Tensor:
+        norm = self.norm_audio(audio)
         vad_aud = self.__vad_transform(norm)
         if vad_aud.size(dim=-1) == 0:
             return torch.zeros_like(audio)
@@ -382,7 +378,7 @@ class AudioProcs:
             return torch.zeros_like(audio)
         rev_vad_out_aud = self.reverse_audio(rev_vad_aud)
         x = torch.nn.functional.pad(
-            norm_audio(rev_vad_out_aud.squeeze()),
+            self.norm_audio(rev_vad_out_aud.squeeze()),
             (
                 audio.size(dim=-1) - vad_aud.size(dim=-1),
                 rev_aud.size(dim=-1) - rev_vad_aud.size(dim=-1),
@@ -395,8 +391,8 @@ class AudioProcs:
             x = torch.cat((x, torch.tensor([1e-10], device=x.device)), dim=0)
         return x
 
-    def clean_audio(self: Self, audio: torch.Tensor) -> torch.Tensor:
-        norm = norm_audio(audio)
+    def clean_audio(self, audio: Tensor) -> Tensor:
+        norm = self.norm_audio(audio)
         vad_aud = self.__vad_transform(norm)
         if vad_aud.size(dim=-1) == 0:
             return torch.tensor([])
@@ -410,21 +406,21 @@ class AudioProcs:
             x = torch.cat((x, torch.tensor([1e-10], device=x.device)), dim=0)
         return x
 
-    def only_content(self: Self, audio: torch.Tensor) -> bool:
+    def only_content(self, audio: Tensor) -> bool:
         return bool(
             (audio.size(dim=-1) > 1)
             and (audio.max().item() > 1e-03)
             and (audio != 0.0).any()
         )
 
-    def is_valid(self: Self, audio: torch.Tensor) -> bool:
+    def is_valid(self, audio: Tensor) -> bool:
         return bool(
             (audio.size(dim=-1) > 1)
             and (audio.max().item() > 1e-03)
             and not (audio == 0.0).all()
         )
 
-    def combine(self: Self, listitem: List[torch.Tensor]) -> torch.Tensor:
+    def combine(self, listitem: list[Tensor]) -> Tensor:
         fold_size = self.__max_len_pad
         fold_step = fold_size // self.__fold_div
         if len(listitem) == 1:
@@ -443,12 +439,12 @@ class AudioProcs:
     ## Noise reduction using stationary spectral gating
     # Explanation: [@sainburg_t_2021_computationalneuroethology]
     # Source:
-    def noisereduce(self: Self, x: torch.Tensor) -> torch.Tensor:
+    def noisereduce(self, x: Tensor) -> Tensor:
         return self.__noisereducer(x)
 
     def short_time_energy(
-        self: Self, audio_data: torch.Tensor, frame_len: int = 400, hop_len: int = 100
-    ) -> torch.Tensor:
+        self, audio_data: Tensor, frame_len: int = 400, hop_len: int = 100
+    ) -> Tensor:
         if len(audio_data.shape) == 1:
             audio_data = audio_data.unsqueeze(0)
         window = torch.ones(1, 1, frame_len, device=audio_data.device)
@@ -457,7 +453,7 @@ class AudioProcs:
         ).squeeze()
         return energy
 
-    def kill_pop(self: Self, audio: torch.Tensor) -> torch.Tensor:
+    def kill_pop(self, audio: Tensor) -> Tensor:
         energy = self.short_time_energy(audio)
         split_beg: int = energy.size(dim=-1) // 4
         split_end: int = 3 * (energy.size(dim=-1) // 4)
@@ -471,24 +467,25 @@ class AudioProcs:
         cropped[int(endidx * scale) : audio.size(dim=-1)] = 0.0
         return cropped.unsqueeze(0)
 
+    def norm_audio(self, x: Tensor) -> Tensor:
+        return x / x.abs().max()
+
 
 @torch.no_grad()
-def amp_to_db(
-    x: torch.Tensor, eps=torch.finfo(torch.float64).eps, top_db=40
-) -> torch.Tensor:
+def amp_to_db(x: Tensor, eps=torch.finfo(torch.float64).eps, top_db=40) -> Tensor:
     x_db = 20 * torch.log10(x.abs() + eps)
     return torch.max(x_db, (x_db.max(-1).values - top_db).unsqueeze(-1))
 
 
 @torch.no_grad()
-def temperature_sigmoid(x: torch.Tensor, x0: float, temp_coeff: float) -> torch.Tensor:
+def temperature_sigmoid(x: Tensor, x0: float, temp_coeff: float) -> Tensor:
     return torch.sigmoid((x - x0) / temp_coeff)
 
 
 @torch.no_grad()
 def linspace(
     start: Number, stop: Number, num: int = 50, endpoint: bool = True, **kwargs
-) -> torch.Tensor:
+) -> Tensor:
     if endpoint:
         return torch.linspace(start, stop, num, **kwargs)
     else:
@@ -507,8 +504,8 @@ class TorchGate(torch.nn.Module):
         n_movemean_nonstationary: int = 20,
         prop_decrease: float = 1.0,
         n_fft: int = 1024,
-        win_length: Optional[int] = None,
-        hop_length: Optional[int] = None,
+        win_length: int | None = None,
+        hop_length: int | None = None,
         freq_mask_smooth_hz: float = 500,
         time_mask_smooth_ms: float = 50,
     ):
@@ -534,7 +531,7 @@ class TorchGate(torch.nn.Module):
         self.register_buffer("smoothing_filter", self._generate_mask_smoothing_filter())
 
     @torch.no_grad()
-    def _generate_mask_smoothing_filter(self: Self) -> Optional[torch.Tensor]:
+    def _generate_mask_smoothing_filter(self) -> Tensor | None:
         if self.freq_mask_smooth_hz is None and self.time_mask_smooth_ms is None:
             return None
         n_grad_freq = (
@@ -573,9 +570,7 @@ class TorchGate(torch.nn.Module):
         return smoothing_filter / smoothing_filter.sum()
 
     @torch.no_grad()
-    def _stationary_mask(
-        self, X_db: torch.Tensor, xn: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
+    def _stationary_mask(self, X_db: Tensor, xn: Tensor | None = None) -> Tensor:
         if xn is not None:
             XN = torch.stft(
                 xn,
@@ -599,7 +594,7 @@ class TorchGate(torch.nn.Module):
         return sig_mask
 
     @torch.no_grad()
-    def _nonstationary_mask(self, X_abs: torch.Tensor) -> torch.Tensor:
+    def _nonstationary_mask(self, X_abs: Tensor) -> Tensor:
         X_smoothed = (
             torch.nn.functional.conv1d(
                 X_abs.reshape(-1, 1, X_abs.shape[-1]),
@@ -619,9 +614,7 @@ class TorchGate(torch.nn.Module):
         )
         return sig_mask
 
-    def forward(
-        self, x: torch.Tensor, xn: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
+    def forward(self, x: Tensor, xn: Tensor | None = None) -> Tensor:
         assert x.ndim == 2
         if x.shape[-1] < self.win_length * 2:
             raise Exception(f"x must be bigger than {self.win_length * 2}")
@@ -648,7 +641,7 @@ class TorchGate(torch.nn.Module):
         sig_mask = self.prop_decrease * (sig_mask * 1.0 - 1.0) + 1.0
         # Smooth signal mask with 2D convolution
         if self.smoothing_filter is not None:
-            inp: torch.Tensor = self.smoothing_filter.to(
+            inp: Tensor = self.smoothing_filter.to(
                 device=sig_mask.device,
                 dtype=sig_mask.dtype,
             )  # type: ignore[assignment]

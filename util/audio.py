@@ -2,10 +2,8 @@ __all__ = [
     "norm_audio",
 ]
 
-import torch
+from torch import Tensor
 
 
-def norm_audio(
-    x: torch.Tensor,
-) -> torch.Tensor:
+def norm_audio(x: Tensor) -> Tensor:
     return x / x.abs().max()

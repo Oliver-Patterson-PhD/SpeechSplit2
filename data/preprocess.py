@@ -2,8 +2,6 @@ __all__ = [
     "PreProcess",
 ]
 
-from typing import Optional, Self
-
 import torch
 import torchaudio
 
@@ -22,7 +20,7 @@ class PreProcess(metaclass=Singleton):
     __proc: AudioProcs
     __parser: DatasetParser
 
-    def __init__(self: Self, conf: Optional[Config] = None) -> None:
+    def __init__(self, conf: Config | None = None) -> None:
         self.__logger = Logger()
         self.__proc = AudioProcs(config=conf)
         self.__parser = DatasetParser(config=conf)
@@ -52,7 +50,7 @@ class PreProcess(metaclass=Singleton):
         speakers = self.__parser.speakers()
         self.__logger.info(f"Found {len(speakers)} speakers")
         [
-            self.process_file(spk=spk, fname=fname)
+            self.process_file(spk=spk, fname=fname)  # type: ignore[func-returns-value]
             for spk in sorted(speakers)
             for fname in self.__logger.progress_bar(
                 sorted(self.__parser.raw_samples(spk)),
@@ -61,7 +59,7 @@ class PreProcess(metaclass=Singleton):
         ]
         self.__logger.info("Preprocessing Complete")
 
-    def process_file(self: Self, spk: str, fname: str) -> None:
+    def process_file(self, spk: str, fname: str) -> None:
         raw_path = path(self.__in_path, self.__parser.get_spkdir(spk), fname)
         self.__logger.trace(f"Processing: {raw_path}")
         raw_wav, nonoise, nopop, wav = self.__proc.full_load_parts(raw_path, keep=False)
@@ -148,5 +146,5 @@ class PreProcess(metaclass=Singleton):
         torch.save(phase.to("cpu"), path(phases, filename))
 
 
-def preprocess_data(config: Optional[Config] = None) -> None:
+def preprocess_data(config: Config | None = None) -> None:
     PreProcess(config)
