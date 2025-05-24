@@ -2,6 +2,7 @@ __all__ = [
     "basename",
     "fread",
     "freadline",
+    "freadlist",
     "strip_ext",
     "strip_path",
     "lsdir",
@@ -9,6 +10,7 @@ __all__ = [
     "walkfiles",
 ]
 
+import glob
 import os
 
 PathVar = str | os.PathLike[str]
@@ -17,6 +19,11 @@ PathVar = str | os.PathLike[str]
 def fread(file: PathVar, binary: bool = False) -> str:
     with open(file, "rb" if binary else "r") as f:
         return f.read()
+
+
+def freadlist(file: PathVar, binary: bool = False) -> list[str]:
+    with open(file, "rb" if binary else "r") as f:
+        return [line for line in f]
 
 
 def freadline(file: PathVar, binary: bool = False) -> str:
@@ -52,15 +59,19 @@ def walkdirs(top: PathVar, fullpaths: bool = False) -> list[str]:
 
 
 def strip_path(fullpath: PathVar) -> str:
-    return str(fullpath).rpartition(os.path.sep)[-1]
+    return os.path.split(str(fullpath))[-1]
 
 
 def strip_ext(fullpath: PathVar) -> str:
-    return str(fullpath).rpartition(".")[0]
+    return os.path.splitext(str(fullpath))[0]
 
 
 def basename(fullpath: PathVar) -> str:
     return strip_path(strip_ext(fullpath))
+
+
+def dirname(fullpath: PathVar) -> str:
+    return os.path.dirname(str(fullpath))
 
 
 def newpath(*args: str) -> str:
@@ -71,3 +82,17 @@ def newpath(*args: str) -> str:
 
 def path(*args: str) -> str:
     return os.path.join(*args)
+
+
+def exists(dir: str) -> bool:
+    return os.path.exists(dir)
+
+
+def myglob(root: str, globstr: str) -> list[str]:
+    return glob.glob(globstr, root_dir=root)
+
+
+def rm_rf(dir: str) -> None:
+    for root, _, files in os.walk(dir, topdown=False):
+        for name in files:
+            os.remove(path(root, name))

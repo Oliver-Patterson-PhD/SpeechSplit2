@@ -1,7 +1,8 @@
-import os
 from typing import Self
 
 import torch
+
+from util.file import newpath, path
 
 from .experiment import Experiment
 
@@ -18,25 +19,18 @@ DataType = tuple[
 
 
 class ExportLatents(Experiment):
-    latents = [
-        "code_exp_1",
-        "code_exp_2",
-        "code_exp_3",
-        "code_exp_4",
-    ]
+    latents = ["code_exp_1", "code_exp_2", "code_exp_3", "code_exp_4"]
 
     @torch.no_grad()
     def export(self: Self) -> None:
         self.logger.info("Running export")
-        model_name = os.path.join(
-            "speechsplit2-large",
-            "trainmask-large-SpeechSplit2-2024-11-07.ckpt",
+        model_name = path(
+            "speechsplit2-large", "trainmask-large-SpeechSplit2-2024-11-07.ckpt"
         )
         self.load_trained(model_name)
         self.logger.info("Full Process On")
         self.compute.set_gpu()
-        ddir = os.path.join(self.experiment_dir, self.config.options.dataset_name)
-        os.makedirs(ddir, exist_ok=True)
+        ddir = newpath(self.experiment_dir, self.config.options.dataset_name)
         self.experiment_dir = ddir
         self.process()
 

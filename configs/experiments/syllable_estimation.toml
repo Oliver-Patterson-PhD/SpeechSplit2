@@ -1,7 +1,7 @@
 [options]
 experiment = "syllable_estimation"
 run_tests = ["syllable_estimation"]
-dataset_name = "uaspeech"
+dataset_name = "timit"
 train = false
 return_latents = false
 regenerate_data = false

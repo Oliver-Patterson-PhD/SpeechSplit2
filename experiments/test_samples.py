@@ -10,16 +10,12 @@ from .experiment import Experiment
 
 class TestSamples(Experiment):
     def __init__(
-        self: Self,
-        config: Optional[Config] = None,
-        currtime: int = int(time.time()),
+        self: Self, config: Optional[Config] = None, currtime: int = int(time.time())
     ) -> None:
         self.config = config or Config()
 
     @torch.no_grad()
-    def test(
-        self: Self,
-    ) -> None:
+    def test(self: Self) -> None:
         self.load_data(singleitem=True, full_process=True)
         self.logger.info("Start eval...")
         self.logfile = open("normlog.csv", "wt")

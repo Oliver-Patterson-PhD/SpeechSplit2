@@ -9,7 +9,6 @@ from transcribers import Transcriber
 from util import CompareItem
 from util.audio import norm_audio
 from util.tensor import save_tensor
-from utils import zero_one_norm
 
 from .experiment import Experiment
 
@@ -23,6 +22,12 @@ DataType = Tuple[
     torch.Tensor,  # Timbre Input
     torch.Tensor,  # len_crop (required in padding)
 ]
+
+
+def zero_one_norm(s: torch.Tensor) -> torch.Tensor:
+    s_norm = s - torch.min(s)
+    s_norm /= torch.max(s_norm)
+    return s_norm
 
 
 class Scratchpad(Experiment):

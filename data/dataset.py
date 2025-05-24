@@ -1,25 +1,83 @@
 __all__ = [
     "DatasetParser",
     "DType",
+    "Phoneme",
+    "Utterance",
 ]
 
-import os
 from enum import Enum, auto
-from typing import Dict, Optional, Self, Set
+from typing import Optional, Self
 
-from meta_dicts import MetaDictType
 from util import Config
+from util.file import (basename, dirname, freadline, freadlist, myglob, path,
+                       strip_ext)
 
-ua_uttrs: Dict[str, str]
-ua_uttrs = getattr(
-    __import__("meta_dicts"),
-    "uaspeech_uttrs",
-)
+from .dataset_detail import (smolspeech_speakers, smolvctk_speakers,
+                             timit_speakers, timit_spk_path, uaspeech_speakers,
+                             uaspeech_uttrs, vctk_sex, vctk_speakers)
+
+
+class Phoneme:
+    start: int
+    end: int
+    phon: str
+
+    def __init__(self: Self, start: int, end: int, phon: str):
+        self.start = start
+        self.end = end
+        self.phon = self.__fold_phon(phon)
+
+    def __str__(self: Self) -> str:
+        return f"{self.start}-{self.end}: {self.phon}"
+
+    def __repr__(self: Self) -> str:
+        return self.__str__()
+
+    def __fold_phon(self: Self, phon: str) -> str:
+        match phon:
+            case "sil" | "h#":
+                return "sil"
+            case _:
+                return phon
+
+
+class Utterance:
+    word: str
+    start: int
+    end: int
+    phones: list[Phoneme]
+
+    def __init__(self: Self, word: str, phones: list[Phoneme]):
+        self.word = word
+        self.phones = phones
+        self.start = min(phone.start for phone in self.phones)
+        self.end = max(phone.end for phone in self.phones)
+
+    def __str__(self: Self) -> str:
+        return f"{self.word}: {self.phones}"
+
+    def __repr__(self: Self) -> str:
+        return self.__str__()
+
+
+def parse_phonemes(lines: list[str], setword: str | None = None) -> Utterance:
+    word: str = setword or ""
+    phones: list[Phoneme] = []
+    for line in lines:
+        items: list[str] = line.split()
+        start: int = int(items[0])
+        end: int = int(items[1])
+        phon: str = items[2]
+        if setword is None and len(items) == 4 and items[2] != "sil":
+            word = items[3]
+        phones.append(Phoneme(start, end, phon))
+    return Utterance(word, phones)
 
 
 class DType(Enum):
     VCTK = auto()
     UASPEECH = auto()
+    TIMIT = auto()
 
     def __str__(self) -> str:
         match self:
@@ -27,45 +85,64 @@ class DType(Enum):
                 return "VCTK"
             case self.UASPEECH:
                 return "UASpeech"
+            case self.TIMIT:
+                return "TIMIT"
             case _:
                 raise ValueError
 
 
 class DatasetParser:
-    __raw_data_path: str
+    __raw_timit: str
+    __raw_uaspeech: str
+    __raw_vctk: str
     __dsettype: DType
-    __spk_meta: MetaDictType
+    __ua_phone_labels: dict[str, Utterance]
 
-    def __init__(
-        self: Self,
-        config: Optional[Config] = None,
-    ) -> None:
-        if config is None:
-            config = Config()
-        self.__raw_data_path = config.paths.raw_data
+    def __init__(self: Self, config: Optional[Config] = None) -> None:
+        config = config or Config()
         self.__dsettype = self.__get_type(config.options.dataset_name)
-        self.__spk_meta = getattr(
-            __import__("meta_dicts"),
-            config.options.dataset_name,
-        )
+        self.__is_smol = config.options.dataset_name.lower().startswith("smol")
+        self.__raw_timit = config.paths.raw_timit
+        self.__raw_uaspeech = config.paths.raw_uaspeech
+        self.__raw_vctk = config.paths.raw_vctk
+        if self.is_uaspeech():
+            self.__ua_phone_labels = self.__load_uaspeech_phones()
 
-    def __fname(
-        self: Self,
-        fname: str,
-    ) -> str:
-        return os.path.splitext(os.path.basename(fname))[0]
+    def __load_uaspeech_phones(self) -> dict[str, Utterance]:
+        dataset_base = self.__raw_uaspeech.rpartition("/")[0].rpartition("/")[0]
+        filepath = path(dataset_base, "mlf", "M16", "M16_aligned_phones.mlf")
+        uttr: str = ""
+        lines: list[str] = []
+        phones: dict[str, Utterance] = {}
+        with open(filepath) as mlf_file:
+            for i, line in enumerate(mlf_file):
+                try:
+                    if line.startswith("."):
+                        phones[uttr] = parse_phonemes(lines)
+                        uttr = ""
+                        lines.clear()
+                    elif line.startswith("#"):
+                        pass
+                    elif line.startswith('"'):
+                        uttr = self.utterance(basename(line.strip().strip('"')))
+                    else:
+                        lines.append(line.strip())
+                except Exception as e:
+                    raise Exception(f"Failed on line: {i}") from e
+        return phones
 
     def __get_type(self: Self, dname: str) -> DType:
-        if dname in ("uaspeech", "smolspeech"):
-            return DType.UASPEECH
-        elif dname in ("vctk", "smolvctk"):
-            return DType.VCTK
-        else:
-            raise ValueError
+        match dname.lower().removeprefix("smol"):
+            case "uaspeech":
+                return DType.UASPEECH
+            case "vctk":
+                return DType.VCTK
+            case "timit":
+                return DType.TIMIT
+            case _:
+                raise ValueError
 
-    def dataset_type(
-        self: Self,
-    ) -> DType:
+    def dataset_type(self: Self) -> DType:
         return self.__dsettype
 
     def is_uaspeech(self: Self) -> bool:
@@ -74,78 +151,159 @@ class DatasetParser:
     def is_vctk(self: Self) -> bool:
         return self.dataset_type() == DType.VCTK
 
-    def sex(
-        self: Self,
-        speaker: str,
-    ) -> str:
-        return self.__spk_meta[speaker].sex
+    def is_timit(self: Self) -> bool:
+        return self.dataset_type() == DType.TIMIT
 
-    def speakers(
-        self: Self,
-    ) -> Set[str]:
-        return set(self.__spk_meta.keys())
-
-    def utterance(
-        self: Self,
-        fname: str,
-    ) -> str:
-        file_name = self.__fname(fname)
+    def get_spkdir(self: Self, spk: str) -> str:
         match self.dataset_type():
             case DType.UASPEECH:
-                return "_".join(file_name.split("_")[1:3])
+                return spk
             case DType.VCTK:
-                return file_name
+                return spk
+            case DType.TIMIT:
+                return path(*timit_spk_path[spk])
             case _:
                 raise ValueError
 
-    def speaker(
-        self: Self,
-        fname: str,
-    ) -> str:
-        file_name = self.__fname(fname)
-        match self.__dsettype:
+    def get_fullpath(self: Self, spk: str, uttr: str) -> str:
+        match self.dataset_type():
             case DType.UASPEECH:
-                return file_name.split("_")[0]
+                return path(self.get_spkdir(spk), f"{spk}_{strip_ext(uttr)}")
             case DType.VCTK:
-                return file_name.split("_")[0]
+                return path(self.get_spkdir(spk), f"{spk}_{strip_ext(uttr)}")
+            case DType.TIMIT:
+                return path(self.get_spkdir(spk), strip_ext(uttr))
             case _:
                 raise ValueError
 
-    def samples(
-        self: Self,
-        spk: str,
-    ):
-        return
-
-    def sample_name(
-        self: Self,
-        fname: str,
-    ) -> str:
-        file_name = self.__fname(fname)
-        match self.__dsettype:
+    def sex(self: Self, speaker: str) -> str:
+        match self.dataset_type():
             case DType.UASPEECH:
-                return "_".join(file_name.split("_")[0:3])
+                return speaker.removeprefix("C")[0]
             case DType.VCTK:
-                return "_".join(file_name.split("_")[0:2])
+                return vctk_sex[speaker]
+            case DType.TIMIT:
+                return speaker[0]
             case _:
                 raise ValueError
 
-    def get_real_text(
-        self: Self,
-        fname: str,
-    ) -> str:
-        sample_name = self.sample_name(fname)
-        match self.__dsettype:
+    def dysarthric(self: Self, speaker: str) -> bool:
+        match self.dataset_type():
             case DType.UASPEECH:
-                return ua_uttrs[self.utterance(sample_name)]
+                return speaker[0] != "C"
             case DType.VCTK:
-                with open(
-                    "{}/VCTK-Corpus/txt/{}/{}.txt".format(
-                        self.__raw_data_path,
-                        sample_name.split("_")[0],
-                        sample_name,
-                    )
-                ) as uttr_file:
-                    return next(uttr_file)
+                return False
+            case DType.TIMIT:
+                return False
+            case _:
+                raise ValueError
+
+    def speakers(self: Self) -> set[str]:
+        match self.dataset_type():
+            case DType.UASPEECH:
+                return smolspeech_speakers if self.__is_smol else uaspeech_speakers
+            case DType.VCTK:
+                return smolvctk_speakers if self.__is_smol else vctk_speakers
+            case DType.TIMIT:
+                return timit_speakers
+            case _:
+                raise ValueError
+
+    def utterance(self: Self, fpath: str) -> str:
+        match self.dataset_type():
+            case DType.UASPEECH:
+                spk, blk, uttr, mic = basename(fpath).split("_")
+                return f"{blk}_{uttr}"
+            case DType.VCTK:
+                spk, uttr = basename(fpath).split("_")
+                return uttr
+            case DType.TIMIT:
+                return basename(fpath)
+            case _:
+                raise ValueError
+
+    def speaker(self: Self, fpath: str) -> str:
+        match self.dataset_type():
+            case DType.UASPEECH:
+                spk, blk, uttr, mic = basename(fpath).split("_")
+                return spk
+            case DType.VCTK:
+                spk, uttr = basename(fpath).split("_")
+                return spk
+            case DType.TIMIT:
+                return basename(dirname(fpath))
+            case _:
+                raise ValueError
+
+    def raw_samples(self: Self, spk: str) -> list[str]:
+        match self.dataset_type():
+            case DType.UASPEECH:
+                return myglob(path(self.__raw_uaspeech, spk), "*.wav")
+            case DType.VCTK:
+                return myglob(path(self.__raw_vctk, spk), "*.wav")
+            case DType.TIMIT:
+                return myglob(path(self.__raw_timit, self.get_spkdir(spk)), "*.WAV")
+            case _:
+                raise ValueError
+
+    def phonetic_labelled_speakers(self: Self) -> set[str]:
+        match self.dataset_type():
+            case DType.UASPEECH:
+                return {"M16"}
+            case DType.VCTK:
+                return set()
+            case DType.TIMIT:
+                return self.speakers()
+
+    def sample_name(self: Self, fpath: str) -> str:
+        fname = basename(fpath)
+        match self.dataset_type():
+            case DType.UASPEECH:
+                return f"{self.speaker(fpath)}_{self.utterance(fpath)}"
+            case DType.VCTK:
+                return f"{self.speaker(fpath)}_{self.utterance(fpath)}"
+            case DType.TIMIT:
+                return self.utterance(fname)
+            case _:
+                raise ValueError
+
+    def get_real_text(self: Self, fpath: str) -> str:
+        match self.dataset_type():
+            case DType.UASPEECH:
+                return uaspeech_uttrs[self.utterance(self.sample_name(fpath))]
+            case DType.VCTK:
+                spk = self.speaker(fpath)
+                txtfile = f"{self.sample_name(fpath)}.txt"
+                return freadline(path(self.__raw_vctk, "txt", spk, txtfile)).strip()
+            case DType.TIMIT:
+                spk = self.speaker(fpath)
+                uttr = self.utterance(fpath)
+                txtfile = f"{self.get_fullpath(spk, uttr)}.TXT"
+                text = freadline(path(self.__raw_timit, txtfile))
+                return text.partition(" ")[-1].partition(" ")[-1].strip()
+            case _:
+                raise ValueError
+
+    def get_wavfile(self: Self, spk: str, uttr: str) -> str:
+        match self.dataset_type():
+            case DType.UASPEECH:
+                return self.get_fullpath(spk, uttr) + ".wav"
+            case DType.VCTK:
+                return self.get_fullpath(spk, uttr) + ".wav"
+            case DType.TIMIT:
+                return strip_ext(self.get_fullpath(spk, uttr)) + ".WAV"
+            case _:
+                raise ValueError
+
+    def get_utterance(self: Self, fpath: str) -> Utterance:
+        match self.dataset_type():
+            case DType.UASPEECH:
+                return self.__ua_phone_labels[self.utterance(fpath)]
+            case DType.VCTK:
+                raise RuntimeError("VCTK does not have phoneme labels")
+            case DType.TIMIT:
+                phonfile = f"{self.get_fullpath(self.speaker(fpath), self.utterance(fpath))}.PHN"
+                phones = freadlist(path(self.__raw_timit, phonfile))
+                return parse_phonemes(phones, self.get_real_text(fpath))
             case _:
                 raise ValueError

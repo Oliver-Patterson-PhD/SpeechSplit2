@@ -174,11 +174,7 @@ class Swapper(Experiment):
 
 
 @torch.no_grad()
-def get_valid(
-    meta: MetaDictType,
-    dys: str,
-    con: str,
-) -> set:
+def get_valid(meta: MetaDictType, dys: str, con: str) -> set:
     dys_uttrs = set(item[-1].split("/")[1][4:-3] for item in meta if item[0] == dys)
     con_uttrs = set(item[-1].split("/")[1][5:-3] for item in meta if item[0] == con)
     return dys_uttrs and con_uttrs
@@ -186,11 +182,7 @@ def get_valid(
 
 @torch.no_grad()
 def get_code(
-    fstring: str,
-    name: str,
-    latent: str,
-    swap: str,
-    orig: str,
+    fstring: str, name: str, latent: str, swap: str, orig: str
 ) -> Tuple[bool, torch.Tensor]:
     speaker_code, swapped = (swap, True) if latent == name else (orig, False)
     filename = fstring.format(name, speaker_code)

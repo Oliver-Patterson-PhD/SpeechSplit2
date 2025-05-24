@@ -1,21 +1,15 @@
 import os
 from glob import glob
 from itertools import product
-from typing import List, Self, Tuple, Dict
 from time import time_ns
+from typing import Dict, List, Self, Tuple
 
 import torch
 import torchaudio
 
 from meta_dicts import MetaDictType, NamedMetaDictType
-from synthesizers import (
-    GriffinLim,
-    MelGan,
-    ParallelWaveGan,
-    Synthesizer,
-    Wavenet,
-    HiFiGAN,
-)
+from synthesizers import (GriffinLim, HiFiGAN, MelGan, ParallelWaveGan,
+                          Synthesizer, Wavenet)
 from util.audio import norm_audio
 from util.tensor import save_tensor
 
@@ -153,11 +147,7 @@ class Swapper(Experiment):
 
     @torch.no_grad()
     def swap_single_latent(
-        self: Self,
-        uttr: str,
-        dys: str,
-        con: str,
-        latent: str,
+        self: Self, uttr: str, dys: str, con: str, latent: str
     ) -> None:
         fstring = self.config.paths.latents + "/{0}/{1}/{1}_" + uttr + ".pt"
         c1, code_1 = get_code(fstring, "code_exp_1", latent, dys, con)
@@ -339,11 +329,7 @@ class Swapper(Experiment):
 
 
 @torch.no_grad()
-def get_valid(
-    meta: MetaDictType,
-    dys: str,
-    con: str,
-) -> set:
+def get_valid(meta: MetaDictType, dys: str, con: str) -> set:
     dys_uttrs = set(item[-1].split("/")[1][4:-3] for item in meta if item[0] == dys)
     con_uttrs = set(item[-1].split("/")[1][5:-3] for item in meta if item[0] == con)
     return dys_uttrs and con_uttrs
@@ -351,11 +337,7 @@ def get_valid(
 
 @torch.no_grad()
 def get_code(
-    fstring: str,
-    name: str,
-    latent: str,
-    swap: str,
-    orig: str,
+    fstring: str, name: str, latent: str, swap: str, orig: str
 ) -> Tuple[bool, torch.Tensor]:
     speaker_code, swapped = (swap, True) if latent == name else (orig, False)
     filename = fstring.format(name, speaker_code)

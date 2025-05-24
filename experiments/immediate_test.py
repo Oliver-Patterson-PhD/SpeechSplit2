@@ -1,4 +1,3 @@
-import os
 from typing import Any, Self
 
 import torch
@@ -7,7 +6,8 @@ import torchaudio
 from data.dataset import DatasetParser
 from data.utils import AudioProcs
 from util import Config, Logger
-from util.file import basename, newpath, strip_path, walkdirs, walkfiles
+from util.file import (basename, exists, newpath, path, rm_rf, strip_path,
+                       walkdirs, walkfiles)
 from util.plot import plot_things
 
 
@@ -25,21 +25,17 @@ class Immediate:
 
     def __init__(self: Self, config: Config) -> None:
         self.config = config
-        self.experiment_dir = newpath(self.config.paths.artefacts, "immediate")
+        self.experiment_dir = newpath(config.paths.artefacts, "immediate")
+        self.logger = Logger()
         return
 
-    def subdir(self: Self, subdir: str) -> str:
-        subpath = os.path.join(self.experiment_dir, subdir)
-        for root, _, files in os.walk(subpath, topdown=False):
-            for name in files:
-                os.remove(os.path.join(root, name))
-        os.makedirs(subpath, exist_ok=True)
-        return subpath
+    def check_single(self: Self) -> None:
+        return
 
     def test(self: Self) -> None:
+        self.check_single()
         if not self.run:
             return
-        self.logger = Logger()
         self.in_path = self.config.paths.raw_wavs
         self.out_path = self.config.paths.features
         self.max_len_pad = self.config.audio.max_len_pad
@@ -64,13 +60,18 @@ class Immediate:
                 self.run_graph_clean(spk_dir)
         self.logger.info("Immediate Test Complete")
 
+    def subdir(self: Self, subdir: str) -> str:
+        subpath = path(self.experiment_dir, subdir)
+        rm_rf(subpath)
+        return newpath(subpath)
+
     def run_single_test(self, spk_dir: str):
         try:
             [
                 self.process_file(filebase)  # type: ignore [func-returns-value]
                 for filebase in sorted(
-                    os.path.join(self.in_path, spk_dir, fname)
-                    for fname in walkfiles(os.path.join(self.in_path, spk_dir))
+                    path(self.in_path, spk_dir, fname)
+                    for fname in walkfiles(path(self.in_path, spk_dir))
                 )
             ]
         except Exception as e:
@@ -78,10 +79,10 @@ class Immediate:
 
     def run_make_clean(self, spk_dir: str):
         try:
-            self.clean_path = os.path.join(self.experiment_dir, "clean_dataset")
+            self.clean_path = path(self.experiment_dir, "clean_dataset")
             procdata_exists = all(
                 [
-                    os.path.exists(f"{self.clean_path}/{speaker}")
+                    exists(path(self.clean_path, speaker))
                     for speaker in self.parser.speakers()
                 ]
             )
@@ -93,8 +94,8 @@ class Immediate:
                 self.save_cleaned_audio(filebase)  # type: ignore [func-returns-value]
                 for filebase in self.logger.progress_bar(
                     sorted(
-                        os.path.join(self.in_path, spk_dir, fname)
-                        for fname in walkfiles(os.path.join(self.in_path, spk_dir))
+                        path(self.in_path, spk_dir, fname)
+                        for fname in walkfiles(path(self.in_path, spk_dir))
                     )
                 )
             ]
@@ -119,8 +120,8 @@ class Immediate:
                 )  # type: ignore [func-returns-value]
                 for filebase in self.logger.progress_bar(
                     sorted(
-                        os.path.join(self.in_path, spk_dir, fname)
-                        for fname in walkfiles(os.path.join(self.in_path, spk_dir))
+                        path(self.in_path, spk_dir, fname)
+                        for fname in walkfiles(path(self.in_path, spk_dir))
                     )
                 )
             ]
@@ -130,9 +131,9 @@ class Immediate:
 
     def save_cleaned_audio(self: Self, fname: str) -> None:
         spk_dir = fname.split("/")[-2]
-        fullpath = os.path.join(self.in_path, spk_dir, fname)
+        fullpath = path(self.in_path, spk_dir, fname)
         sfname = basename(fname)
-        outpath = os.path.join(self.clean_path, f"{sfname}.wav")
+        outpath = path(self.clean_path, f"{sfname}.wav")
         proc = self.proc.full_load_parts(fullpath)
         test = self.proc.full_load_check(*proc)
         if test is not None:
@@ -158,17 +159,15 @@ class Immediate:
     def graph_cleaned_audio(self: Self, out_dir: str, bad_dir: str, fname: str) -> None:
         spk_dir = fname.split("/")[-2]
         sfname = basename(fname)
-        rawpath = os.path.join(self.in_path, spk_dir, fname)
+        rawpath = path(self.in_path, spk_dir, fname)
         raw_wav, nonoise, nopop, cln_wav = self.proc.full_load_parts(rawpath, keep=True)
         failure = self.proc.full_load_check(raw_wav, nonoise, nopop, cln_wav, keep=True)
         if failure is not None:
             self.logger.warn(f"Failure in {failure}: {fname}")
-            if os.path.exists(os.path.join(self.clean_path, fname)):
+            if exists(path(self.clean_path, fname)):
                 self.logger.warn("Failure is in immediate data")
-            if os.path.exists(
-                os.path.join(
-                    self.config.paths.cleanwavs, self.parser.speaker(fname), fname
-                )
+            if exists(
+                path(self.config.paths.cleanwavs, self.parser.speaker(fname), fname)
             ):
                 self.logger.warn("Failure is in clean data")
         plot_items = [
@@ -179,19 +178,16 @@ class Immediate:
         ]
         plot_things(out_dir if failure is None else bad_dir, sfname, plot_items)
 
-    def process_file(
-        self: Self,
-        fname: str,
-    ) -> None:
+    def process_file(self: Self, fname: str) -> None:
         spk_dir: str = fname.split("/")[-2]
         wav_prc = torch.tensor([])
         wav_mono = torch.tensor([])
         spmel = torch.tensor([])
         f0_norm = torch.tensor([])
         try:
-            full_path = os.path.join(self.in_path, spk_dir, fname)
+            full_path = path(self.in_path, spk_dir, fname)
             wav_prc = self.proc.full_load_parts(full_path)[-1]
-            lo, hi = self.proc.get_f0_lohi(spk_dir)
+            lo, hi = self.proc.get_f0_lohi(self.parser.sex(spk_dir))
             f0, sp, ap = self.proc.get_world_params(wav=wav_prc)
             wav_mono = self.proc.get_monotonic_wav(wav=wav_prc, f0=f0, sp=sp, ap=ap)
             spmel, phase = self.proc.get_spmel(wav_prc)
@@ -240,9 +236,7 @@ def iter_autocorrelation(signal: torch.Tensor) -> torch.Tensor:
 
 
 def format_log_message(
-    fname: str,
-    data_list: list[float],
-    other: list[Any] = [],
+    fname: str, data_list: list[float], other: list[Any] = []
 ) -> str:
     precision = 5
     width = precision + 5

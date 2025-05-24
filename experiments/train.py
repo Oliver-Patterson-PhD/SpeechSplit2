@@ -4,9 +4,20 @@ from typing import Self
 import torch
 
 from util import NanError
-from utils import masked_mse
 
 from .experiment import Experiment
+
+
+def masked_mse(prediction: torch.Tensor, ground_t: torch.Tensor) -> torch.Tensor:
+    prediction = prediction.flatten()
+    ground_t = ground_t.flatten()
+    mask: torch.Tensor = ground_t != 0.0
+    sum: torch.Tensor = torch.nn.functional.mse_loss(
+        prediction,
+        ground_t,
+        reduction="sum",
+    )
+    return sum / mask.sum()
 
 
 ## Solver for training

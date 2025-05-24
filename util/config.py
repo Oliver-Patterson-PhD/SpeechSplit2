@@ -5,10 +5,10 @@ __all__ = [
 
 from datetime import datetime
 from enum import Flag, auto
-from os import path
 from tomllib import load as loadtoml
 from typing import Any, Dict, List, Optional, Self
 
+from .file import exists, path
 from .logging import Logger, LogLevel
 from .patterns import Singleton
 
@@ -167,10 +167,7 @@ class Config(metaclass=Singleton):
 
     ## Initialise configuration object
     # Reads the config toml file and creates a single object with the values
-    def __init__(
-        self: Self,
-        config_name: Optional[str] = None,
-    ) -> None:
+    def __init__(self: Self, config_name: Optional[str] = None) -> None:
         self.start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         if config_name is not None:
             if ".toml" not in config_name:
@@ -184,13 +181,10 @@ class Config(metaclass=Singleton):
     ## Load config file and update values
     #  Duplicate values will be overwritten, existing config options that not
     #  specified in the loaded files are not removed.
-    def load_config(
-        self: Self,
-        config_name: str,
-    ) -> None:
+    def load_config(self: Self, config_name: str) -> None:
         config_str = "configs/{}.toml"
         config_file = config_str.format(config_name)
-        if not path.exists(config_file):
+        if not exists(config_file):
             err_str = f"Could not find file: {config_file}"
             Logger().fatal(err_str)
             raise FileNotFoundError(err_str)
@@ -227,10 +221,7 @@ class Config(metaclass=Singleton):
             )
         self.__fill_nulls()
 
-    def __print_config(
-        self: Self,
-        config_dict: dict,
-    ) -> None:
+    def __print_config(self: Self, config_dict: dict) -> None:
         Logger().info(
             f"config: {self.original_config}\n"
             + "\n".join(
@@ -245,20 +236,13 @@ class Config(metaclass=Singleton):
             )
         )
 
-    def __merge_dicts(
-        self: Self,
-        *dict_args,
-    ) -> dict:
+    def __merge_dicts(self: Self, *dict_args) -> dict:
         result = {}
         for dictionary in dict_args:
             result.update(dictionary)
         return result
 
-    def __map_categories(
-        self: Self,
-        key: str,
-        subdict: Dict[str, Any],
-    ) -> None:
+    def __map_categories(self: Self, key: str, subdict: Dict[str, Any]) -> None:
         match key.lower():
             case "log":
                 if "level" in subdict:
@@ -298,10 +282,7 @@ class Config(metaclass=Singleton):
                 self.__dict__.update(subdict)
         return
 
-    def __set_runtypes(
-        self: Self,
-        runtype_list: List[str],
-    ) -> RunTests:
+    def __set_runtypes(self: Self, runtype_list: List[str]) -> RunTests:
         runtype = RunTests.NOTHING
         for runtype_str in runtype_list:
             runtype_str = runtype_str.upper().strip()
@@ -316,80 +297,73 @@ class Config(metaclass=Singleton):
                 raise Exception(err_str) from e
         return runtype
 
-    def __fill_nulls(
-        self: Self,
-    ) -> None:
+    def __fill_nulls(self: Self) -> None:
         self.__set_dataset_paths()
         self.__set_data_and_feat()
         self.__set_artefact_paths()
         if self.__logging.file == "SET_ME":
-            self.__logging.file = (
-                f"{self.paths.logging}/{self.start_time}-{self.options.experiment}.log"
+            self.__logging.file = path(
+                self.paths.logging,
+                f"{self.start_time}-{self.options.experiment}.log",
             )
             Logger().set_file(self.__logging.file)
         if self.__logging.callgraph:
             Logger().enable_callgraph()
 
-    def __set_artefact_paths(
-        self: Self,
-    ) -> None:
+    def __set_artefact_paths(self: Self) -> None:
         if not hasattr(self.paths, "logging"):
-            self.paths.logging = f"{self.paths.artefacts}/logs"
+            self.paths.logging = path(self.paths.artefacts, "logs")
         if not hasattr(self.paths, "full_models"):
-            self.paths.full_models = f"{self.paths.artefacts}/full_models"
+            self.paths.full_models = path(self.paths.artefacts, "full_models")
         if not hasattr(self.paths, "tensorboard"):
-            self.paths.tensorboard = f"{self.paths.artefacts}/tensorboard"
+            self.paths.tensorboard = path(self.paths.artefacts, "tensorboard")
         if not hasattr(self.paths, "models"):
-            self.paths.models = f"{self.paths.artefacts}/models"
+            self.paths.models = path(self.paths.artefacts, "models")
         if not hasattr(self.paths, "latents"):
-            self.paths.latents = f"{self.paths.artefacts}/latents"
+            self.paths.latents = path(self.paths.artefacts, "latents")
 
         if not hasattr(self.paths, "freqs"):
-            self.paths.freqs = f"{self.paths.features}/freqs"
+            self.paths.freqs = path(self.paths.features, "freqs")
         if not hasattr(self.paths, "spmels"):
-            self.paths.spmels = f"{self.paths.features}/spmels"
+            self.paths.spmels = path(self.paths.features, "spmels")
         if not hasattr(self.paths, "monowavs"):
-            self.paths.monowavs = f"{self.paths.features}/monowavs"
+            self.paths.monowavs = path(self.paths.features, "monowavs")
         if not hasattr(self.paths, "fullwavs"):
-            self.paths.fullwavs = f"{self.paths.features}/fullwavs"
+            self.paths.fullwavs = path(self.paths.features, "fullwavs")
         if not hasattr(self.paths, "phases"):
-            self.paths.phases = f"{self.paths.features}/phases"
+            self.paths.phases = path(self.paths.features, "phases")
         if not hasattr(self.paths, "cleanwavs"):
-            self.paths.cleanwavs = f"{self.paths.features}/cleanwavs"
+            self.paths.cleanwavs = path(self.paths.features, "cleanwavs")
 
-    def __set_dataset_paths(
-        self: Self,
-    ) -> None:
+    def __set_dataset_paths(self: Self) -> None:
         if not hasattr(self.paths, "raw_timit"):
-            self.paths.raw_timit = f"{self.paths.raw_data}/TIMIT"
+            self.paths.raw_timit = path(self.paths.raw_data, "TIMIT")
         if not hasattr(self.paths, "dataset_timit"):
-            self.paths.dataset_timit = f"{self.paths.proc_data}/TIMIT"
+            self.paths.dataset_timit = path(self.paths.proc_data, "TIMIT")
 
         if not hasattr(self.paths, "raw_vctk"):
-            self.paths.raw_vctk = f"{self.paths.raw_data}/VCTK-Corpus/wav"
+            self.paths.raw_vctk = path(self.paths.raw_data, "VCTK-Corpus", "wav")
         if not hasattr(self.paths, "dataset_vctk"):
-            self.paths.dataset_vctk = f"{self.paths.proc_data}/VCTK-Corpus"
+            self.paths.dataset_vctk = path(self.paths.proc_data, "VCTK-Corpus")
 
         if not hasattr(self.paths, "raw_uaspeech"):
-            self.paths.raw_uaspeech = f"{self.paths.raw_data}/UASpeech/audio/original"
+            self.paths.raw_uaspeech = path(self.paths.raw_data, "UASpeech", "audio", "original")
         if not hasattr(self.paths, "dataset_uaspeech"):
             self.paths.dataset_uaspeech = (
-                f"{self.paths.proc_data}/UASpeech/audio/original"
+                path(self.paths.proc_data, "UASpeech", "audio", "original")
             )
 
         if not hasattr(self.paths, "raw_smolspeech"):
-            self.paths.raw_smolspeech = f"{self.paths.raw_data}/SmolSpeech"
+            self.paths.raw_smolspeech = path(self.paths.raw_data, "SmolSpeech")
         if not hasattr(self.paths, "dataset_smolspeech"):
-            self.paths.dataset_smolspeech = f"{self.paths.proc_data}/SmolSpeech"
+            self.paths.dataset_smolspeech = path(self.paths.proc_data, "SmolSpeech")
 
         if not hasattr(self.paths, "raw_smolvctk"):
-            self.paths.raw_smolvctk = f"{self.paths.raw_data}/SmolVCTK"
+            self.paths.raw_smolvctk = path(self.paths.raw_data, "SmolVCTK")
         if not hasattr(self.paths, "dataset_smolvctk"):
-            self.paths.dataset_smolvctk = f"{self.paths.proc_data}/SmolVCTK"
+            self.paths.dataset_smolvctk = path(self.paths.proc_data, "SmolVCTK")
 
-    def __set_data_and_feat(
-        self: Self,
-    ) -> None:
+    def __set_data_and_feat(self: Self) -> None:
         if self.options.dataset_name == "vctk":
             data_dir = self.paths.raw_vctk
             feat_dir = self.paths.dataset_vctk

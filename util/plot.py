@@ -1,7 +1,7 @@
 import matplotlib
 import torch
 
-from data.phonetics import Word
+from data import Utterance
 from util.file import path
 
 
@@ -9,11 +9,13 @@ def plot_things(
     plot_out: str,
     sample: str,
     things: list[tuple[torch.Tensor, str]],
-    word: Word | None = None,
+    word: Utterance | None = None,
     label_colour: str = "r",
     lines_colour: str = "k",
     spect_cmap: str = "binary",
     sample_time: int | None = None,
+    sample_start: int | None = None,
+    sample_end: int | None = None,
 ):
     nrows = len(things)
     ncols = 1
@@ -42,7 +44,7 @@ def plot_things(
                 else:
                     ax.plot(item.cpu().numpy())
                     ax.set_xlabel("Samples")
-                    ax.set_xlim(0, item.size(dim=-1))
+                    ax.set_xlim(sample_start or 0, sample_end or item.size(dim=-1))
             elif item.dim() == 2:
                 ax.imshow(
                     item.cpu().numpy(),

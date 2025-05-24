@@ -8,7 +8,7 @@ from typing import List, Self, Tuple
 
 import torch
 
-from util import Config, Logger, Compute
+from util import Compute, Config, Logger
 
 from .utils import AudioProcs
 
@@ -36,10 +36,7 @@ class MyDataset(torch.utils.data.Dataset):
     full_info: bool
     map_device: torch.device
 
-    def __init__(
-        self: Self,
-        config: Config,
-    ) -> None:
+    def __init__(self: Self, config: Config) -> None:
         self.dataset_name = config.options.dataset_name
         self.sample_rate = config.audio.sample_rate
         self.max_len_seq = config.model.max_len_seq
@@ -80,20 +77,13 @@ class MyDataset(torch.utils.data.Dataset):
         ]
         self.num_tokens = len(self.dataset)
 
-    def pinnable(
-        self: Self,
-    ) -> bool:
+    def pinnable(self: Self) -> bool:
         return Compute().could_be_gpu() and self.map_device == torch.device("cpu")
 
-    def __len__(
-        self: Self,
-    ) -> int:
+    def __len__(self: Self) -> int:
         return self.num_tokens
 
-    def __getitem__(
-        self: Self,
-        index: int,
-    ) -> Tuple[
+    def __getitem__(self: Self, index: int) -> Tuple[
         str,
         str,
         torch.Tensor,
@@ -126,8 +116,7 @@ class MyDataset(torch.utils.data.Dataset):
         )
 
     def load_from_meta(
-        self: Self,
-        filepath: str,
+        self: Self, filepath: str
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         wav_mono: torch.Tensor
         spmel: torch.Tensor

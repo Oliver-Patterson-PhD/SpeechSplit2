@@ -2,8 +2,7 @@ from typing import Self
 
 import torch
 
-from data.phonetics import Word, load_words
-from util.file import basename, newpath, path, walkdirs, walkfiles
+from util.file import basename, newpath, path
 from util.math import find_peaks
 from util.plot import plot_things
 
@@ -14,7 +13,6 @@ class SyllableEstimation(Experiment):
     fold_params: dict
     kernel_overlap: float = 0.2
     kernel_time: float = 0.02
-    words: dict[str, Word]
     dims_log: str = "TRACE"
 
     def run(self: Self) -> None:
@@ -26,37 +24,19 @@ class SyllableEstimation(Experiment):
             padding=int(self.kernel_size / 2),
             stride=self.kernel_hop,
         )
-        speakers = set(
-            speaker
-            for speaker in walkdirs(self.config.paths.raw_wavs)
-            if speaker in self.dataset.speakers()
-        )
-        if self.dataset.is_uaspeech():
-            speakers = {"M16"}
-            self.words = load_words(
-                path(
-                    self.config.paths.raw_data,
-                    "UASpeech",
-                    "mlf",
-                    "M16",
-                    "M16_aligned_phones.mlf",
-                )
-            )
-        else:
-            raise NotImplementedError(
-                f"phoneme reading for {self.dataset.dataset_type()} not implemented yet"
-            )
+        speakers = self.dataset.speakers()
+        speakers = self.dataset.phonetic_labelled_speakers()
         self.logger.info(f"Found {len(speakers)} speakers")
         [
-            self.run_estimation(speaker, basename(fname))
-            for speaker in sorted(speakers)
-            for fname in sorted(walkfiles(path(self.config.paths.raw_wavs, speaker)))
+            self.run_estimation(speaker, fname)
+            for speaker in self.logger.progress_bar(speakers, desc="speakers")
+            for fname in sorted(self.dataset.raw_samples(speaker))
         ]
         return
 
-    def run_estimation(self: Self, speaker: str, sample: str) -> None:
-        self.logger.debug(f"Estimating: {sample}")
-        wav = self.load_audio(speaker, sample)
+    def run_estimation(self: Self, speaker: str, fname: str) -> None:
+        fullpath = self.dataset.get_fullpath(speaker, basename(fname))
+        wav = self.load_audio(speaker, fname)
         spmel = self.spectrum(wav)
         intensity = self.intensity(wav)
         intensity_peaks = self.peaks(intensity)
@@ -70,28 +50,30 @@ class SyllableEstimation(Experiment):
         ]
         try:
             plot_things(
-                plot_out=newpath(self.experiment_dir, str(self.dataset.dataset_type())),
-                sample=sample,
+                plot_out=newpath(
+                    self.experiment_dir,
+                    str(self.dataset.dataset_type()),
+                    self.dataset.get_spkdir(speaker),
+                ),
+                sample=basename(fullpath),
                 things=plot_items,
-                word=self.words[self.dataset.utterance(sample)],
+                word=self.dataset.get_utterance(fullpath),
                 sample_time=(wav.size(dim=-1) / self.config.audio.sample_rate),
             )
         except RuntimeError:
             return
 
     def intensity(self: Self, audio: torch.Tensor) -> torch.Tensor:
-        intensity = torch.nn.functional.avg_pool1d(
-            input=audio.abs(), **self.fold_params
-        )
+        intensity = torch.nn.functional.avg_pool1d(audio.abs(), **self.fold_params)
         norm_intensity = intensity / intensity.max()
         self.logger.trace_tensor(norm_intensity, self.dims_log)
         return norm_intensity
 
-    def load_audio(self: Self, speaker: str, sample: str) -> torch.Tensor:
-        fullpath = path(self.config.paths.raw_wavs, speaker, f"{sample}.wav")
+    def load_audio(self: Self, speaker: str, fname: str) -> torch.Tensor:
+        subpath = self.dataset.get_wavfile(speaker, basename(fname))
+        fullpath = path(self.config.paths.raw_wavs, subpath)
         wav = self.audproc.full_load_parts(fullpath, True)[-1]
-        if wav.dim() == 1:
-            wav.unsqueeze_(0)
+        wav = wav.unsqueeze(0) if wav.dim() == 1 else wav
         self.logger.trace_tensor(wav, self.dims_log)
         return wav
 
@@ -106,7 +88,7 @@ class SyllableEstimation(Experiment):
         return intensity_peaks
 
     def pitch_contour(self: Self, wav: torch.Tensor, speaker: str) -> torch.Tensor:
-        lo, hi = self.audproc.get_f0_lohi(speaker)
+        lo, hi = self.audproc.get_f0_lohi(self.dataset.sex(speaker))
         self.logger.trace_var(lo, self.dims_log)
         self.logger.trace_var(hi, self.dims_log)
         pitch_contour = self.audproc.extract_f0(
