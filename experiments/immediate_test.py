@@ -1,5 +1,6 @@
 from typing import Any, Self
 
+import matplotlib
 import torch
 import torchaudio
 
@@ -8,20 +9,21 @@ from data.utils import AudioProcs
 from util import Config, Logger
 from util.file import (basename, exists, newpath, path, rm_rf, strip_path,
                        walkdirs, walkfiles)
-from util.plot import plot_things
+from util.tensor import Tensor
 
 
 class Immediate:
-    run: bool = False
+    run: bool = True
     config: Config
     clean_data_before_run: bool = False
-    exit_after: bool = False
+    exit_after: bool = True
     batch_test: bool = False
     batch_graph: bool = False
     single_test: bool = False
     make_clean: bool = False
     graph_clean: bool = True
     clean_path: str
+    fs: int
 
     def __init__(self: Self, config: Config) -> None:
         self.config = config
@@ -40,6 +42,7 @@ class Immediate:
         self.out_path = self.config.paths.features
         self.max_len_pad = self.config.audio.max_len_pad
         self.hop_length = self.config.audio.hop_len
+        self.fs = self.config.audio.sample_rate
         self.proc = AudioProcs(config=self.config)
         self.parser = DatasetParser(config=self.config)
         self.logger.debug(f"In  Path: {self.in_path}")
@@ -47,6 +50,7 @@ class Immediate:
         speakers = set(
             spk for spk in walkdirs(self.in_path) if spk in self.parser.speakers()
         )
+        speakers = set(("CM08",))
         self.logger.info(f"Found {len(speakers)} speakers")
         for spk_idx, spk_dir in enumerate(speakers):
             self.logger.info(
@@ -122,7 +126,7 @@ class Immediate:
                     sorted(
                         path(self.in_path, spk_dir, fname)
                         for fname in walkfiles(path(self.in_path, spk_dir))
-                    )
+                    )[:10]
                 )
             ]
         except Exception as e:
@@ -146,15 +150,59 @@ class Immediate:
             sample_rate=16000,
         )
 
-    def debug_audio(
-        self, audio: torch.Tensor, name: str
-    ) -> list[tuple[torch.Tensor, str]]:
+    def debug_audio(self, audio: Tensor, name: str) -> tuple[tuple[Tensor, str], ...]:
         audio = audio.squeeze()
         spect = self.proc.get_spmel(audio)[0].squeeze().mT
-        return [
+        return (
             (audio, f"{name} Audio"),
             (spect, f"{name} Spectrum"),
-        ]
+        )
+
+    def plot_waveform(
+        self, ax: matplotlib.axes.Axes, item: Tensor, name: str, n_samples: int
+    ) -> matplotlib.axes.Axes:
+        item[item == 0.0] = float("nan")
+        ax.plot(
+            [i / self.fs for i in range(item.size(-1))],
+            item.cpu().numpy(),
+        )
+        ax.set_xlim(0, item.size(dim=-1) / self.fs)
+        ax.set_xlabel("Time (Seconds)")
+        ax.set_ylabel("Amplitude (A.U.)")
+        ax.set_title(name, loc="left", pad=16)
+        return ax
+
+    def plot_melspec(
+        self, ax: matplotlib.axes.Axes, item: Tensor, name: str, n_samples: int
+    ) -> matplotlib.axes.Axes:
+        ysize = item.size(dim=-2)
+        ax.imshow(
+            item.cpu().numpy(),
+            interpolation="none",
+            aspect="auto",
+            origin="lower",
+            extent=(
+                0,
+                n_samples / self.fs,
+                self.proc.melbin_to_hz(0),
+                self.proc.melbin_to_hz(ysize),
+            ),
+        )
+        ax.set_yscale("log", base=2)
+        ax.set_xlabel("Time (Seconds)")
+        ax.set_ylabel("Frequency (Hz)")
+        ax.set_title(name, loc="left", pad=16)
+        return ax
+
+    def make_plot(
+        self, ax: matplotlib.axes.Axes, item: Tensor, name: str, n_samples: int
+    ) -> matplotlib.axes.Axes:
+        if item.dim() == 1:
+            ax = self.plot_waveform(ax=ax, item=item, name=name, n_samples=n_samples)
+        elif item.dim() == 2:
+            self.plot_melspec(ax=ax, item=item, name=name, n_samples=n_samples)
+        else:
+            raise RuntimeError(f"Invalid Tensor with shape: {item.size()}")
 
     def graph_cleaned_audio(self: Self, out_dir: str, bad_dir: str, fname: str) -> None:
         spk_dir = fname.split("/")[-2]
@@ -170,13 +218,33 @@ class Immediate:
                 path(self.config.paths.cleanwavs, self.parser.speaker(fname), fname)
             ):
                 self.logger.warn("Failure is in clean data")
-        plot_items = [
-            *self.debug_audio(raw_wav, "Raw"),
-            *self.debug_audio(nonoise, "Noisereduced"),
-            *self.debug_audio(nopop, "Pop-Free"),
-            *self.debug_audio(cln_wav, "Clean"),
+        plot_items: list[tuple[tuple[Tensor, str], ...]] = [
+            self.debug_audio(raw_wav, "Raw"),
+            self.debug_audio(nonoise, "Noisereduced"),
+            self.debug_audio(nopop, "Pop-Free"),
+            self.debug_audio(cln_wav, "Clean"),
         ]
-        plot_things(out_dir if failure is None else bad_dir, sfname, plot_items)
+        fig = matplotlib.pyplot.figure()
+        fig.set_size_inches(24, 12)
+        fig.set_dpi(300)
+        fig.suptitle(f"Sample: {sfname}")
+        n_rows = 4
+        n_cols = 2
+        [
+            self.make_plot(
+                ax=matplotlib.pyplot.subplot(
+                    n_rows, n_cols, (n_cols * row_idx) + col_idx + 1
+                ),
+                item=item,
+                name=name,
+                n_samples=len(row_item[0][0]),
+            )
+            for row_idx, row_item in enumerate(plot_items)
+            for col_idx, (item, name) in enumerate(row_item)
+        ]
+        fig.tight_layout()
+        fig.savefig(path(out_dir if failure is None else bad_dir, f"{sfname}.png"))
+        matplotlib.pyplot.close(fig=fig)
 
     def process_file(self: Self, fname: str) -> None:
         spk_dir: str = fname.split("/")[-2]
@@ -217,7 +285,7 @@ class Immediate:
         )
 
 
-def autocorrelation(signal: torch.Tensor) -> torch.Tensor:
+def autocorrelation(signal: Tensor) -> Tensor:
     n = len(signal)
     signal_padded = torch.nn.functional.pad(signal, (0, n - 1))
     signal_start = torch.nn.functional.pad(signal, (n - 1, 0))
@@ -227,7 +295,7 @@ def autocorrelation(signal: torch.Tensor) -> torch.Tensor:
     return correlation[:n]
 
 
-def iter_autocorrelation(signal: torch.Tensor) -> torch.Tensor:
+def iter_autocorrelation(signal: Tensor) -> Tensor:
     n = len(signal)
     correlation = torch.zeros(n, device=signal.device)
     for lag in range(n):

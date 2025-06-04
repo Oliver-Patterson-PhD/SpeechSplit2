@@ -14,6 +14,7 @@ def _plot_single(
     sample_end: int | None,
     sample_div: int,
     line: bool,
+    annotate: bool,
 ) -> matplotlib.axes.Axes:
     plotargs = dict(label=name) if line else dict()
     ax.plot(
@@ -25,8 +26,9 @@ def _plot_single(
         item.cpu().numpy(),
         **plotargs,
     )
-    ax.set_xlabel("Time (Seconds)" if sample_time is not None else "Samples")
     ax.set_xlim(sample_start or 0, sample_time or sample_end or item.size(dim=-1))
+    if annotate:
+        ax.set_xlabel("Time (Seconds)" if sample_time is not None else "Samples")
     if not line:
         ax.set_title(name, loc="left", pad=16)
     return ax
@@ -41,6 +43,7 @@ def _plot_multi(
     sample_end: int | None,
     sample_div: int,
     line: bool,
+    annotate: bool,
 ) -> matplotlib.axes.Axes:
     for i_item, i_name in zip(item, name):
         ax = _plot_single(
@@ -52,8 +55,9 @@ def _plot_multi(
             sample_end=sample_end,
             sample_div=sample_div,
             line=True,
+            annotate=annotate,
         )
-    ax.legend()
+    ax.legend(loc="upper left", bbox_to_anchor=(0.8, 1.3))
     return ax
 
 
@@ -100,6 +104,7 @@ def _make_plot(
             sample_end=sample_end,
             sample_div=sample_div,
             line=True,
+            annotate=annotate,
         )
     elif isinstance(name, str):
         if item.dim() == 1:
@@ -112,6 +117,7 @@ def _make_plot(
                 sample_end=sample_end,
                 sample_div=sample_div,
                 line=False,
+                annotate=annotate,
             )
         elif item.dim() == 2:
             is_image = True
@@ -139,7 +145,7 @@ def _make_plot(
                 start_point = phon.start / div
             else:
                 raise RuntimeError(f"Invalid Tensor ({item.size()}) with str ({name})")
-            if annotate:
+            if not isinstance(name, tuple):
                 ax.annotate(
                     text=phon.phon,
                     xy=(half_point, ax.get_ylim()[1]),
@@ -149,7 +155,9 @@ def _make_plot(
                     verticalalignment="baseline",
                     color=label_colour,
                 )
-            ax.axvline(start_point, color=label_colour, alpha=0.4 if is_image else 0.1)
+                ax.axvline(
+                    start_point, color=label_colour, alpha=0.4 if is_image else 0.1
+                )
 
 
 def plot_things(
@@ -195,9 +203,68 @@ def plot_things(
             sample_end=sample_end,
             label_colour=label_colour,
             word=uttr,
-            annotate=((fig.get_figheight() > (len(things) * 3)) or i == 0),
+            annotate=(i == len(things)),
         )
         for i, ((item, name), uttr) in enumerate(zip(things, uttr_list))
+    ]
+    fig.savefig(path(plot_out, f"{sample}.{ftype}"))
+    matplotlib.pyplot.close(fig=fig)
+
+
+def make_idx(n_rows: int, n_cols: int, row_idx: int, col_idx: int) -> int:
+    return (n_cols * row_idx) + col_idx + 1
+
+
+def plot_multicol_things(
+    plot_out: str,
+    sample: str,
+    things: list[tuple[tuple[Tensor, str | tuple[str, ...]], ...]],
+    utterances: list[Utterance] | Utterance | None = None,
+    label_colour: str = "k",
+    spect_cmap: str = "binary",
+    sample_time: int | None = None,
+    sample_start: int | None = None,
+    sample_end: int | None = None,
+    ftype: str = "pdf",
+) -> None:
+    fig = matplotlib.pyplot.figure()
+    match ftype:
+        case "pdf":
+            fig.set_size_inches(15.44, 27.45)
+        case "png":
+            fig.set_size_inches(12, 12)
+            fig.set_dpi(300)
+    uttr_list: list[Utterance | None]
+    if utterances is None:
+        fig.suptitle(f"Sample: {sample}")
+        uttr_list = [None for _ in things]
+    elif isinstance(utterances, list):
+        fig.suptitle(f"Sample: {sample} ({utterances[0].word})")
+        uttr_list = [uttr for uttr in utterances]
+        assert len(uttr_list) == len(things)
+    elif isinstance(utterances, Utterance):
+        fig.suptitle(f"Sample: {sample} ({utterances.word})")
+        uttr_list = [utterances for _ in things]
+    else:
+        raise RuntimeError(f"invalid type for utterances: {type(utterances)}")
+    n_rows = len(things)
+    n_cols = len(things[0])
+    [
+        _make_plot(
+            ax=matplotlib.pyplot.subplot(
+                n_rows, n_cols, make_idx(n_rows, n_cols, row_idx, col_idx)
+            ),
+            item=item,
+            name=name,
+            sample_time=sample_time,
+            sample_start=sample_start,
+            sample_end=sample_end,
+            label_colour=label_colour,
+            word=None,
+            annotate=(row_idx == len(things)),
+        )
+        for row_idx, row_item in enumerate(things)
+        for col_idx, (item, name) in enumerate(row_item)
     ]
     fig.savefig(path(plot_out, f"{sample}.{ftype}"))
     matplotlib.pyplot.close(fig=fig)

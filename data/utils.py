@@ -2,7 +2,7 @@ __all__ = [
     "AudioProcs",
 ]
 
-from math import floor
+from math import floor, log10
 
 import pyworld
 import torch
@@ -14,6 +14,14 @@ from util import Compute, Config
 from util.tensor import Tensor, TensorQuad, TensorTriple
 
 from .dataset import DatasetParser
+
+
+def hz_to_mel[T: (float, Tensor)](freq: T) -> T:
+    return 2595.0 * log10(1.0 + (freq / 700.0))
+
+
+def mel_to_hz[T: (float, Tensor)](mel_idx: T) -> T:
+    return 700.0 * (10.0 ** (mel_idx / 2595.0) - 1.0)
 
 
 class AudioProcs:
@@ -47,6 +55,13 @@ class AudioProcs:
             window_fn=torch.hann_window,
             power=1,
         )
+        self.__mel_map = mel_to_hz(
+            torch.linspace(
+                hz_to_mel(self.__freq_min),
+                hz_to_mel(self.__freq_max),
+                self.__dim_freq + 2,
+            )
+        )
         self.__melbasis = torchaudio.transforms.MelScale(
             n_stft=self.__n_fft // 2 + 1,
             n_mels=self.__dim_freq,
@@ -67,6 +82,15 @@ class AudioProcs:
             driver="gels",
         )
         return
+
+    def melbin_to_hz(self, bin: int) -> float:
+        return self.__mel_map[bin]
+
+    def hz_to_melbin(self, hz: float) -> int:
+        for i, f in enumerate(self.__mel_map):
+            if hz <= f:
+                return i - 1
+        raise ValueError
 
     def stft(self, wav: Tensor) -> Tensor:
         return torch.stft(
