@@ -4,7 +4,7 @@ raw_data = "/mnt/datasets/raw"
 
 [options]
 bottleneck = "large"
-experiment = "transcription_loss"
+experiment = "trainswitch"
 audio = "speechsplit2"
 trace = false
 

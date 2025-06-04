@@ -83,6 +83,9 @@ class AudioProcs:
         )
         return
 
+    def melmap(self) -> Tensor:
+        return self.__mel_map
+
     def melbin_to_hz(self, bin: int) -> float:
         return self.__mel_map[bin]
 

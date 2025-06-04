@@ -1,6 +1,7 @@
-from typing import Any, Self
+from typing import Any
 
 import matplotlib
+import matplotlib.ticker as ticker
 import torch
 import torchaudio
 
@@ -25,16 +26,16 @@ class Immediate:
     clean_path: str
     fs: int
 
-    def __init__(self: Self, config: Config) -> None:
+    def __init__(self, config: Config) -> None:
         self.config = config
         self.experiment_dir = newpath(config.paths.artefacts, "immediate")
         self.logger = Logger()
         return
 
-    def check_single(self: Self) -> None:
+    def check_single(self) -> None:
         return
 
-    def test(self: Self) -> None:
+    def test(self) -> None:
         self.check_single()
         if not self.run:
             return
@@ -64,7 +65,7 @@ class Immediate:
                 self.run_graph_clean(spk_dir)
         self.logger.info("Immediate Test Complete")
 
-    def subdir(self: Self, subdir: str) -> str:
+    def subdir(self, subdir: str) -> str:
         subpath = path(self.experiment_dir, subdir)
         rm_rf(subpath)
         return newpath(subpath)
@@ -133,7 +134,7 @@ class Immediate:
             self.logger.error(f"Failure in graph_clean: {e.__str__()}")
             raise e
 
-    def save_cleaned_audio(self: Self, fname: str) -> None:
+    def save_cleaned_audio(self, fname: str) -> None:
         spk_dir = fname.split("/")[-2]
         fullpath = path(self.in_path, spk_dir, fname)
         sfname = basename(fname)
@@ -169,29 +170,29 @@ class Immediate:
         ax.set_xlim(0, item.size(dim=-1) / self.fs)
         ax.set_xlabel("Time (Seconds)")
         ax.set_ylabel("Amplitude (A.U.)")
-        ax.set_title(name, loc="left", pad=16)
+        ax.set_title(name, loc="left")
         return ax
 
     def plot_melspec(
         self, ax: matplotlib.axes.Axes, item: Tensor, name: str, n_samples: int
     ) -> matplotlib.axes.Axes:
-        ysize = item.size(dim=-2)
-        ax.imshow(
+        endtime = n_samples / self.fs
+        xvals = torch.linspace(0, endtime, item.size(dim=-1) + 1)
+        yvals = self.proc.melmap().tolist()[1:]
+        ax.pcolormesh(
+            xvals,
+            yvals,
             item.cpu().numpy(),
-            interpolation="none",
-            aspect="auto",
-            origin="lower",
-            extent=(
-                0,
-                n_samples / self.fs,
-                self.proc.melbin_to_hz(0),
-                self.proc.melbin_to_hz(ysize),
-            ),
+            shading="flat",
         )
+        ax.set_xlim(0, endtime)
+        ax.set_ylim(self.config.audio.freq_min, self.fs / 2)
         ax.set_yscale("log", base=2)
+        ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+        ax.yaxis.set_major_formatter(ticker.ScalarFormatter())
         ax.set_xlabel("Time (Seconds)")
         ax.set_ylabel("Frequency (Hz)")
-        ax.set_title(name, loc="left", pad=16)
+        ax.set_title(name, loc="left")
         return ax
 
     def make_plot(
@@ -204,7 +205,7 @@ class Immediate:
         else:
             raise RuntimeError(f"Invalid Tensor with shape: {item.size()}")
 
-    def graph_cleaned_audio(self: Self, out_dir: str, bad_dir: str, fname: str) -> None:
+    def graph_cleaned_audio(self, out_dir: str, bad_dir: str, fname: str) -> None:
         spk_dir = fname.split("/")[-2]
         sfname = basename(fname)
         rawpath = path(self.in_path, spk_dir, fname)
@@ -246,7 +247,7 @@ class Immediate:
         fig.savefig(path(out_dir if failure is None else bad_dir, f"{sfname}.png"))
         matplotlib.pyplot.close(fig=fig)
 
-    def process_file(self: Self, fname: str) -> None:
+    def process_file(self, fname: str) -> None:
         spk_dir: str = fname.split("/")[-2]
         wav_prc = torch.tensor([])
         wav_mono = torch.tensor([])
