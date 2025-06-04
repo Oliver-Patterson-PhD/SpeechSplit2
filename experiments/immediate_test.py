@@ -51,7 +51,6 @@ class Immediate:
         speakers = set(
             spk for spk in walkdirs(self.in_path) if spk in self.parser.speakers()
         )
-        speakers = set(("CM08",))
         self.logger.info(f"Found {len(speakers)} speakers")
         for spk_idx, spk_dir in enumerate(speakers):
             self.logger.info(
@@ -127,7 +126,7 @@ class Immediate:
                     sorted(
                         path(self.in_path, spk_dir, fname)
                         for fname in walkfiles(path(self.in_path, spk_dir))
-                    )[:10]
+                    )
                 )
             ]
         except Exception as e:
