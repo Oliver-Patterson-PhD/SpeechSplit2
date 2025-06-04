@@ -225,9 +225,10 @@ class Immediate:
             self.debug_audio(cln_wav, "Clean"),
         ]
         fig = matplotlib.pyplot.figure()
+        word = self.parser.get_real_text(sfname)
         fig.set_size_inches(24, 12)
         fig.set_dpi(300)
-        fig.suptitle(f"Sample: {sfname}")
+        fig.suptitle(f"Sample: {sfname} ({word})")
         n_rows = 4
         n_cols = 2
         [
