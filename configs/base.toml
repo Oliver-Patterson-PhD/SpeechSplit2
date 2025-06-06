@@ -4,7 +4,7 @@ raw_data = "/mnt/datasets/raw"
 
 [options]
 bottleneck = "large"
-experiment = "trainswitch"
+experiment = "syllable_estimation"
 audio = "speechsplit2"
 trace = false
 

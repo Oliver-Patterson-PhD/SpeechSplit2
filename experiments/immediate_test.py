@@ -14,10 +14,10 @@ from util.tensor import Tensor
 
 
 class Immediate:
-    run: bool = True
+    run: bool = False
     config: Config
     clean_data_before_run: bool = False
-    exit_after: bool = True
+    exit_after: bool = False
     batch_test: bool = False
     batch_graph: bool = False
     single_test: bool = False

@@ -1,5 +1,6 @@
 from itertools import product
 
+import matplotlib
 import torch
 
 from util.file import basename, newpath, path
@@ -69,44 +70,123 @@ class SyllableEstimation(Experiment):
                 unvoiced_peaks.squeeze(),
             )
         )
-        label = (
-            f"Intensity {speaker}",
-            f"Pitch Contour {speaker}",
-            f"Voiced Peaks {speaker}",
-            f"Unvoiced Peaks {speaker}",
-        )
+        label = ("Intensity", "Pitch Contour", "Voiced Peaks", "Unvoiced Peaks")
         return plot, label
 
-    def run_loss(self, spk1: str, spk2: str, uttr: str) -> None:
-        self.logger.debug(f"Running loss with {uttr} between {spk1} and {spk2}")
-        wav1, wav2 = pad_to(self.load_audio(spk1, uttr), self.load_audio(spk2, uttr))
-        plot_items: list[tuple[Tensor, str | tuple[str, ...]]] = [
-            (wav1.squeeze(), f"waveform {spk1}"),
-            self.get_feats(wav1, spk1),
-            (wav2.squeeze(), f"waveform {spk2}"),
-            self.get_feats(wav2, spk2),
-        ]
+    def plot_features(
+        self,
+        ax: matplotlib.axes.Axes,
+        item: Tensor,
+        name: tuple[str, ...],
+        sample_time: int,
+        sample_div: int,
+    ) -> matplotlib.axes.Axes:
+        for i_item, i_name in zip(item, name):
+            ax.plot(
+                [i / sample_div for i in range(i_item.size(-1))],
+                i_item.cpu().numpy(),
+                label=i_name,
+            )
+        ax.set_xlim(0, sample_time)
+        ax.set_ylim(0.0, 1.0)
+        ax.set_ylabel("Magnitude (A.U.)")
+        ax.legend(loc="lower left", bbox_to_anchor=(0.95, 0.1))
+        return ax
 
+    def plot_wavform(
+        self,
+        ax: matplotlib.axes.Axes,
+        item: Tensor,
+        name: str,
+        sample_time: int,
+        sample_div: int,
+    ) -> matplotlib.axes.Axes:
+        item[item == 0.0] = float("nan")
+        ax.plot(
+            [i / sample_div for i in range(item.size(-1))],
+            item.cpu().numpy(),
+        )
+        ax.set_xlim(0, sample_time)
+        ax.set_ylim(-1.0, 1.0)
+        ax.set_ylabel("Magnitude (A.U.)")
+        return ax
+
+    def run_loss(self, spk1: str, spk2: str, uttr: str) -> None:
+        assert self.parser.is_timit()
         try:
+            self.logger.debug(f"Running loss with {uttr} between {spk1} and {spk2}")
+            wav1, wav2 = pad_to(
+                self.load_audio(spk1, uttr), self.load_audio(spk2, uttr)
+            )
+            plot_items: list[tuple[Tensor, str | tuple[str, ...]]] = [
+                (wav1.squeeze(), "waveform"),
+                self.get_feats(wav1, spk1),
+                (wav2.squeeze(), "waveform"),
+                self.get_feats(wav2, spk2),
+            ]
             realtext1 = self.parser.get_utterance(self.parser.get_fullpath(spk1, uttr))
             realtext2 = self.parser.get_utterance(self.parser.get_fullpath(spk2, uttr))
-            uttrs = (
-                [realtext1, realtext1, realtext2, realtext2]
-                if self.parser.is_timit()
-                else None
+            uttrs = [realtext1, realtext1, realtext2, realtext2]
+            assert len(uttrs) == len(plot_items)
+            fig = matplotlib.pyplot.figure()
+            fig.set_size_inches(19, 15)
+            fig.set_dpi(300)
+            label_colour = "k"
+            sample = f"{uttr}-{spk1}-{spk2}"
+            sample_time = wav1.size(dim=-1) / self.config.audio.sample_rate
+            fig.suptitle(f"Sample: {sample} ({uttrs[0].word})")
+            subplots = fig.subplots(len(plot_items), 1)
+            for i, ((item, name), word, ax) in enumerate(
+                zip(plot_items, uttrs, subplots)
+            ):
+                sample_div = 1 if sample_time is None else item.size(-1) / sample_time
+                if isinstance(name, tuple):
+                    ax = self.plot_features(
+                        ax=ax,
+                        item=item,
+                        name=name,
+                        sample_time=sample_time,
+                        sample_div=sample_div,
+                    )
+                elif isinstance(name, str):
+                    if item.dim() == 1:
+                        ax = self.plot_wavform(
+                            ax=ax,
+                            item=item,
+                            name=name,
+                            sample_time=sample_time,
+                            sample_div=sample_div,
+                        )
+                for phon in word.phones:
+                    start_time = phon.start / self.config.audio.sample_rate
+                    half_time = (
+                        phon.start + ((phon.end - phon.start) / 2)
+                    ) / self.config.audio.sample_rate
+                    ax.annotate(
+                        text=phon.phon,
+                        xy=(half_time, ax.get_ylim()[1]),
+                        xytext=(0, 3),
+                        textcoords="offset points",
+                        horizontalalignment="center",
+                        verticalalignment="baseline",
+                        color=label_colour,
+                    )
+                    ax.axvline(start_time, color=label_colour, alpha=0.1)
+            subplots[-1].set_xlabel("Time (Seconds)")
+            subplots[0].set_title(spk1, loc="right")
+            subplots[2].set_title(spk2, loc="right")
+            fig.savefig(
+                path(
+                    newpath(
+                        self.experiment_dir,
+                        str(self.parser.dataset_type()),
+                        f"{spk1}-{spk2}",
+                    ),
+                    f"{sample}.png",
+                )
             )
-            plot_things(
-                plot_out=newpath(
-                    self.experiment_dir,
-                    str(self.parser.dataset_type()),
-                    f"{spk1}-{spk2}",
-                ),
-                sample=f"{uttr}-{spk1}-{spk2}",
-                things=plot_items,
-                utterances=uttrs,
-                sample_time=(wav1.size(dim=-1) / self.config.audio.sample_rate),
-                ftype="png",
-            )
+            fig.tight_layout()
+            matplotlib.pyplot.close(fig=fig)
         except RuntimeError as e:
             self.logger.warn(f"Failed to plot: {uttr}, {spk1}-{spk2}")
             raise e
