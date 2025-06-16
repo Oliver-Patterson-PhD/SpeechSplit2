@@ -349,10 +349,12 @@ class Config(metaclass=Singleton):
             self.paths.dataset_vctk = path(self.paths.proc_data, "VCTK-Corpus")
 
         if not hasattr(self.paths, "raw_uaspeech"):
-            self.paths.raw_uaspeech = path(self.paths.raw_data, "UASpeech", "audio", "original")
+            self.paths.raw_uaspeech = path(
+                self.paths.raw_data, "UASpeech", "audio", "original"
+            )
         if not hasattr(self.paths, "dataset_uaspeech"):
-            self.paths.dataset_uaspeech = (
-                path(self.paths.proc_data, "UASpeech", "audio", "original")
+            self.paths.dataset_uaspeech = path(
+                self.paths.proc_data, "UASpeech", "audio", "original"
             )
 
         if not hasattr(self.paths, "raw_smolspeech"):
