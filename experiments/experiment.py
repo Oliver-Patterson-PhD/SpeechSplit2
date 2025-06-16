@@ -6,6 +6,7 @@ import datetime
 import os
 import time
 from collections import OrderedDict
+from typing import Any
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -89,14 +90,14 @@ class Experiment(object):
         self.config = config
 
     def tb_add_scalar(self, name: str, value: float, step: int) -> None:
-        self.writer.add_scalar(
+        self.writer.add_scalar(  # type: ignore
             tag=f"{self.tb_prefix}/{name}",
             scalar_value=value,
             global_step=step,
         )
 
     def tb_add_melspec(self, name: str, tensor: torch.Tensor, step: int) -> None:
-        self.writer.add_image(
+        self.writer.add_image(  # type: ignore
             tag=f"{self.tb_prefix}/melspec/{name}",
             img_tensor=tensor,
             global_step=step,
@@ -124,7 +125,7 @@ class Experiment(object):
         try:
             self.model.load_state_dict(ckpt["model"])
         except RuntimeError:
-            new_state_dict = OrderedDict()
+            new_state_dict: OrderedDict[str, Any] = OrderedDict()
             for k, v in ckpt["model"].items():
                 new_state_dict[k[7:]] = v
             self.model.load_state_dict(new_state_dict)
@@ -161,7 +162,7 @@ class Experiment(object):
                 else:
                     self.logger.error("Failed to load optimizer", depth=2)
         except RuntimeError:
-            new_state_dict = OrderedDict()
+            new_state_dict: OrderedDict[str, Any] = OrderedDict()
             for k, v in ckpt["model"].items():
                 new_state_dict[k[7:]] = v
             self.model.load_state_dict(new_state_dict)
@@ -207,7 +208,7 @@ class Experiment(object):
             self.tb_add_melspec(name="proc", tensor=proc, step=step)
             self.writer.flush()
 
-    def load_data(self, **kwargs) -> None:
+    def load_data(self, **kwargs: bool) -> None:
         self.data_loader = get_loader(self.config, **kwargs)
 
     def save_tensor(self, tensor: torch.Tensor, fname: str) -> None:
@@ -310,14 +311,14 @@ class Experiment(object):
             len_crop,
         )
 
-    @torch.no_grad()
+    @torch.no_grad()  # type: ignore
     def check_data(self) -> None:
         for item in self.logger.progress_bar(
             self.data_loader, desc=f"Verifying {self.dataset_name}"
         ):
             (
                 fname,
-                spk_id_org,
+                _,  # spk_id_org
                 spmel_gt,
                 rhythm_input,
                 content_input,

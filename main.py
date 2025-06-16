@@ -4,9 +4,16 @@ def main() -> None:
     import torch
 
     from data import PreProcess
-    from experiments import (Immediate, Scratchpad, Swapper,
-                             SyllableEstimation, TestSamples, Train,
-                             TranscriptionLoss)
+    from experiments import (
+        Immediate,
+        Scratchpad,
+        Swapper,
+        SyllableEstimation,
+        TestSamples,
+        Train,
+        TranscriptionLoss,
+        DisVoiceTest,
+    )
     from util import Compute, Config, Logger, RunTests
 
     torch.backends.cudnn.benchmark = True
@@ -32,6 +39,10 @@ def main() -> None:
         if imm.exit_after:
             logger.info("Returning from Immediate test")
             return
+
+        if RunTests.DISVOICE in config.options.run_tests:
+            disvoice = DisVoiceTest(config)
+            disvoice.run()
 
         PreProcess(config)
 

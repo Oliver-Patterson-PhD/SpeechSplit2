@@ -12,7 +12,7 @@ from shutil import get_terminal_size
 from sys import _getframe
 from time import gmtime, strftime
 from types import FrameType
-from typing import Any, List, Optional, Self, TextIO, overload
+from typing import Any, List, Optional, Self, TextIO, overload, Iterable
 
 from torch import Tensor
 from tqdm import tqdm
@@ -96,7 +96,7 @@ class Logger(metaclass=Singleton):
         if self.__print_callgraph:
             frame: FrameType | None = inspect.currentframe()
             assert frame is not None
-            names = []
+            names: list[str] = []
             while True:
                 frame = frame.f_back
                 if frame is None:
@@ -283,17 +283,21 @@ class Logger(metaclass=Singleton):
         else:
             return False
 
-    def progress_bar(self: Self, *args, **kwargs):
+    def progress_bar[T](
+        self: Self, iter: Iterable[T], *args: Any, **kwargs: Any
+    ) -> Iterable[T]:
         self.__process_bar_running = True
-        for item in tqdm(*args, **kwargs):
+        for item in tqdm(iter, *args, **kwargs):
             yield item
         self.__process_bar_running = False
 
-    def manual_process_bar_start(self: Self, *args, **kwargs):
+    def manual_process_bar_start[T](
+        self: Self, iter: Iterable[T], *args: Any, **kwargs: Any
+    ) -> Iterable[T]:
         self.__process_bar_running = True
-        return tqdm(*args, **kwargs)
+        return tqdm(iter, *args, **kwargs)
 
-    def manual_process_bar_end(self: Self, pbar):
+    def manual_process_bar_end(self: Self, pbar: tqdm) -> None:  # type: ignore
         pbar.close()
         self.__process_bar_running = False
         return

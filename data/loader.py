@@ -12,16 +12,17 @@ from util.tensor import Tensor, TensorTriple
 from .dataset import DatasetParser
 from .utils import AudioProcs
 
+DataItem = tuple[
+    str,  # speaker
+    Tensor,  # spk_emb
+    TensorTriple,  # wav_mono, spmel, f0
+    str,  # filepath
+]
+DataLoadType = tuple[str, str, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]
 
-class MyDataset(torch.utils.data.Dataset):
+
+class MyDataset(torch.utils.data.Dataset[DataLoadType]):
     dataset_name: str
-    DataItem = tuple[
-        str,  # speaker
-        Tensor,  # spk_emb
-        TensorTriple,  # wav_mono, spmel, f0
-        str,  # filepath
-    ]
-    DataLoadType = tuple[str, str, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]
     dataset: list[DataItem]
     num_tokens: int
     sample_rate: int
@@ -145,17 +146,17 @@ class MyDataset(torch.utils.data.Dataset):
         return x
 
 
-def worker_init_fn(x):
-    return torch.random.manual_seed(
+def worker_init_fn(x: int) -> None:
+    return torch.random.manual_seed(  # type: ignore
         (torch.initial_seed()) % (2**32),
     )
 
 
 def get_loader(
     config: Config, sequential: bool = False, singleitem: bool = False
-) -> torch.utils.data.DataLoader:
-    dataset: torch.utils.data.Dataset
-    sampler: torch.utils.data.sampler.Sampler
+) -> torch.utils.data.DataLoader[DataLoadType]:
+    dataset: torch.utils.data.Dataset[DataLoadType]
+    sampler: torch.utils.data.sampler.Sampler  # type: ignore
     dataset = MyDataset(config)
     device = Compute().device()
     logger = Logger()

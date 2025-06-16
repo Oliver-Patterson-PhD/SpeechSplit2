@@ -4,7 +4,7 @@ raw_data = "/mnt/datasets/raw"
 
 [options]
 bottleneck = "large"
-experiment = "syllable_estimation"
+experiment = "disvoice"
 audio = "speechsplit2"
 trace = false
 

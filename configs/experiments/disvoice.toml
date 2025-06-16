@@ -1,0 +1,14 @@
+[options]
+experiment = "disvoice"
+run_tests = ["disvoice"]
+dataset_name = "uaspeech"
+train = false
+return_latents = false
+regenerate_data = false
+
+[dataloader]
+shuffle = true
+batch_size = 32
+num_workers = 24
+samplier = 32
+drop_and_pad = true

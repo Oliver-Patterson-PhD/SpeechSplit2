@@ -104,6 +104,7 @@ class RunTests(Flag):
     NOTHING = 0
     TRAIN = auto()
     SYLLABLE_ESTIMATION = auto()
+    DISVOICE = auto()
     TRANSCRIPTION_LOSS = auto()
     SAVE_LATENTS = auto()
     SWAP_LATENTS = auto()
