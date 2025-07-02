@@ -10,7 +10,7 @@ from util.file import exists, newpath, path, strip_ext
 from util.patterns import Singleton
 
 from .dataset import DatasetParser
-from .utils import AudioProcs
+from .audio_procs import AudioProcs
 
 
 class PreProcess(metaclass=Singleton):

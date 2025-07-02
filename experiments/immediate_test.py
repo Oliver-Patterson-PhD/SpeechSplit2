@@ -5,8 +5,7 @@ import matplotlib.ticker as ticker
 import torch
 import torchaudio
 
-from data.dataset import DatasetParser
-from data.utils import AudioProcs
+from data import AudioProcs, DatasetParser
 from util import Config, Logger
 from util.file import (basename, exists, newpath, path, rm_rf, strip_path,
                        walkdirs, walkfiles)
@@ -200,9 +199,10 @@ class Immediate:
         if item.dim() == 1:
             ax = self.plot_waveform(ax=ax, item=item, name=name, n_samples=n_samples)
         elif item.dim() == 2:
-            self.plot_melspec(ax=ax, item=item, name=name, n_samples=n_samples)
+            ax = self.plot_melspec(ax=ax, item=item, name=name, n_samples=n_samples)
         else:
             raise RuntimeError(f"Invalid Tensor with shape: {item.size()}")
+        return ax
 
     def graph_cleaned_audio(self, out_dir: str, bad_dir: str, fname: str) -> None:
         spk_dir = fname.split("/")[-2]

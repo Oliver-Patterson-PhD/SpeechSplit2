@@ -13,4 +13,4 @@ __all__ = [
 from .dataset import DatasetParser, DType, Phoneme, Utterance
 from .loader import MyDataset, get_loader
 from .preprocess import PreProcess, preprocess_data
-from .utils import AudioProcs
+from .audio_procs import AudioProcs

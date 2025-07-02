@@ -211,8 +211,8 @@ class Experiment(object):
     def load_data(self, **kwargs: bool) -> None:
         self.data_loader = get_loader(self.config, **kwargs)
 
-    def save_tensor(self, tensor: torch.Tensor, fname: str) -> None:
-        save_tensor(tensor, path(self.experiment_dir, fname))
+    def save_tensor(self, tensor: torch.Tensor, fname: str, save_raw: bool = False) -> None:
+        save_tensor(tensor, path(self.experiment_dir, fname), save_raw)
         return
 
     def prepare_input(

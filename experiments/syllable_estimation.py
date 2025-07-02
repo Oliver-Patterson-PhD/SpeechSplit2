@@ -78,8 +78,8 @@ class SyllableEstimation(Experiment):
         ax: matplotlib.axes.Axes,
         item: Tensor,
         name: tuple[str, ...],
-        sample_time: int,
-        sample_div: int,
+        sample_time: float,
+        sample_div: float,
     ) -> matplotlib.axes.Axes:
         for i_item, i_name in zip(item, name):
             ax.plot(
@@ -98,8 +98,8 @@ class SyllableEstimation(Experiment):
         ax: matplotlib.axes.Axes,
         item: Tensor,
         name: str,
-        sample_time: int,
-        sample_div: int,
+        sample_time: float,
+        sample_div: float,
     ) -> matplotlib.axes.Axes:
         item[item == 0.0] = float("nan")
         ax.plot(

@@ -61,7 +61,7 @@ class Logger(metaclass=Singleton):
     __level: LogLevel = LogLevel.DEBUG
     __file: Optional[TextIO] = None
     __flush: bool = False
-    __process_bar_running: bool = False
+    __pbar_running: bool = False
     __print_callgraph: bool = False
     __date_format: str = "%Y/%m/%d %H:%M:%S"
 
@@ -134,7 +134,7 @@ class Logger(metaclass=Singleton):
         level = self.__get_level(level)
         if self.__file is not None or level >= self.__level:
             if level >= self.__level:
-                if self.__process_bar_running:
+                if self.__pbar_running:
                     tqdm.write("\r" + (" " * get_terminal_size().columns), end="\r")
                 tqdm.write(fullmsg)
             if self.__file is not None:
@@ -290,20 +290,25 @@ class Logger(metaclass=Singleton):
     def progress_bar[T](
         self: Self, iter: Iterable[T], *args: Any, **kwargs: Any
     ) -> Iterable[T]:
-        self.__process_bar_running = True
+        self.__pbar_running = True
         for item in tqdm(iter, *args, **kwargs):
             yield item
-        self.__process_bar_running = False
+        self.__pbar_running = False
 
-    def manual_process_bar_start[T](
-        self: Self, iter: Iterable[T], *args: Any, **kwargs: Any
-    ) -> Iterable[T]:
-        self.__process_bar_running = True
-        return tqdm(iter, *args, **kwargs)
+    def manual_pbar_start(
+        self: Self, *args: Any, **kwargs: Any
+    ) -> None:
+        self.__pbar_running = True
+        self.__manual_pbar = tqdm(*args, **kwargs)
 
-    def manual_process_bar_end(self: Self, pbar: tqdm) -> None:  # type: ignore
-        pbar.close()
-        self.__process_bar_running = False
+    def manual_pbar_update(
+        self: Self, *args: Any, **kwargs: Any
+    ) -> None:
+        self.__manual_pbar.update
+
+    def manual_pbar_end(self: Self) -> None:
+        self.__manual_pbar.close
+        self.__pbar_running = False
         return
-        self.__process_bar_running = False
+        self.__pbar_running = False
         return

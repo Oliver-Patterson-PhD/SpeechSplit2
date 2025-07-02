@@ -451,8 +451,6 @@ class AudioProcs:
         return folded / out_norm
 
     ## Noise reduction using stationary spectral gating
-    # Explanation: [@sainburg_t_2021_computationalneuroethology]
-    # Source:
     def noisereduce(self, x: Tensor) -> Tensor:
         return self.__noisereducer(x)
 
@@ -506,6 +504,10 @@ def linspace(
         return torch.linspace(start, stop, num + 1, **kwargs)[:-1]
 
 
+## Pytorch implementation of Spectral Gating
+# Software citation: sainburg_t_2024_noisereduce
+# Explanation: sainburg_t_2021_computationalneuroethology
+# Source: https://github.com/timsainb/noisereduce/blob/master/noisereduce/torchgate/torchgate.py
 class TorchGate(torch.nn.Module):
     @torch.no_grad()
     def __init__(

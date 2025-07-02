@@ -9,14 +9,13 @@ def _plot_single(
     ax: matplotlib.axes.Axes,
     item: Tensor,
     name: str,
-    sample_time: int | None,
-    sample_start: int | None,
-    sample_end: int | None,
-    sample_div: int,
+    sample_time: float | None,
+    sample_start: float | None,
+    sample_end: float | None,
+    sample_div: float,
     line: bool,
     annotate: bool,
 ) -> matplotlib.axes.Axes:
-    plotargs = dict(label=name) if line else dict()
     ax.plot(
         (
             [i / sample_div for i in range(item.size(-1))]
@@ -24,8 +23,9 @@ def _plot_single(
             else list(range(item.size(-1)))
         ),
         item.cpu().numpy(),
-        **plotargs,
     )
+    if line:
+        ax.set_label(name)
     ax.set_xlim(sample_start or 0, sample_time or sample_end or item.size(dim=-1))
     if annotate:
         ax.set_xlabel("Time (Seconds)" if sample_time is not None else "Samples")
@@ -38,10 +38,10 @@ def _plot_multi(
     ax: matplotlib.axes.Axes,
     item: Tensor,
     name: tuple[str, ...],
-    sample_time: int | None,
-    sample_start: int | None,
-    sample_end: int | None,
-    sample_div: int,
+    sample_time: float | None,
+    sample_start: float | None,
+    sample_end: float | None,
+    sample_div: float,
     line: bool,
     annotate: bool,
 ) -> matplotlib.axes.Axes:
@@ -85,14 +85,14 @@ def _make_plot(
     ax: matplotlib.axes.Axes,
     item: Tensor,
     name: str | tuple[str, ...],
-    sample_time: int | None,
-    sample_start: int | None,
-    sample_end: int | None,
+    sample_time: float | None,
+    sample_start: float | None,
+    sample_end: float | None,
     label_colour: str,
     word: Utterance | None,
     annotate: bool,
 ) -> matplotlib.axes.Axes:
-    sample_div = 1 if sample_time is None else item.size(-1) / sample_time
+    sample_div = 1 if sample_time is None else item.size(-1) // sample_time
     is_image = False
     if isinstance(name, tuple):
         ax = _plot_multi(
@@ -139,7 +139,6 @@ def _make_plot(
                 ) / sample_div
                 start_point = (phon.start / sample_div) / div
             elif item.dim() == 2:
-                size_item = item[0].masked_select(item[0] != 0.0).size(dim=-1)
                 div = word.end / (sample_time or 1)
                 half_point = (phon.start + ((phon.end - phon.start) / 2)) / div
                 start_point = phon.start / div
@@ -158,6 +157,7 @@ def _make_plot(
                 ax.axvline(
                     start_point, color=label_colour, alpha=0.4 if is_image else 0.1
                 )
+    return ax
 
 
 def plot_things(
@@ -167,9 +167,9 @@ def plot_things(
     utterances: list[Utterance] | Utterance | None = None,
     label_colour: str = "k",
     spect_cmap: str = "binary",
-    sample_time: int | None = None,
-    sample_start: int | None = None,
-    sample_end: int | None = None,
+    sample_time: float | None = None,
+    sample_start: float | None = None,
+    sample_end: float | None = None,
     ftype: str = "pdf",
 ) -> None:
     fig = matplotlib.pyplot.figure()
@@ -222,9 +222,9 @@ def plot_multicol_things(
     utterances: list[Utterance] | Utterance | None = None,
     label_colour: str = "k",
     spect_cmap: str = "binary",
-    sample_time: int | None = None,
-    sample_start: int | None = None,
-    sample_end: int | None = None,
+    sample_time: float | None = None,
+    sample_start: float | None = None,
+    sample_end: float | None = None,
     ftype: str = "pdf",
 ) -> None:
     fig = matplotlib.pyplot.figure()

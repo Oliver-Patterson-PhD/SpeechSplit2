@@ -21,7 +21,6 @@ class TranscriptionLoss(Experiment):
     def run(self) -> None:
         self.transcriber = Transcriber(
             device=self.compute.device(),
-            model_name=self.config.options.whisper_type,
             config=self.config,
         )
         self.logger.debug("Running Transcription Loss")
@@ -53,11 +52,7 @@ class TranscriptionLoss(Experiment):
         try:
             realtext1 = self.parser.get_utterance(self.parser.get_fullpath(spk1, uttr))
             realtext2 = self.parser.get_utterance(self.parser.get_fullpath(spk2, uttr))
-            uttrs = (
-                [realtext1, realtext2]
-                if self.parser.is_timit()
-                else None
-            )
+            uttrs = [realtext1, realtext2] if self.parser.is_timit() else None
             plot_things(
                 plot_out=newpath(
                     self.experiment_dir,
@@ -67,7 +62,7 @@ class TranscriptionLoss(Experiment):
                 sample=f"{uttr}-{spk1}-{spk2}",
                 things=plot_items,
                 utterances=uttrs,
-                sample_time=(wav1.size(dim=-1) / self.config.audio.sample_rate),
+                sample_time=(wav1.size(dim=-1) // self.config.audio.sample_rate),
                 ftype="png",
             )
         except RuntimeError as e:

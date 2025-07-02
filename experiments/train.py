@@ -52,7 +52,7 @@ class Train(Experiment):
             self.check_data()
 
         i = start_iters
-        pbar = self.logger.manual_process_bar_start(
+        self.logger.manual_pbar_start(
             total=self.config.options.num_iters,
             initial=i,
         )
@@ -138,7 +138,7 @@ class Train(Experiment):
             # =============================================================== #
             #                   3. Logging and saving checkpoints             #
             # =============================================================== #
-            pbar.update()
+            self.logger.manual_pbar_update()
             # Save model checkpoints
             if i % self.config.options.ckpt_save_step == 0:
                 self.save_checkpoint(i)
@@ -179,6 +179,6 @@ class Train(Experiment):
                     self.logger.error(f"filename: {fname}")
                     self.logger.error(f"tensor: {spmel_gt.any()}")
                     self.writer.flush()
-                    self.logger.manual_process_bar_end(pbar)
+                    self.logger.manual_pbar_end()
                     raise NanError(f"{fname}")
-        self.logger.manual_process_bar_end(pbar)
+        self.logger.manual_pbar_end()

@@ -24,8 +24,10 @@ TensorQuad = tuple[Tensor, Tensor, Tensor, Tensor]
 
 
 @torch.no_grad()
-def save_tensor(tensor: Tensor, save_path: str) -> None:
-    image = _try_resize(tensor.abs())
+def save_tensor(tensor: Tensor, save_path: str, save_raw: bool = False) -> None:
+    image = None
+    if not save_raw:
+        image = _try_resize(tensor.abs())
     if image is not None:
         im_min = image.min()
         im_max = image.max()
@@ -123,8 +125,8 @@ def plot_batch(batch: Tensor, base: str) -> Figure:
     return fig
 
 
-def pad_like(x: Tensor, ref: Tensor) -> TensorPair:
-    assert all(x.shape <= ref.shape)
+def pad_like(x: Tensor, ref: Tensor) -> Tensor:
+    assert x.shape <= ref.shape
     return torch.nn.functional.pad(x, (0, ref.size(dim=-1) - x.size(dim=-1)))
 
 
