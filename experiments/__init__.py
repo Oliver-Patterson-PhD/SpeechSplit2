@@ -15,7 +15,7 @@ from .immediate_test import Immediate
 from .scratchpad import Scratchpad
 from .swap_only import Swapper
 from .syllable_estimation import SyllableEstimation
-from .disvoice import DisVoiceTest
+from .disvoice_test import DisVoiceTest
 from .test_samples import TestSamples
 from .train import Train
 from .transcription_loss import TranscriptionLoss

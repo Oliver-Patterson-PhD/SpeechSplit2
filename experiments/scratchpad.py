@@ -36,7 +36,6 @@ class Scratchpad(Experiment):
     def run(self) -> None:
         self.transcriber = Transcriber(
             device=self.compute.device(),
-            model_name=self.config.options.whisper_type,
             config=self.config,
         )
         model_name = os.path.join(
@@ -117,8 +116,8 @@ class Scratchpad(Experiment):
         open(os.path.join(self.lossdir, name + ".txt"), "w").write(
             CompareItem(
                 name,
-                source=orig,
-                destin=proc,
+                mel1=orig,
+                mel2=proc,
                 model=self.transcriber,
                 text=self.parser.get_real_text(name),
             ).__str__()
@@ -128,7 +127,7 @@ class Scratchpad(Experiment):
         )
         raw_aud_raw, _ = torchaudio.load(raw_audio_file)
         raws, _ = self.audproc.get_spmel(
-            self.audproc.filter_wav(self.audproc.clean_audio(raw_aud_raw))
+            self.audproc.filter_wav(self.audproc.run_clean(raw_aud_raw))
         )
         save_tensor(raws, os.path.join(self.spmldir, f"{name}-mel-raws.png"))
         save_tensor(orig, os.path.join(self.spmldir, f"{name}-mel-orig.png"))

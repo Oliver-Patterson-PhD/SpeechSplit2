@@ -86,7 +86,7 @@ class AudioProcs:
     def melmap(self) -> Tensor:
         return self.__mel_map
 
-    def melbin_to_hz(self, bin: int) -> float:
+    def melbin_to_hz(self, bin: int) -> float | Tensor:
         return self.__mel_map[bin]
 
     def hz_to_melbin(self, hz: float) -> int:
@@ -378,10 +378,10 @@ class AudioProcs:
         return None
 
     def full_load_parts(self, fullname: str, keep: bool = False) -> TensorQuad:
-        raw = self.norm_audio(self.getraw(fullname))
+        raw = self.norm_audio(self.getraw(full_fname=fullname))
         nonoise = self.noisereduce(raw)
-        nopop = self.kill_pop(nonoise) if self.__parser.is_uaspeech() else nonoise
-        clean = self.clean_keep(nopop) if keep else self.clean_audio(nopop)
+        nopop = self.kill_pop(audio=nonoise) if self.__parser.is_uaspeech() else nonoise
+        clean = self.run_clean(audio=nopop, keep=keep)
         return raw, nonoise, nopop, clean
 
     def getraw(self, full_fname: str) -> Tensor:
@@ -394,41 +394,28 @@ class AudioProcs:
             aud, self.__sample_rate, [["reverse"]]
         )[0]
 
-    def clean_keep(self, audio: Tensor) -> Tensor:
+    def run_clean(self, audio: Tensor, keep: bool = False) -> Tensor:
         norm = self.norm_audio(audio)
         vad_aud = self.__vad_transform(norm)
         if vad_aud.size(dim=-1) == 0:
-            return torch.zeros_like(audio)
+            return torch.zeros_like(audio) if keep else torch.tensor([])
         rev_aud = self.reverse_audio(vad_aud)
         rev_vad_aud = self.__vad_transform(rev_aud)
         if rev_vad_aud.size(dim=-1) == 0:
-            return torch.zeros_like(audio)
+            return torch.zeros_like(audio) if keep else torch.tensor([])
         rev_vad_out_aud = self.reverse_audio(rev_vad_aud)
-        x = torch.nn.functional.pad(
-            self.norm_audio(rev_vad_out_aud.squeeze()),
-            (
-                audio.size(dim=-1) - vad_aud.size(dim=-1),
-                rev_aud.size(dim=-1) - rev_vad_aud.size(dim=-1),
-            ),
-            mode="constant",
-            value=0,
-        )
-        assert x.size(dim=-1) == audio.size(dim=-1)
-        if x.shape[0] % self.__hop_length == 0:
-            x = torch.cat((x, torch.tensor([1e-10], device=x.device)), dim=0)
-        return x
-
-    def clean_audio(self, audio: Tensor) -> Tensor:
-        norm = self.norm_audio(audio)
-        vad_aud = self.__vad_transform(norm)
-        if vad_aud.size(dim=-1) == 0:
-            return torch.tensor([])
-        rev_aud = self.reverse_audio(vad_aud)
-        rev_vad_aud = self.__vad_transform(rev_aud)
-        if rev_vad_aud.size(dim=-1) == 0:
-            return torch.tensor([])
-        rev_vad_out_aud = self.reverse_audio(rev_vad_aud)
-        x = rev_vad_out_aud.squeeze()
+        x = self.norm_audio(rev_vad_out_aud.squeeze())
+        if keep:
+            x = torch.nn.functional.pad(
+                x,
+                (
+                    audio.size(dim=-1) - vad_aud.size(dim=-1),
+                    rev_aud.size(dim=-1) - rev_vad_aud.size(dim=-1),
+                ),
+                mode="constant",
+                value=0,
+            )
+            assert x.size(dim=-1) == audio.size(dim=-1)
         if x.shape[0] % self.__hop_length == 0:
             x = torch.cat((x, torch.tensor([1e-10], device=x.device)), dim=0)
         return x
@@ -568,7 +555,7 @@ class TorchGate(torch.nn.Module):
         )
         if n_grad_freq < 1:
             raise ValueError(
-                f"freq_mask_smooth_hz needs to be at least {int((self.sr / (self._n_fft / 2)))} Hz"
+                f"freq_mask_smooth_hz needs to be at least {int((self.sr / (self.n_fft / 2)))} Hz"
             )
         n_grad_time = (
             1

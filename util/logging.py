@@ -127,8 +127,12 @@ class Logger(metaclass=Singleton):
             )
 
     def __log(self: Self, level: LogLevel, caller: str, message: str) -> None:
+        fullmsg = self.__format_msg(level=level, caller=caller, message=message)
+        self.unformatted(level=level, fullmsg=fullmsg)
+
+    def unformatted(self: Self, level: LogLevel | str, fullmsg: str) -> None:
+        level = self.__get_level(level)
         if self.__file is not None or level >= self.__level:
-            fullmsg = self.__format_msg(level=level, caller=caller, message=message)
             if level >= self.__level:
                 if self.__process_bar_running:
                     tqdm.write("\r" + (" " * get_terminal_size().columns), end="\r")
