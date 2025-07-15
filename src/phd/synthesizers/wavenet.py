@@ -4,9 +4,8 @@ from typing import List, Optional, Self
 import torch
 from tqdm import tqdm
 
-from models.wavenet_vocoder import WaveNet as WavenetGenerator
-from util import Config
-
+from ..models.wavenet_vocoder import WaveNet as WavenetGenerator
+from ..util import Config
 from .synthesizer import Synthesizer
 
 

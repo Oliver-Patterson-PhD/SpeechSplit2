@@ -2,13 +2,13 @@ from typing import Self
 
 import torch
 
-from models.whisper.audio import N_FRAMES
-from models.whisper.loader import load_model
-from models.whisper.model import Whisper
-from models.whisper.transcribe import transcribe
-from models.whisper.utils import ResultWriter
-from util.file import path
-from util import Config
+from ..models.whisper.audio import N_FRAMES
+from ..models.whisper.loader import load_model
+from ..models.whisper.model import Whisper
+from ..models.whisper.transcribe import transcribe
+from ..models.whisper.utils import ResultWriter
+from ..util import Config
+from ..util.file import path
 
 
 class Transcriber:
@@ -70,9 +70,7 @@ class Transcriber:
         if len(result["text"]) == 0:
             from util import Logger
 
-            Logger().trace(
-                f"Unable to transcribe: {tuple(padded_melspec.shape)}, {name}"
-            )
+            Logger().trace(f"Unable to transcribe: {tuple(padded_melspec.shape)}, {name}")
 
         out_str = ""
         for segment in result["segments"]:

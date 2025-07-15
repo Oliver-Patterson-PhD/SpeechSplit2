@@ -1,8 +1,9 @@
-from util.tensor import Tensor
 from disvoice.articulation import Articulation as ArticulationRunner
 from disvoice.glottal import Glottal as GlottalRunner
 from disvoice.phonation import Phonation as PhonationRunner
 from disvoice.prosody import Prosody as ProsodyRunner
+
+from ..util.tensor import Tensor
 
 
 class DisVoiceItem:

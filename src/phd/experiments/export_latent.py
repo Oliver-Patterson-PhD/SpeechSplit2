@@ -2,8 +2,7 @@ from typing import Self
 
 import torch
 
-from util.file import newpath, path
-
+from ..util.file import newpath, path
 from .experiment import Experiment
 
 DataType = tuple[
@@ -29,9 +28,7 @@ class ExportLatents(Experiment):
         )
         self.logger.info("Full Process On")
         self.compute.set_gpu()
-        self.experiment_dir = newpath(
-            self.experiment_dir, self.config.options.dataset_name
-        )
+        self.experiment_dir = newpath(self.experiment_dir, self.config.options.dataset_name)
         self.process()
 
     def process(self: Self) -> None:

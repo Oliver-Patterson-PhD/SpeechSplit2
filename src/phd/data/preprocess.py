@@ -5,12 +5,11 @@ __all__ = [
 import torch
 import torchaudio
 
-from util import Config, Logger
-from util.file import exists, newpath, path, strip_ext
-from util.patterns import Singleton
-
-from .dataset import DatasetParser
+from ..util import Config, Logger
+from ..util.file import exists, newpath, path, strip_ext
+from ..util.patterns import Singleton
 from .audio_procs import AudioProcs
+from .dataset import DatasetParser
 
 
 class PreProcess(metaclass=Singleton):
@@ -38,9 +37,7 @@ class PreProcess(metaclass=Singleton):
         self.path_cleanwavs = config.paths.cleanwavs
         procdata_exists = all(
             [
-                exists(
-                    path(self.__out_path, "freqs", self.__parser.get_spkdir(speaker))
-                )
+                exists(path(self.__out_path, "freqs", self.__parser.get_spkdir(speaker)))
                 for speaker in self.__parser.speakers()
             ]
         )
@@ -106,12 +103,8 @@ class PreProcess(metaclass=Singleton):
                 self.__logger.fatal(msg)
                 raise Exception(msg)
 
-        wav_full_split = self.__proc.fold_pad(
-            wav, self.max_len_pad * (self.hop_length - 1)
-        )
-        wav_mono_split = self.__proc.fold_pad(
-            wav_mono, self.max_len_pad * (self.hop_length - 1)
-        )
+        wav_full_split = self.__proc.fold_pad(wav, self.max_len_pad * (self.hop_length - 1))
+        wav_mono_split = self.__proc.fold_pad(wav_mono, self.max_len_pad * (self.hop_length - 1))
         spmel_split = self.__proc.fold_pad(spmel, self.max_len_pad)
         f0_split = self.__proc.fold_pad(f0_norm, self.max_len_pad)
 

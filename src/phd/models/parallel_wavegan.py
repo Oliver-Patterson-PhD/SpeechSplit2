@@ -10,9 +10,9 @@ from typing import Any, Dict, Optional
 
 import torch
 
-from models.layers.conv1d1x1 import Conv1d1x1
-from models.layers.conv_in_upsample_network import ConvInUpsampleNetwork
-from models.layers.residual_block import ResidualBlock
+from .layers.conv1d1x1 import Conv1d1x1
+from .layers.conv_in_upsample_network import ConvInUpsampleNetwork
+from .layers.residual_block import ResidualBlock
 
 
 ## Parallel WaveGAN Generator module.
@@ -206,9 +206,7 @@ class ParallelWaveGANGenerator(torch.nn.Module):
     @property
     def receptive_field_size(self):
         """Return receptive field size."""
-        return self._get_receptive_field_size(
-            self.layers, self.stacks, self.kernel_size
-        )
+        return self._get_receptive_field_size(self.layers, self.stacks, self.kernel_size)
 
     ## Perform Inverence
     # @param    c                   Local conditioning auxiliary features (T' ,C).
@@ -223,20 +221,14 @@ class ParallelWaveGANGenerator(torch.nn.Module):
     ) -> torch.Tensor:
         if x is not None:
             if not isinstance(x, torch.Tensor):
-                x = torch.tensor(x, dtype=torch.float).to(
-                    next(self.parameters()).device
-                )
+                x = torch.tensor(x, dtype=torch.float).to(next(self.parameters()).device)
             x = x.transpose(1, 0).unsqueeze(0)
         else:
             assert c is not None
-            x = torch.randn(1, 1, len(c) * self.upsample_factor).to(
-                next(self.parameters()).device
-            )
+            x = torch.randn(1, 1, len(c) * self.upsample_factor).to(next(self.parameters()).device)
         if c is not None:
             if not isinstance(c, torch.Tensor):
-                c = torch.tensor(c, dtype=torch.float).to(
-                    next(self.parameters()).device
-                )
+                c = torch.tensor(c, dtype=torch.float).to(next(self.parameters()).device)
             if normalize_before:
                 c = (c - self.mean) / self.scale
             assert c is not None

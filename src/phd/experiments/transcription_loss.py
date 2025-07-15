@@ -1,10 +1,9 @@
 from itertools import product
 
-from transcribers import CompareItem, Transcriber
-from util.file import newpath, path
-from util.plot import plot_things
-from util.tensor import Tensor, pad_to
-
+from ..transcribers import CompareItem, Transcriber
+from ..util.file import newpath, path
+from ..util.plot import plot_things
+from ..util.tensor import Tensor, pad_to
 from .experiment import Experiment
 
 

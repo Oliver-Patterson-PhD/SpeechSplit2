@@ -2,8 +2,8 @@ from typing import Self
 
 import torch
 
-from models.layers.linear_norm import LinearNorm
-from util import Config
+from ...util import Config
+from ..layers.linear_norm import LinearNorm
 
 
 class SpeechSplitDecoder(torch.nn.Module):
@@ -18,10 +18,7 @@ class SpeechSplitDecoder(torch.nn.Module):
         self.dim_neck_2 = config.model.dim_neck_2
         self.dim_neck_3 = config.model.dim_neck_3
         self.lstm = torch.nn.LSTM(
-            self.dim_neck * 2
-            + self.dim_neck_2 * 2
-            + self.dim_neck_3 * 2
-            + self.dim_emb,
+            self.dim_neck * 2 + self.dim_neck_2 * 2 + self.dim_neck_3 * 2 + self.dim_emb,
             512,
             3,
             batch_first=True,

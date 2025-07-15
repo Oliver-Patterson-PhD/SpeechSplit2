@@ -2,9 +2,8 @@ from typing import Optional, Self
 
 import torch
 
-from models.parallel_wavegan import ParallelWaveGANGenerator
-from util import Config
-
+from ..models.parallel_wavegan import ParallelWaveGANGenerator
+from ..util import Config
 from .synthesizer import Synthesizer
 
 

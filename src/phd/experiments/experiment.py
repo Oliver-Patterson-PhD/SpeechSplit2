@@ -11,11 +11,11 @@ from typing import Any
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from data import AudioProcs, DatasetParser, get_loader
-from models.speechsplit import InterpLnr, SpeechSplit
-from util import Compute, Config, Logger, LogLevel, NanError
-from util.file import path
-from util.tensor import save_tensor
+from ..data import AudioProcs, DatasetParser, get_loader
+from ..models.speechsplit import InterpLnr, SpeechSplit
+from ..util import Compute, Config, Logger, LogLevel, NanError
+from ..util.file import path
+from ..util.tensor import save_tensor
 
 
 class Experiment(object):
@@ -41,9 +41,7 @@ class Experiment(object):
         torch.Tensor,
     ]
 
-    def __init__(
-        self, config: Config | None = None, currtime: int = int(time.time())
-    ) -> None:
+    def __init__(self, config: Config | None = None, currtime: int = int(time.time())) -> None:
         config = config or Config()
         self.logger = Logger()
         self.compute = Compute()
@@ -138,16 +136,12 @@ class Experiment(object):
     ) -> None:
         if resume_iters == 0:
             resume_iters = self.resume_iters
-        self.logger.info(
-            f"Loading the trained models from step {resume_iters}...", depth=2
-        )
+        self.logger.info(f"Loading the trained models from step {resume_iters}...", depth=2)
         name_dir = "{}-{}".format(self.model_type, self.model_bottleneck)
         name_file = "{}-{}-{}-{}.ckpt".format(
             self.experiment_name, self.model_bottleneck, self.model_type, resume_iters
         )
-        save_dir = (
-            self.train_models_path if resume_iters != 0 else self.full_models_path
-        )
+        save_dir = self.train_models_path if resume_iters != 0 else self.full_models_path
         ckpt_file = os.path.join(save_dir, name_dir, self.experiment_name, name_file)
         ckpt = torch.load(
             ckpt_file if model_name is None else model_name,
@@ -169,9 +163,7 @@ class Experiment(object):
 
     def save_checkpoint(self, current_iter: int, save_optim: bool = True) -> None:
         os.makedirs(self.train_models_path, exist_ok=True)
-        self.logger.info(
-            f"Saving model checkpoint into {self.train_models_path}...", depth=2
-        )
+        self.logger.info(f"Saving model checkpoint into {self.train_models_path}...", depth=2)
         ckpt_name = path(
             f"{self.model_bottleneck}-{self.model_type}",
             self.experiment_name,
@@ -221,12 +213,8 @@ class Experiment(object):
         pitch_input: torch.Tensor,
         len_crop: torch.Tensor,
     ) -> torch.Tensor:
-        content_pitch_input = torch.cat(
-            (content_input, pitch_input), dim=-1
-        )  # [B, T, F+1]
-        content_pitch_input_intrp = self.intrp(
-            content_pitch_input, len_crop
-        )  # [B, T, F+1]
+        content_pitch_input = torch.cat((content_input, pitch_input), dim=-1)  # [B, T, F+1]
+        content_pitch_input_intrp = self.intrp(content_pitch_input, len_crop)  # [B, T, F+1]
         pitch_input_intrp = self.audproc.quantize_f0(
             content_pitch_input_intrp[:, :, -1],
         )  # [B, T, 257]

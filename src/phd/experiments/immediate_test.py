@@ -5,11 +5,11 @@ import matplotlib.ticker as ticker
 import torch
 import torchaudio
 
-from data import AudioProcs, DatasetParser
-from util import Config, Logger
-from util.file import (basename, exists, newpath, path, rm_rf, strip_path,
-                       walkdirs, walkfiles)
-from util.tensor import Tensor
+from ..data import AudioProcs, DatasetParser
+from ..util import Config, Logger
+from ..util.file import (basename, exists, newpath, path, rm_rf, strip_path,
+                         walkdirs, walkfiles)
+from ..util.tensor import Tensor
 
 
 class Immediate:
@@ -47,14 +47,10 @@ class Immediate:
         self.parser = DatasetParser(config=self.config)
         self.logger.debug(f"In  Path: {self.in_path}")
         self.logger.debug(f"Out Path: {self.out_path}")
-        speakers = set(
-            spk for spk in walkdirs(self.in_path) if spk in self.parser.speakers()
-        )
+        speakers = set(spk for spk in walkdirs(self.in_path) if spk in self.parser.speakers())
         self.logger.info(f"Found {len(speakers)} speakers")
         for spk_idx, spk_dir in enumerate(speakers):
-            self.logger.info(
-                f"Processing {spk_idx + 1:>2}/{len(speakers):>2} {spk_dir}"
-            )
+            self.logger.info(f"Processing {spk_idx + 1:>2}/{len(speakers):>2} {spk_dir}")
             if self.single_test:
                 self.run_single_test(spk_dir)
             if self.make_clean:
@@ -84,10 +80,7 @@ class Immediate:
         try:
             self.clean_path = path(self.experiment_dir, "clean_dataset")
             procdata_exists = all(
-                [
-                    exists(path(self.clean_path, speaker))
-                    for speaker in self.parser.speakers()
-                ]
+                [exists(path(self.clean_path, speaker)) for speaker in self.parser.speakers()]
             )
             if procdata_exists and not self.clean_data_before_run:
                 self.logger.info("Clean Data Generation Skipped")
@@ -214,9 +207,7 @@ class Immediate:
             self.logger.warn(f"Failure in {failure}: {fname}")
             if exists(path(self.clean_path, fname)):
                 self.logger.warn("Failure is in immediate data")
-            if exists(
-                path(self.config.paths.cleanwavs, self.parser.speaker(fname), fname)
-            ):
+            if exists(path(self.config.paths.cleanwavs, self.parser.speaker(fname), fname)):
                 self.logger.warn("Failure is in clean data")
         plot_items: list[tuple[tuple[Tensor, str], ...]] = [
             self.debug_audio(raw_wav, "Raw"),
@@ -233,9 +224,7 @@ class Immediate:
         n_cols = 2
         [
             self.make_plot(
-                ax=matplotlib.pyplot.subplot(
-                    n_rows, n_cols, (n_cols * row_idx) + col_idx + 1
-                ),
+                ax=matplotlib.pyplot.subplot(n_rows, n_cols, (n_cols * row_idx) + col_idx + 1),
                 item=item,
                 name=name,
                 n_samples=len(row_item[0][0]),
@@ -304,9 +293,7 @@ def iter_autocorrelation(signal: Tensor) -> Tensor:
     return correlation
 
 
-def format_log_message(
-    fname: str, data_list: list[float], other: list[Any] = []
-) -> str:
+def format_log_message(fname: str, data_list: list[float], other: list[Any] = []) -> str:
     precision = 5
     width = precision + 5
     format_string = "{:<25} " + " ".join(

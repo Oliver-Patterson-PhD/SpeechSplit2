@@ -3,10 +3,9 @@ import os
 import torch
 import torchaudio
 
-from synthesizers import Synthesizer
-from transcribers import CompareItem, Transcriber
-from util.tensor import Tensor, TensorPair, save_tensor
-
+from ..synthesizers import Synthesizer
+from ..transcribers import CompareItem, Transcriber
+from ..util.tensor import Tensor, TensorPair, save_tensor
 from .experiment import Experiment
 
 DataType = tuple[
@@ -199,15 +198,9 @@ class Scratchpad(Experiment):
         self.logger.trace_tensor(raw_audio_orig, "DEBUG")
         self.logger.trace_tensor(raw_audio_proc, "DEBUG")
 
-        self.save_audio(
-            raw_audio_stft, os.path.join(self.wavsdir, f"{name}-raw-stft.wav")
-        )
-        self.save_audio(
-            raw_audio_orig, os.path.join(self.wavsdir, f"{name}-raw-orig.wav")
-        )
-        self.save_audio(
-            raw_audio_proc, os.path.join(self.wavsdir, f"{name}-raw-proc.wav")
-        )
+        self.save_audio(raw_audio_stft, os.path.join(self.wavsdir, f"{name}-raw-stft.wav"))
+        self.save_audio(raw_audio_orig, os.path.join(self.wavsdir, f"{name}-raw-orig.wav"))
+        self.save_audio(raw_audio_proc, os.path.join(self.wavsdir, f"{name}-raw-proc.wav"))
         return
 
     def save_audio(self, wav: Tensor, file: str) -> None:
@@ -226,9 +219,7 @@ class Scratchpad(Experiment):
         return
 
     @torch.no_grad()
-    def process_synth(
-        self, synt: Synthesizer, name: str, orig: Tensor, proc: Tensor
-    ) -> None:
+    def process_synth(self, synt: Synthesizer, name: str, orig: Tensor, proc: Tensor) -> None:
         self.logger.debug(f"Synthesizing: {synt}")
         synth_gt = os.path.join(self.wavsdir, f"{name}-{synt}-orig.wav")
         synth_out = os.path.join(self.wavsdir, f"{name}-{synt}-proc.wav")

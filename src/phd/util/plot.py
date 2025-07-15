@@ -1,8 +1,8 @@
 import matplotlib
 
-from data import Utterance
-from util.file import path
-from util.tensor import Tensor
+from ..data import Utterance
+from .file import path
+from .tensor import Tensor
 
 
 def _plot_single(
@@ -134,9 +134,7 @@ def _make_plot(
             if item.dim() == 1 or isinstance(name, tuple):
                 size_item = item.masked_select(item != 0.0)
                 div = word.end / size_item.size(dim=-1)
-                half_point = (
-                    (phon.start + ((phon.end - phon.start) / 2)) / div
-                ) / sample_div
+                half_point = ((phon.start + ((phon.end - phon.start) / 2)) / div) / sample_div
                 start_point = (phon.start / sample_div) / div
             elif item.dim() == 2:
                 div = word.end / (sample_time or 1)
@@ -154,9 +152,7 @@ def _make_plot(
                     verticalalignment="baseline",
                     color=label_colour,
                 )
-                ax.axvline(
-                    start_point, color=label_colour, alpha=0.4 if is_image else 0.1
-                )
+                ax.axvline(start_point, color=label_colour, alpha=0.4 if is_image else 0.1)
     return ax
 
 

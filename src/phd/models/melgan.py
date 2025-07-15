@@ -2,9 +2,9 @@ from typing import Any, Dict, List, Self
 
 import torch
 
-from models.layers.causal_conv1d import CausalConv1d
-from models.layers.causal_conv_transpose1d import CausalConvTranspose1d
-from models.layers.residual_stack import ResidualStack
+from .layers.causal_conv1d import CausalConv1d
+from .layers.causal_conv_transpose1d import CausalConvTranspose1d
+from .layers.residual_stack import ResidualStack
 
 
 class MelGANGenerator(torch.nn.Module):
@@ -73,9 +73,7 @@ class MelGANGenerator(torch.nn.Module):
 
         for i, upsample_scale in enumerate(upsample_scales):
             # add upsampling layer
-            layers += [
-                getattr(torch.nn, nonlinear_activation)(**nonlinear_activation_params)
-            ]
+            layers += [getattr(torch.nn, nonlinear_activation)(**nonlinear_activation_params)]
             if not use_causal_conv:
                 layers += [
                     torch.nn.ConvTranspose1d(
@@ -116,15 +114,11 @@ class MelGANGenerator(torch.nn.Module):
                 ]
 
         # add final layer
-        layers += [
-            getattr(torch.nn, nonlinear_activation)(**nonlinear_activation_params)
-        ]
+        layers += [getattr(torch.nn, nonlinear_activation)(**nonlinear_activation_params)]
         if not use_causal_conv:
             layers += [
                 getattr(torch.nn, pad)((kernel_size - 1) // 2, **pad_params),
-                torch.nn.Conv1d(
-                    channels // (2 ** (i + 1)), out_channels, kernel_size, bias=bias
-                ),
+                torch.nn.Conv1d(channels // (2 ** (i + 1)), out_channels, kernel_size, bias=bias),
             ]
         else:
             layers += [
@@ -163,9 +157,7 @@ class MelGANGenerator(torch.nn.Module):
     def reset_parameters(self: Self) -> None:
 
         def _reset_parameters(m):
-            if isinstance(m, torch.nn.Conv1d) or isinstance(
-                m, torch.nn.ConvTranspose1d
-            ):
+            if isinstance(m, torch.nn.Conv1d) or isinstance(m, torch.nn.ConvTranspose1d):
                 m.weight.data.normal_(0.0, 0.02)
 
         self.apply(_reset_parameters)
@@ -192,9 +184,7 @@ class MelGANGenerator(torch.nn.Module):
         """Apply weight normalization module from all of the layers."""
 
         def _apply_weight_norm(m):
-            if isinstance(m, torch.nn.Conv1d) or isinstance(
-                m, torch.nn.ConvTranspose1d
-            ):
+            if isinstance(m, torch.nn.Conv1d) or isinstance(m, torch.nn.ConvTranspose1d):
                 torch.nn.utils.parametrizations.weight_norm(m)
 
         self.apply(_apply_weight_norm)

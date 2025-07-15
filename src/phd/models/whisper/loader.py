@@ -6,8 +6,7 @@ from typing import List, Union
 import torch
 from tqdm import tqdm
 
-from util.file import fread
-
+from ...util.file import fread
 from .model import ModelDimensions, Whisper
 
 _MODELS = {
@@ -62,9 +61,7 @@ def _download(url: str, root: str) -> str:
         if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
             return download_target
         else:
-            raise Exception(
-                f"{download_target} exists, but the SHA256 checksum does not match"
-            )
+            raise Exception(f"{download_target} exists, but the SHA256 checksum does not match")
 
     with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
         with tqdm(

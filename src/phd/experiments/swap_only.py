@@ -3,8 +3,7 @@ from itertools import product
 
 import torch
 
-from util.tensor import Tensor, save_tensor
-
+from ..util.tensor import Tensor, save_tensor
 from .experiment import Experiment
 
 
@@ -16,9 +15,7 @@ class Swapper(Experiment):
         "code_exp_4",
     ]
 
-    DataItem = tuple[
-        list[str], list[str], Tensor, Tensor, Tensor, Tensor, Tensor, Tensor
-    ]
+    DataItem = tuple[list[str], list[str], Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]
 
     @torch.no_grad()
     def save_latents(self) -> None:
@@ -129,9 +126,7 @@ class Swapper(Experiment):
 
 
 @torch.no_grad()
-def get_code(
-    fstring: str, name: str, latent: str, swap: str, orig: str
-) -> tuple[bool, Tensor]:
+def get_code(fstring: str, name: str, latent: str, swap: str, orig: str) -> tuple[bool, Tensor]:
     speaker_code, swapped = (swap, True) if latent == name else (orig, False)
     filename = fstring.format(name, speaker_code)
     code = torch.load(filename, weights_only=True)

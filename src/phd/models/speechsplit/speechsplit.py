@@ -2,8 +2,7 @@ from typing import Self, Tuple
 
 import torch
 
-from util import Config
-
+from ...util import Config
 from .decoder_speechsplit import SpeechSplitDecoder
 from .encoder_rhythm import EncoderRhythm
 from .encoder_sync import EncoderSync

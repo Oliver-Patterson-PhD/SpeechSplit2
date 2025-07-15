@@ -7,10 +7,9 @@ __all__ = [
 
 from enum import Enum, auto
 
-from util import Config
-from util.file import (basename, dirname, freadline, freadlist, myglob, path,
-                       strip_ext)
-
+from ..util import Config
+from ..util.file import (basename, dirname, freadline, freadlist, myglob, path,
+                         strip_ext)
 from .dataset_detail import (smolspeech_speakers, smolvctk_speakers,
                              timit_speakers, timit_spk_path, uaspeech_speakers,
                              uaspeech_uttrs, vctk_sex, vctk_speakers)

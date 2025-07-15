@@ -3,8 +3,7 @@ from typing import Optional, Self
 
 import torch
 
-from util import Config, Logger
-
+from ..util import Config, Logger
 # from models.hifi_gan import Generator as HifiGanGenerator
 # from models.hifi_gan import HiFiConfig
 from .synthesizer import Synthesizer

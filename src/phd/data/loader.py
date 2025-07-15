@@ -5,12 +5,11 @@ __all__ = [
 
 import torch
 
-from util import Compute, Config, Logger
-from util.file import exists, path
-from util.tensor import Tensor, TensorTriple
-
-from .dataset import DatasetParser
+from ..util import Compute, Config, Logger
+from ..util.file import exists, path
+from ..util.tensor import Tensor, TensorTriple
 from .audio_procs import AudioProcs
+from .dataset import DatasetParser
 
 DataItem = tuple[
     str,  # speaker
@@ -53,9 +52,7 @@ class MyDataset(torch.utils.data.Dataset[DataLoadType]):
                 self.load_from_meta(self.parser.get_wavfile(speaker, uttr)),
                 self.parser.get_wavfile(speaker, uttr),
             )
-            for speaker in Logger().progress_bar(
-                self.parser.speakers(), desc="speakers loaded"
-            )
+            for speaker in Logger().progress_bar(self.parser.speakers(), desc="speakers loaded")
             for uttr in self.parser.get_utterances(speaker)
             if self.uttr_exists(speaker, uttr)
         ]
@@ -172,9 +169,7 @@ def get_loader(
             replacement=True,
             generator=torch.Generator(device=device),
             num_samples=(
-                (len(dataset) * samplier)
-                if singleitem
-                else (batch_size * len(dataset) * samplier)
+                (len(dataset) * samplier) if singleitem else (batch_size * len(dataset) * samplier)
             ),
         )
     data_loader = torch.utils.data.DataLoader(

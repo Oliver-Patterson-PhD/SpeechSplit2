@@ -1,7 +1,7 @@
-from util.tensor import Tensor
-from util.file import path, basename
-from .experiment import Experiment
+from ..util.file import basename, path
+from ..util.tensor import Tensor
 from .disvoice_requirements import Articulation, Glottal, Phonation
+from .experiment import Experiment
 
 
 class DisVoiceTest(Experiment):
@@ -35,12 +35,8 @@ class DisVoiceTest(Experiment):
 
         try:
             do_static = False
-            uttr = self.parser.get_utterance(
-                self.parser.get_fullpath(speaker, utterance_id)
-            )
-            full_path = path(
-                self.in_path, self.parser.get_wavfile(speaker, utterance_id)
-            )
+            uttr = self.parser.get_utterance(self.parser.get_fullpath(speaker, utterance_id))
+            full_path = path(self.in_path, self.parser.get_wavfile(speaker, utterance_id))
             self.logger.trace_tensor(wav, self.dims_log)
             self.logger.trace_var(uttr, self.dims_log)
             articulation = Articulation(full_path, do_static)

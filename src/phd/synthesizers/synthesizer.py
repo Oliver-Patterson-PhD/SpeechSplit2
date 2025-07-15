@@ -3,7 +3,7 @@ from typing import Optional, Self
 
 import torch
 
-from util import Config
+from ..util import Config
 
 
 class Synthesizer(object):
@@ -50,4 +50,4 @@ class Synthesizer(object):
     def __str__(
         self: Self,
     ) -> str:
-        return self.model_name.partition('/')[0]
+        return self.model_name.partition("/")[0]

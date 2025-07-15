@@ -2,15 +2,12 @@ import time
 
 import torch
 
-from util import Config
-
+from ..util import Config
 from .experiment import Experiment
 
 
 class TestSamples(Experiment):
-    def __init__(
-        self, config: Config | None = None, currtime: int = int(time.time())
-    ) -> None:
+    def __init__(self, config: Config | None = None, currtime: int = int(time.time())) -> None:
         self.config = config or Config()
 
     @torch.no_grad()

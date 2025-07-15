@@ -8,10 +8,9 @@ from math import sqrt
 
 import torch
 
-from util.compute import Compute
-from util.config import Config
-from util.tensor import Tensor
-
+from ..util.compute import Compute
+from ..util.config import Config
+from ..util.tensor import Tensor
 from .transcriber import Transcriber
 
 
@@ -73,18 +72,14 @@ class CompareItem:
         transcription_attempts: int = 0
         while True:
             transcription_attempts += 1
-            transcription, tokens = self.transcriber.transcribe(
-                melspec, f"{self.fname}_{item}"
-            )
+            transcription, tokens = self.transcriber.transcribe(melspec, f"{self.fname}_{item}")
             if transcription is not None:
                 clean_transcription = clean_string(transcription)
                 if clean_transcription is not None:
                     return clean_transcription, tokens
             if transcription_attempts <= self.max_retries:
                 continue
-        raise RuntimeError(
-            f"Could not transcribe {item} after {transcription_attempts} attempts"
-        )
+        raise RuntimeError(f"Could not transcribe {item} after {transcription_attempts} attempts")
 
     def file_text(self) -> tuple[str, str]:
         return self.fname, self.__str__()
@@ -123,9 +118,7 @@ def corr_calc(gt_list: list[int], wp_list: list[int]) -> tuple[float, Tensor]:
 
 
 def distance_to_diagonal(width: int, height: int, xval: int, yval: int) -> float:
-    return abs(((height / width) * (xval + 0.5)) - (yval + 0.5)) / sqrt(
-        1 + (height / width) ** 2
-    )
+    return abs(((height / width) * (xval + 0.5)) - (yval + 0.5)) / sqrt(1 + (height / width) ** 2)
 
 
 @torch.no_grad()

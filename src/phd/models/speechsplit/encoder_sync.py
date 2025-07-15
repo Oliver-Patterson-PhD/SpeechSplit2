@@ -2,9 +2,8 @@ from typing import Self, Tuple
 
 import torch
 
-from models.layers.conv_norm import ConvNorm
-from util import Config
-
+from ...util import Config
+from ..layers.conv_norm import ConvNorm
 from .interplnr import InterpLnr
 
 

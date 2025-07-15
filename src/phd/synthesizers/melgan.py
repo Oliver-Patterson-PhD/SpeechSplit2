@@ -2,9 +2,8 @@ from typing import Optional, Self
 
 import torch
 
-from models.melgan import MelGANGenerator
-from util import Config
-
+from ..models.melgan import MelGANGenerator
+from ..util import Config
 from .synthesizer import Synthesizer
 
 

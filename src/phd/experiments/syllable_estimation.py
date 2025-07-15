@@ -3,11 +3,10 @@ from itertools import product
 import matplotlib
 import torch
 
-from util.file import basename, newpath, path
-from util.math import find_peaks
-from util.plot import plot_things
-from util.tensor import Tensor, pad_to
-
+from ..util.file import basename, newpath, path
+from ..util.math import find_peaks
+from ..util.plot import plot_things
+from ..util.tensor import Tensor, pad_to
 from .experiment import Experiment
 
 
@@ -115,9 +114,7 @@ class SyllableEstimation(Experiment):
         assert self.parser.is_timit()
         try:
             self.logger.debug(f"Running loss with {uttr} between {spk1} and {spk2}")
-            wav1, wav2 = pad_to(
-                self.load_audio(spk1, uttr), self.load_audio(spk2, uttr)
-            )
+            wav1, wav2 = pad_to(self.load_audio(spk1, uttr), self.load_audio(spk2, uttr))
             plot_items: list[tuple[Tensor, str | tuple[str, ...]]] = [
                 (wav1.squeeze(), "waveform"),
                 self.get_feats(wav1, spk1),
@@ -136,9 +133,7 @@ class SyllableEstimation(Experiment):
             sample_time = wav1.size(dim=-1) / self.config.audio.sample_rate
             fig.suptitle(f"Sample: {sample} ({uttrs[0].word})")
             subplots = fig.subplots(len(plot_items), 1)
-            for i, ((item, name), word, ax) in enumerate(
-                zip(plot_items, uttrs, subplots)
-            ):
+            for i, ((item, name), word, ax) in enumerate(zip(plot_items, uttrs, subplots)):
                 sample_div = 1 if sample_time is None else item.size(-1) / sample_time
                 if isinstance(name, tuple):
                     ax = self.plot_features(

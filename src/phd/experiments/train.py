@@ -2,9 +2,8 @@ import time
 
 import torch
 
-from util import NanError
-from util.tensor import Tensor
-
+from ..util import NanError
+from ..util.tensor import Tensor
 from .experiment import Experiment
 
 
