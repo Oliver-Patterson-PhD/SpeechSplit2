@@ -1,5 +1,5 @@
 [project]
-name = "speechsplit2"
+name = "phd"
 version = "0.1.0"
 description = "Fork of SpeechSplit2 for my PhD project"
 readme = "README.md"
@@ -47,8 +47,11 @@ cpu = [
 ]
 
 [project.scripts]
-experiment = "main:main"
-check = "test:test"
+experiment = "phd:main"
+check = "phd:check"
+
+[build-system]
+requires = [ "setuptools" ]
 
 [tool.uv]
 managed = true
