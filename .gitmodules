@@ -1,0 +1,3 @@
+[submodule "external/disvoice"]
+	path = external/disvoice
+	url = git@github.com:Oliver-Patterson-PhD/DisVoice

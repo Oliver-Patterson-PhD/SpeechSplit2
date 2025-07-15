@@ -10,7 +10,7 @@ from util.file import exists, path
 from util.tensor import Tensor, TensorTriple
 
 from .dataset import DatasetParser
-from .utils import AudioProcs
+from .audio_procs import AudioProcs
 
 DataItem = tuple[
     str,  # speaker

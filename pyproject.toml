@@ -1,0 +1,125 @@
+[project]
+name = "speechsplit2"
+version = "0.1.0"
+description = "Fork of SpeechSplit2 for my PhD project"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "cement>=3.0.14",
+    "disvoice",
+    "inflect>=7.5.0",
+    "kaldi-io>=0.9.8",
+    "librosa>=0.11.0",
+    "matplotlib>=3.10.3",
+    "more-itertools>=10.7.0",
+    "mypy>=1.16.1",
+    "numba>=0.61.2",
+    "numpy>=2.1.3",
+    "pillow>=11.3.0",
+    "praat-parselmouth>=0.4.6",
+    "pysptk>=1.0.1",
+    "pyworld>=0.3.5",
+    "safetensors>=0.5.3",
+    "scipy>=1.16.0",
+    "setuptools-rust>=1.11.1",
+    "standard-imghdr>=3.13.0",
+    "tensorboard>=2.19.0",
+    "tiktoken>=0.9.0",
+    "tqdm>=4.67.1",
+    "triton>=3.3.1",
+    "types-requests>=2.32.4.20250611",
+    "unidecode>=1.4.0",
+    "wavenet-vocoder>=0.1.1",
+]
+
+[project.optional-dependencies]
+rocm = [
+    "torch>=2.7.1",
+    "torchaudio>=2.7.1",
+]
+cuda = [
+    "torch>=2.7.1",
+    "torchaudio>=2.7.1",
+]
+cpu = [
+    "torch>=2.7.1",
+    "torchaudio>=2.7.1",
+]
+
+[project.scripts]
+experiment = "main:main"
+check = "test:test"
+
+[tool.uv]
+managed = true
+cache-keys = [
+    { file = "pyproject.toml" },
+]
+compile-bytecode = true
+prerelease = "allow"
+extra-index-url = ["https://pypi.org/simple"]
+find-links = ["https://download.pytorch.org/whl/torch_stable.html"]
+conflicts = [
+    [
+        { extra = "rocm" },
+        { extra = "cuda" },
+        { extra = "cpu" },
+    ],
+]
+
+[tool.uv.sources]
+disvoice = { path = "external/disvoice", editable = true }
+
+[[tool.iv.index]]
+name = "rocm"
+url = "https://download.pytorch.org/whl/nightly/rocm6.4"
+explicit = true
+
+[[tool.iv.index]]
+name = "cuda"
+url = "https://download.pytorch.org/whl/nightly/cu126"
+explicit = true
+
+[[tool.iv.index]]
+name = "cpu"
+url = ""
+explicit = true
+
+[tool.pycodestyle]
+ignore = [
+    "E202", # E202 - whitespace before ')'
+    "E203", # E203 - Whitespace before ':'
+    "E241", # E241 - multiple spaces after ','
+    "E262", # E262 - Inline comment should start with '# '
+    "E266", # E266 - Too many leaning '#' for block comment
+    "E501", # E501 - Line too long
+    "W503", # W503 - Line break before binary operator
+]
+max-line-length = 100
+
+[tool.flake8]
+ignore = [
+    "E202", # E202 - whitespace before ')'
+    "E203", # E203 - Whitespace before ':'
+    "E241", # E241 - multiple spaces after ','
+    "E262", # E262 - Inline comment should start with '# '
+    "E266", # E266 - Too many leaning '#' for block comment
+    "E501", # E501 - Line too long
+    "W503", # W503 - Line break before binary operator
+]
+max-line-length = 100
+
+[tool.autopep8]
+max_line_length = 100
+
+[tool.black]
+line-length = 100
+
+[tool.mypy]
+color_output = true
+explicit_package_bases = true
+force_uppercase_builtins = true
+ignore_missing_imports = true
+pretty = true
+show_column_numbers = true
+show_error_context = true

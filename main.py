@@ -1,19 +1,22 @@
+import torch
+
+torch.multiprocessing.set_sharing_strategy("file_system")
+torch.multiprocessing.set_start_method("spawn")
+if torch.cuda.is_available():
+    dev = torch.device("cuda")
+    if dev is not None:
+        torch.set_default_device(dev)
+
+
 def main() -> None:
     from argparse import ArgumentParser
 
     import torch
 
     from data import PreProcess
-    from experiments import (
-        Immediate,
-        Scratchpad,
-        Swapper,
-        SyllableEstimation,
-        TestSamples,
-        Train,
-        TranscriptionLoss,
-        DisVoiceTest,
-    )
+    from experiments import (DisVoiceTest, Immediate, Scratchpad, Swapper,
+                             SyllableEstimation, TestSamples, Train,
+                             TranscriptionLoss)
     from util import Compute, Config, Logger, RunTests
 
     torch.backends.cudnn.benchmark = True
@@ -84,3 +87,7 @@ def main() -> None:
     except Exception as e:
         logger.fatal(str(e.__cause__))
         raise Exception from e
+
+
+if __name__ == "__main__":
+    main()
