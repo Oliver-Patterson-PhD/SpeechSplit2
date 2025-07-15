@@ -12,10 +12,13 @@ from .file import strip_ext
 __all__ = [
     "Tensor",
     "TensorPair",
-    "TensorTriple",
     "TensorQuad",
-    "save_tensor",
+    "TensorTriple",
+    "pad_like",
+    "pad_list",
     "pad_to",
+    "stack_list",
+    "save_tensor",
 ]
 
 TensorPair = tuple[Tensor, Tensor]
@@ -104,9 +107,7 @@ def make_grid(tensor: Tensor) -> Tensor:
             # https://pytorch.org/docs/stable/tensors.html#torch.Tensor.copy_
             grid.narrow(1, y * height + padding, height - padding).narrow(  # type: ignore[attr-defined]
                 2, x * width + padding, width - padding
-            ).copy_(
-                tensor[k]
-            )
+            ).copy_(tensor[k])
             k = k + 1
     return grid
 
@@ -128,6 +129,18 @@ def plot_batch(batch: Tensor, base: str) -> Figure:
 def pad_like(x: Tensor, ref: Tensor) -> Tensor:
     assert x.shape <= ref.shape
     return torch.nn.functional.pad(x, (0, ref.size(dim=-1) - x.size(dim=-1)))
+
+
+def pad_list(xlist: list[Tensor]) -> list[Tensor]:
+    biggest = max(xlist, key=lambda x: x.size(dim=-1)).size(dim=-1)
+    return [torch.nn.functional.pad(x, (0, biggest - x.size(dim=-1))) for x in xlist]
+
+
+def stack_list(xlist: list[Tensor]) -> Tensor:
+    biggest = max(xlist, key=lambda x: x.size(dim=-1)).size(dim=-1)
+    return torch.stack(
+        [torch.nn.functional.pad(x, (0, biggest - x.size(dim=-1))) for x in xlist]
+    )
 
 
 def pad_to(x: Tensor, y: Tensor) -> TensorPair:

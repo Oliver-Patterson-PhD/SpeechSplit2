@@ -18,17 +18,23 @@ dependencies = [
     "praat-parselmouth",
     "pysptk",
     "pyworld",
+    "requests",
     "safetensors",
     "scipy",
     "setuptools-rust",
+    "speech-intelligibility-index",
     "standard-imghdr",
     "tensorboard",
-    "tiktoken",
+    "torchmetrics",
+    "torchmetrics[audio]",
+    "torchmetrics[detection]",
+    "torchmetrics[image]",
+    "torchmetrics[text]",
     "tqdm",
+    "triton",
     "types-requests",
     "unidecode",
     "wavenet-vocoder",
-    "speech-intelligibility-index",
 ]
 
 [project.scripts]
@@ -94,11 +100,14 @@ lint = [
 ]
 
 [project.optional-dependencies]
+
 rocm = [
+    "lightning",
     "lightning-utilities",
     "matplotlib",
     "mypy-extensions",
     "numpy",
+    "onnxruntime-gpu",
     "pandas",
     "pillow",
     "pytorch-triton",
@@ -109,18 +118,20 @@ rocm = [
     "tiktoken",
     "torch==2.9.0.dev20250714+rocm6.4",
     "torchaudio==2.8.0.dev20250714+rocm6.4",
-    "torchmetrics",
     "torchtune",
     "torchvision",
     "tqdm",
     "typing-extensions",
     "typing-inspect",
 ]
+
 cuda = [
+    "lightning",
     "lightning-utilities",
     "matplotlib",
     "mypy-extensions",
     "numpy",
+    "onnxruntime-gpu",
     "pandas",
     "pillow",
     "pytorch-triton",
@@ -131,18 +142,20 @@ cuda = [
     "tiktoken",
     "torch",
     "torchaudio",
-    "torchmetrics",
     "torchtune",
     "torchvision",
     "tqdm",
     "typing-extensions",
     "typing-inspect",
 ]
+
 cpu = [
+    "lightning",
     "lightning-utilities",
     "matplotlib",
     "mypy-extensions",
     "numpy",
+    "onnxruntime",
     "pandas",
     "pillow",
     "pytorch-triton",
@@ -153,7 +166,6 @@ cpu = [
     "tiktoken",
     "torch",
     "torchaudio",
-    "torchmetrics",
     "torchtune",
     "torchvision",
     "tqdm",
@@ -178,7 +190,6 @@ setuptools = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda"
 tiktoken = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 torch = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 torchaudio = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-torchmetrics = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 torchtune = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 torchvision = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 tqdm = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
