@@ -68,7 +68,7 @@ explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-cuda"
-url = "https://download.pytorch.org/whl/nightly/cu129"
+url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [[tool.uv.index]]
@@ -140,7 +140,7 @@ cuda = [
     "safetensors",
     "setuptools",
     "tiktoken",
-    "torch",
+    "torch<2.8",
     "torchaudio",
     "torchtune",
     "torchvision",
@@ -177,20 +177,20 @@ cpu = [
 [tool.uv.sources]
 disvoice = { path = "external/disvoice", editable = true }
 lightning-utilities = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-matplotlib = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
+matplotlib = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 mypy-extensions = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 numpy = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-pandas = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
+pandas = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 pillow = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 pytorch-triton = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 pytorch-triton-rocm = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 pytorch-triton-xpu = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-safetensors = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
+safetensors = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 setuptools = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-tiktoken = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
+tiktoken = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 torch = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 torchaudio = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-torchtune = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
+torchtune = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 torchvision = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 tqdm = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
 typing-extensions = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
