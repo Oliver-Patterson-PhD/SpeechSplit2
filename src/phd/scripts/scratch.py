@@ -33,6 +33,17 @@ def run_item(spk: str, uttr: str) -> tuple[float, float, float, float] | None:
         return None
 
 
+def print_stats(thing: list[int | float], name: str) -> None:
+    thing_len = len(thing)
+    thing_mean = sum(thing) / thing_len
+    thing_max = max(thing)
+    thing_min = min(thing)
+    logger.debug(f"{name} Max:  {thing_max}")
+    logger.debug(f"{name} Min:  {thing_min}")
+    logger.debug(f"{name} Mean: {thing_mean}")
+    print(thing, file=open(path(out_path, f"{name}.txt"), "w"))
+
+
 def run_speaker(spk: str) -> None:
     logger.debug(f"Loading: {spk}")
     p808: list[float] = []
@@ -55,6 +66,10 @@ def run_speaker(spk: str) -> None:
         )
         for p, s, b, o in [result for result in results if result is not None]
     ]
+    print_stats(p808, f"{spk}, P808")
+    print_stats(sig, f"{spk}, sig ")
+    print_stats(bak, f"{spk}, bak ")
+    print_stats(ovr, f"{spk}, ovr ")
     logger.debug(f"Plotting: {spk}")
     fig = matplotlib.pyplot.figure()
     ax = fig.gca()
@@ -67,7 +82,8 @@ def run_speaker(spk: str) -> None:
     ax.plot(ovr)
     ax.set_label("OVR")
     ax.legend(loc="upper left")
-    fig.savefig(path(out_path, str(parser.dataset_type()), f"{spk}.{ftype}"))
+    fig_out = newpath(out_path, str(parser.dataset_type()))
+    fig.savefig(path(fig_out, f"{spk}.{ftype}"))
     matplotlib.pyplot.close(fig=fig)
     logger.debug(f"Plots finished: {spk}")
 
