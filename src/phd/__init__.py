@@ -10,3 +10,4 @@ if torch.cuda.is_available():
 from .scripts.check import check
 from .scripts.legacy import main
 from .scripts.scratch import scratch
+from .scripts.lld_classify import lld_classify

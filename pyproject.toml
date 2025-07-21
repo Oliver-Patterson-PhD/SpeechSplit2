@@ -41,6 +41,7 @@ dependencies = [
 experiment = "phd:main"
 check = "phd:check"
 scratch = "phd:scratch"
+lld_classify = "phd:lld_classify"
 
 [build-system]
 requires = [ "setuptools" ]
