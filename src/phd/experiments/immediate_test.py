@@ -6,7 +6,7 @@ import torch
 import torchaudio
 
 from ..data import AudioProcs, DatasetParser
-from ..util import Config, Logger
+from ..util import config, logger
 from ..util.file import (basename, exists, newpath, path, rm_rf, strip_path,
                          walkdirs, walkfiles)
 from ..util.tensor import Tensor
@@ -14,7 +14,6 @@ from ..util.tensor import Tensor
 
 class Immediate:
     run: bool = False
-    config: Config
     clean_data_before_run: bool = False
     exit_after: bool = False
     batch_test: bool = False
@@ -25,10 +24,8 @@ class Immediate:
     clean_path: str
     fs: int
 
-    def __init__(self, config: Config) -> None:
-        self.config = config
+    def __init__(self) -> None:
         self.experiment_dir = newpath(config.paths.artefacts, "immediate")
-        self.logger = Logger()
         return
 
     def check_single(self) -> None:
@@ -38,26 +35,28 @@ class Immediate:
         self.check_single()
         if not self.run:
             return
-        self.in_path = self.config.paths.raw_wavs
-        self.out_path = self.config.paths.features
-        self.max_len_pad = self.config.audio.max_len_pad
-        self.hop_length = self.config.audio.hop_len
-        self.fs = self.config.audio.sample_rate
-        self.proc = AudioProcs(config=self.config)
-        self.parser = DatasetParser(config=self.config)
-        self.logger.debug(f"In  Path: {self.in_path}")
-        self.logger.debug(f"Out Path: {self.out_path}")
-        speakers = set(spk for spk in walkdirs(self.in_path) if spk in self.parser.speakers())
-        self.logger.info(f"Found {len(speakers)} speakers")
+        self.in_path = config.paths.raw_wavs
+        self.out_path = config.paths.features
+        self.max_len_pad = config.audio.max_len_pad
+        self.hop_length = config.audio.hop_len
+        self.fs = config.audio.sample_rate
+        self.proc = AudioProcs()
+        self.parser = DatasetParser()
+        logger.debug(f"In  Path: {self.in_path}")
+        logger.debug(f"Out Path: {self.out_path}")
+        speakers = set(
+            spk for spk in walkdirs(self.in_path) if spk in self.parser.speakers()
+        )
+        logger.info(f"Found {len(speakers)} speakers")
         for spk_idx, spk_dir in enumerate(speakers):
-            self.logger.info(f"Processing {spk_idx + 1:>2}/{len(speakers):>2} {spk_dir}")
+            logger.info(f"Processing {spk_idx + 1:>2}/{len(speakers):>2} {spk_dir}")
             if self.single_test:
                 self.run_single_test(spk_dir)
             if self.make_clean:
                 self.run_make_clean(spk_dir)
             if self.graph_clean:
                 self.run_graph_clean(spk_dir)
-        self.logger.info("Immediate Test Complete")
+        logger.info("Immediate Test Complete")
 
     def subdir(self, subdir: str) -> str:
         subpath = path(self.experiment_dir, subdir)
@@ -74,21 +73,24 @@ class Immediate:
                 )
             ]
         except Exception as e:
-            self.logger.error(f"Failure in single_test: {e.__str__()}")
+            logger.error(f"Failure in single_test: {e.__str__()}")
 
     def run_make_clean(self, spk_dir: str):
         try:
             self.clean_path = path(self.experiment_dir, "clean_dataset")
             procdata_exists = all(
-                [exists(path(self.clean_path, speaker)) for speaker in self.parser.speakers()]
+                [
+                    exists(path(self.clean_path, speaker))
+                    for speaker in self.parser.speakers()
+                ]
             )
             if procdata_exists and not self.clean_data_before_run:
-                self.logger.info("Clean Data Generation Skipped")
+                logger.info("Clean Data Generation Skipped")
                 return
             self.subdir("clean_dataset")
             [
                 self.save_cleaned_audio(filebase)  # type: ignore [func-returns-value]
-                for filebase in self.logger.progress_bar(
+                for filebase in logger.progress_bar(
                     sorted(
                         path(self.in_path, spk_dir, fname)
                         for fname in walkfiles(path(self.in_path, spk_dir))
@@ -96,15 +98,15 @@ class Immediate:
                 )
             ]
         except Exception as e:
-            self.logger.error(f"Failure in make_clean: {e.__str__()}")
+            logger.error(f"Failure in make_clean: {e.__str__()}")
             raise e
 
     def run_graph_clean(self, spk_dir: str):
         try:
             from data.preprocess import preprocess_data
 
-            preprocess_data(self.config)
-            self.clean_path = self.config.paths.cleanwavs
+            preprocess_data(config)
+            self.clean_path = config.paths.cleanwavs
 
             out_dir = self.subdir("cleanup")
             bad_dir = self.subdir("bad")
@@ -114,7 +116,7 @@ class Immediate:
                     bad_dir=bad_dir,
                     fname=filebase,
                 )  # type: ignore [func-returns-value]
-                for filebase in self.logger.progress_bar(
+                for filebase in logger.progress_bar(
                     sorted(
                         path(self.in_path, spk_dir, fname)
                         for fname in walkfiles(path(self.in_path, spk_dir))
@@ -122,7 +124,7 @@ class Immediate:
                 )
             ]
         except Exception as e:
-            self.logger.error(f"Failure in graph_clean: {e.__str__()}")
+            logger.error(f"Failure in graph_clean: {e.__str__()}")
             raise e
 
     def save_cleaned_audio(self, fname: str) -> None:
@@ -133,7 +135,7 @@ class Immediate:
         proc = self.proc.full_load_parts(fullpath)
         test = self.proc.full_load_check(*proc)
         if test is not None:
-            self.logger.warn(f"Failure in {test}: {sfname}")
+            logger.warn(f"Failure in {test}: {sfname}")
             return
         _, _, _, clean_wav = proc
         torchaudio.save(
@@ -177,7 +179,7 @@ class Immediate:
             shading="flat",
         )
         ax.set_xlim(0, endtime)
-        ax.set_ylim(self.config.audio.freq_min, self.fs / 2)
+        ax.set_ylim(config.audio.freq_min, self.fs / 2)
         ax.set_yscale("log", base=2)
         ax.yaxis.set_minor_formatter(ticker.NullFormatter())
         ax.yaxis.set_major_formatter(ticker.ScalarFormatter())
@@ -204,11 +206,11 @@ class Immediate:
         raw_wav, nonoise, nopop, cln_wav = self.proc.full_load_parts(rawpath, keep=True)
         failure = self.proc.full_load_check(raw_wav, nonoise, nopop, cln_wav, keep=True)
         if failure is not None:
-            self.logger.warn(f"Failure in {failure}: {fname}")
+            logger.warn(f"Failure in {failure}: {fname}")
             if exists(path(self.clean_path, fname)):
-                self.logger.warn("Failure is in immediate data")
-            if exists(path(self.config.paths.cleanwavs, self.parser.speaker(fname), fname)):
-                self.logger.warn("Failure is in clean data")
+                logger.warn("Failure is in immediate data")
+            if exists(path(config.paths.cleanwavs, self.parser.speaker(fname), fname)):
+                logger.warn("Failure is in clean data")
         plot_items: list[tuple[tuple[Tensor, str], ...]] = [
             self.debug_audio(raw_wav, "Raw"),
             self.debug_audio(nonoise, "Noisereduced"),
@@ -224,7 +226,9 @@ class Immediate:
         n_cols = 2
         [
             self.make_plot(
-                ax=matplotlib.pyplot.subplot(n_rows, n_cols, (n_cols * row_idx) + col_idx + 1),
+                ax=matplotlib.pyplot.subplot(
+                    n_rows, n_cols, (n_cols * row_idx) + col_idx + 1
+                ),
                 item=item,
                 name=name,
                 n_samples=len(row_item[0][0]),
@@ -251,9 +255,9 @@ class Immediate:
             spmel, phase = self.proc.get_spmel(wav_prc)
             f0_norm = self.proc.extract_f0(wav=wav_prc, lo=lo, hi=hi)
         except Exception as e:
-            self.logger.error(f"Failed to generate: {fname}, {e.__str__()}")
+            logger.error(f"Failed to generate: {fname}, {e.__str__()}")
             return
-        self.logger.info(
+        logger.info(
             format_log_message(
                 strip_path(fname),
                 [
@@ -293,7 +297,9 @@ def iter_autocorrelation(signal: Tensor) -> Tensor:
     return correlation
 
 
-def format_log_message(fname: str, data_list: list[float], other: list[Any] = []) -> str:
+def format_log_message(
+    fname: str, data_list: list[float], other: list[Any] = []
+) -> str:
     precision = 5
     width = precision + 5
     format_string = "{:<25} " + " ".join(

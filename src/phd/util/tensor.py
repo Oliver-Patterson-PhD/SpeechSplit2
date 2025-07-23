@@ -112,6 +112,7 @@ def make_grid(tensor: Tensor) -> Tensor:
     return grid
 
 
+@torch.no_grad()
 def plot_batch(batch: Tensor, base: str) -> Figure:
     fig = figure()
     fig.set_size_inches(15.44, 27.45)
@@ -149,3 +150,7 @@ def pad_to(x: Tensor, y: Tensor) -> TensorPair:
     if x.size(dim=-1) > y.size(dim=-1):
         y = torch.nn.functional.pad(y, (0, x.size(dim=-1) - y.size(dim=-1)))
     return x, y
+
+
+def is_nan(x: Tensor) -> bool:
+    return True if x.isnan().any().item() else False

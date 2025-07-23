@@ -5,7 +5,7 @@ freq_3 = 1
 dim_neck_1 = 32
 dim_neck_2 = 32
 dim_neck_3 = 32
-dim_enc = 512
+dim_enc_1 = 512
 dim_enc_2 = 128
 dim_enc_3 = 256
 dim_rhy = 80
@@ -14,6 +14,7 @@ dim_pit = 257
 dim_freq = 80
 dim_spk_emb = 82
 dim_f0 = 257
+
 dim_dec = 512
 len_raw = 128
 chs_grp = 16

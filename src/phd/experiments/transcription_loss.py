@@ -1,6 +1,7 @@
 from itertools import product
 
 from ..transcribers import CompareItem, Transcriber
+from ..util import compute, config, logger
 from ..util.file import newpath, path
 from ..util.plot import plot_things
 from ..util.tensor import Tensor, pad_to
@@ -12,18 +13,15 @@ class TranscriptionLoss(Experiment):
 
     def load_audio(self, speaker: str, uttr: str) -> Tensor:
         subpath = self.parser.get_wavfile(speaker, uttr)
-        fullpath = path(self.config.paths.raw_wavs, subpath)
+        fullpath = path(config.paths.raw_wavs, subpath)
         raw, nonoise, nopop, wav = self.audproc.full_load_parts(fullpath, True)
         wav = wav.unsqueeze(0) if wav.dim() == 1 else wav
         return raw
 
     def run(self) -> None:
-        self.transcriber = Transcriber(
-            device=self.compute.device(),
-            config=self.config,
-        )
-        self.logger.debug("Running Transcription Loss")
-        self.compute.set_gpu()
+        self.transcriber = Transcriber(device=compute.device())
+        logger.debug("Running Transcription Loss")
+        compute.set_gpu()
         speakers = self.parser.speakers()
         speaker_dict: dict[str, set[str]] = {
             speaker: set(uttr for uttr in self.parser.get_utterances(speaker))
@@ -61,11 +59,11 @@ class TranscriptionLoss(Experiment):
                 sample=f"{uttr}-{spk1}-{spk2}",
                 things=plot_items,
                 utterances=uttrs,
-                sample_time=(wav1.size(dim=-1) // self.config.audio.sample_rate),
+                sample_time=(wav1.size(dim=-1) // config.audio.sample_rate),
                 ftype="png",
             )
         except RuntimeError as e:
-            self.logger.warn(f"Failed to plot: {uttr}, {spk1}-{spk2}")
+            logger.warn(f"Failed to plot: {uttr}, {spk1}-{spk2}")
             raise e
         message = CompareItem(
             f"{uttr}-{spk1}-{spk2}",
@@ -74,4 +72,4 @@ class TranscriptionLoss(Experiment):
             model=self.transcriber,
             text=realtext1.word,
         )
-        self.logger.info("\n" + message.__str__())
+        logger.info("\n" + message.__str__())

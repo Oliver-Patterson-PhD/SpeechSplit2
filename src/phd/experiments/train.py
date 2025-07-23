@@ -2,7 +2,7 @@ import time
 
 import torch
 
-from ..util import NanError
+from ..util import NanError, compute, config, logger
 from ..util.tensor import Tensor
 from .experiment import Experiment
 
@@ -23,26 +23,26 @@ def masked_mse(prediction: Tensor, ground_t: Tensor) -> Tensor:
 class Train(Experiment):
     def train(self) -> None:
         # Start training from scratch or resume training.
-        self.compute.set_gpu()
+        compute.set_gpu()
         self.load_data()
         start_iters = 0
-        if self.config.options.resume_iters:
-            self.logger.info("Resuming ...")
-            start_iters = self.config.options.resume_iters
-            self.config.options.num_iters += self.config.options.resume_iters
-            self.restore_model(self.config.options.resume_iters)
-            self.logger.info(str(self.optimizer))
-            self.logger.info("optimizer")
+        if config.options.resume_iters:
+            logger.info("Resuming ...")
+            start_iters = config.options.resume_iters
+            config.options.num_iters += config.options.resume_iters
+            self.restore_model(config.options.resume_iters)
+            logger.info(str(self.optimizer))
+            logger.info("optimizer")
 
         # Learning rate cache for decaying.
-        lr = self.config.training.lr
-        self.logger.info("Current learning rates, lr: {}.".format(lr))
+        lr = config.training.lr
+        logger.info("Current learning rates, lr: {}.".format(lr))
 
         # Start training.
         self.model.train()
         self.intrp.train()
         self.start_time = time.time()
-        if self.config.training.mask_loss:
+        if config.training.mask_loss:
             self.loss_fn = masked_mse
         else:
             self.loss_fn = torch.nn.MSELoss(reduction="mean")
@@ -51,12 +51,12 @@ class Train(Experiment):
             self.check_data()
 
         i = start_iters
-        self.logger.manual_pbar_start(
-            total=self.config.options.num_iters,
+        logger.manual_pbar_start(
+            total=config.options.num_iters,
             initial=i,
         )
-        self.logger.info("Start training...")
-        while i <= self.config.options.num_iters:
+        logger.info("Start training...")
+        while i <= config.options.num_iters:
             fname: str
             spk_id_org: str
             spmel_gt: Tensor
@@ -90,12 +90,12 @@ class Train(Experiment):
             #                   2. Train the model                            #
             # =============================================================== #
             # Prepare input data and apply random resampling
-            self.logger.trace_tensor(spmel_gt)
-            self.logger.trace_tensor(rhythm_input)
-            self.logger.trace_tensor(content_input)
-            self.logger.trace_tensor(pitch_input)
-            self.logger.trace_tensor(timbre_input)
-            self.logger.trace_tensor(len_crop)
+            logger.trace_tensor(spmel_gt)
+            logger.trace_tensor(rhythm_input)
+            logger.trace_tensor(content_input)
+            logger.trace_tensor(pitch_input)
+            logger.trace_tensor(timbre_input)
+            logger.trace_tensor(len_crop)
             content_pitch_input = self.prepare_input(
                 content_input,
                 pitch_input,
@@ -103,7 +103,7 @@ class Train(Experiment):
             )
 
             # Identity mapping loss
-            if self.config.options.return_latents:
+            if config.options.return_latents:
                 (
                     spmel_output,
                     code_exp_1,
@@ -137,9 +137,9 @@ class Train(Experiment):
             # =============================================================== #
             #                   3. Logging and saving checkpoints             #
             # =============================================================== #
-            self.logger.manual_pbar_update()
+            logger.manual_pbar_update()
             # Save model checkpoints
-            if i % self.config.options.ckpt_save_step == 0:
+            if i % config.options.ckpt_save_step == 0:
                 self.save_checkpoint(i)
                 self.writer.add_graph(
                     model=self.model,
@@ -154,7 +154,7 @@ class Train(Experiment):
             self.tb_add_scalar(name="train_loss_id", value=train_loss_id, step=i)
 
             # Print out training information.
-            if i % self.config.options.log_step == 0:
+            if i % config.options.log_step == 0:
                 self.log_training_step(
                     step=i,
                     loss=train_loss_id,
@@ -164,20 +164,20 @@ class Train(Experiment):
 
             if __debug__:
                 found_nan = False
-                found_nan |= self.logger.log_if_nan_ret(loss)
-                found_nan |= self.logger.log_if_nan_ret(loss_id)
-                found_nan |= self.logger.log_if_nan_ret(spmel_output)
-                if self.config.options.return_latents:
-                    found_nan |= self.logger.log_if_nan_ret(code_exp_1)
-                    found_nan |= self.logger.log_if_nan_ret(code_exp_2)
-                    found_nan |= self.logger.log_if_nan_ret(code_exp_3)
-                    found_nan |= self.logger.log_if_nan_ret(code_exp_4)
+                found_nan |= logger.log_if_nan_ret(loss)
+                found_nan |= logger.log_if_nan_ret(loss_id)
+                found_nan |= logger.log_if_nan_ret(spmel_output)
+                if config.options.return_latents:
+                    found_nan |= logger.log_if_nan_ret(code_exp_1)
+                    found_nan |= logger.log_if_nan_ret(code_exp_2)
+                    found_nan |= logger.log_if_nan_ret(code_exp_3)
+                    found_nan |= logger.log_if_nan_ret(code_exp_4)
                 if found_nan:
                     self.log_training_step(i, train_loss_id)
-                    self.logger.error("Step has NaN loss")
-                    self.logger.error(f"filename: {fname}")
-                    self.logger.error(f"tensor: {spmel_gt.any()}")
+                    logger.error("Step has NaN loss")
+                    logger.error(f"filename: {fname}")
+                    logger.error(f"tensor: {spmel_gt.any()}")
                     self.writer.flush()
-                    self.logger.manual_pbar_end()
+                    logger.manual_pbar_end()
                     raise NanError(f"{fname}")
-        self.logger.manual_pbar_end()
+        logger.manual_pbar_end()

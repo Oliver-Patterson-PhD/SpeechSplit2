@@ -2,6 +2,7 @@ from typing import Self
 
 import torch
 
+from ..util import compute, config, logger
 from ..util.file import newpath, path
 from .experiment import Experiment
 
@@ -22,20 +23,20 @@ class ExportLatents(Experiment):
 
     @torch.no_grad()
     def export(self: Self) -> None:
-        self.logger.info("Running export")
+        logger.info("Running export")
         self.load_trained(
             path("speechsplit2-large", "trainmask-large-SpeechSplit2-2024-11-07.ckpt")
         )
-        self.logger.info("Full Process On")
-        self.compute.set_gpu()
-        self.experiment_dir = newpath(self.experiment_dir, self.config.options.dataset_name)
+        logger.info("Full Process On")
+        compute.set_gpu()
+        self.experiment_dir = newpath(self.experiment_dir, config.options.dataset_name)
         self.process()
 
     def process(self: Self) -> None:
         self.load_data(singleitem=True, sequential=True)
         proc_data = sorted([item for item in self.data_loader], key=lambda i: i[0])
         proc_name = set(self.parser.sample_name(item[0][0]) for item in proc_data)
-        self.logger.trace_var(proc_name, "DEBUG")
+        logger.trace_var(proc_name, "DEBUG")
         for name in proc_name:
             items: list[DataType] = sorted(
                 [item for item in proc_data if str(item[0][0]).find(name) != -1],
@@ -74,18 +75,18 @@ class ExportLatents(Experiment):
         timbre_input: torch.Tensor,
         len_crop: torch.Tensor,
     ) -> None:
-        spmel_gt = spmel_gt.to(self.compute.device())
-        rhythm_input = rhythm_input.to(self.compute.device())
-        content_input = content_input.to(self.compute.device())
-        pitch_input = pitch_input.to(self.compute.device()).unsqueeze(-1)
-        timbre_input = timbre_input.to(self.compute.device())
-        len_crop = len_crop.to(self.compute.device())
+        spmel_gt = spmel_gt.to(compute.device())
+        rhythm_input = rhythm_input.to(compute.device())
+        content_input = content_input.to(compute.device())
+        pitch_input = pitch_input.to(compute.device()).unsqueeze(-1)
+        timbre_input = timbre_input.to(compute.device())
+        len_crop = len_crop.to(compute.device())
         content_pitch_input = self.prepare_input(
             content_input,
             pitch_input,
             len_crop,
         )
-        assert self.config.options.return_latents
+        assert config.options.return_latents
         (
             spmel_output,
             code_exp_1,
@@ -98,7 +99,7 @@ class ExportLatents(Experiment):
             timbre_input,
         )
         fbase = (fname[0].rpartition("/")[-1]).rpartition(".")[0]
-        self.logger.debug(f"Saving: {fbase}")
+        logger.debug(f"Saving: {fbase}")
         self.save_tensor(code_exp_1, f"{fbase}-L1.pt", save_raw=True)
         self.save_tensor(code_exp_2, f"{fbase}-L2.pt", save_raw=True)
         self.save_tensor(code_exp_3, f"{fbase}-L3.pt", save_raw=True)

@@ -1,11 +1,6 @@
-# from tomllib import load as loadtoml
-from typing import Optional, Self
-
 import torch
 
-from ..util import Config, Logger
-# from models.hifi_gan import Generator as HifiGanGenerator
-# from models.hifi_gan import HiFiConfig
+from ..util import logger
 from .synthesizer import Synthesizer
 
 
@@ -13,19 +8,8 @@ class HiFiGAN(Synthesizer):
     model_name: str = "hifigan"
 
     @torch.no_grad()
-    def __init__(
-        self: Self,
-        device: torch.device,
-        config: Optional[Config] = None,
-    ) -> None:
+    def __init__(self, device: torch.device) -> None:
         self.device = device
-        self.config = config or Config()
-        # data_dir = self.config.paths.full_models
-        # config_file = f"{data_dir}/{self.model_name}.toml"
-        # tomlconf = {**loadtoml(open(config_file, "rb")), "fmax_for_loss": None}
-        # self.configtoml = HiFiConfig(**tomlconf)
-        # self.model = HifiGanGenerator(hifi_config=self.configtoml).to(device)
-        self.logger = Logger()
         self.hifigan, vocoder_train_setup, self.denoiser = torch.hub.load(
             "NVIDIA/DeepLearningExamples:torchhub",
             "nvidia_hifigan",
@@ -43,7 +27,7 @@ class HiFiGAN(Synthesizer):
         ]
 
         for k in CHECKPOINT_SPECIFIC_ARGS:
-            self.logger.debug(f"{k}: {vocoder_train_setup.get(k, None)}")
+            logger.debug(f"{k}: {vocoder_train_setup.get(k, None)}")
         self.div_val = vocoder_train_setup.get("max_wav_value", 1)
         self.hifigan.to(self.device)
         self.denoiser.to(self.device)
@@ -52,10 +36,7 @@ class HiFiGAN(Synthesizer):
         self.denoiser.eval()
 
     @torch.no_grad()
-    def spect2wav(
-        self: Self,
-        spect: torch.Tensor,
-    ) -> torch.Tensor:
+    def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
         retval = (
             self.denoiser(
                 self.hifigan(spect.T.to(self.device)).float().squeeze(1),

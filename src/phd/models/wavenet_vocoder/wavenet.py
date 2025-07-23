@@ -2,7 +2,7 @@
 from __future__ import absolute_import, print_function, with_statement
 
 import math
-from typing import Callable, List, Optional, Self
+from typing import Callable, List, Optional, Self, Iterable
 
 import torch
 
@@ -10,23 +10,18 @@ from .mixture import sample_from_discretized_mix_logistic
 from .modules import Conv1d1x1, ConvTranspose2d, Embedding, ResidualConv1dGLU
 
 
+## Expand global conditioning features to all time steps
+# @param B      Batch size.
+# @param T      Time length.
+# @param g      Global features, (B x C) or (B x C x 1).
+# @param bct    returns (B x C x T) if True, otherwise (B x T x C)
+# @return       Tensor B x C x T or B x T x C or None
 def _expand_global_features(
     B: int,
     T: int,
     g: Optional[torch.Tensor],
     bct: bool = True,
-) -> Optional[torch.Tensor]:
-    """Expand global conditioning features to all time steps
-
-    Args:
-        B (int): Batch size.
-        T (int): Time length.
-        g (Tensor): Global features, (B x C) or (B x C x 1).
-        bct (bool) : returns (B x C x T) if True, otherwise (B x T x C)
-
-    Returns:
-        Tensor: B x C x T or B x T x C or None
-    """
+) -> torch.Tensor | None:
     if g is None:
         return None
     g = g.unsqueeze(-1) if g.dim() == 2 else g
@@ -38,25 +33,18 @@ def _expand_global_features(
         return g_btc.contiguous()
 
 
+## Compute receptive field size
+# @param total_layers   total layers
+# @param num_cycles     cycles
+# @param kernel_size    kernel size
+# @param dilation       lambda to compute dilation factor. ``lambda x : 1`` to disable dilated convolution.
+# @return               receptive field size in sample
 def receptive_field_size(
     total_layers: int,
     num_cycles: int,
     kernel_size: int,
     dilation: Callable[[int], int] = lambda x: 2**x,
 ) -> int:
-    """Compute receptive field size
-
-    Args:
-        total_layers (int): total layers
-        num_cycles (int): cycles
-        kernel_size (int): kernel size
-        dilation (lambda): lambda to compute dilation factor. ``lambda x : 1``
-          to disable dilated convolution.
-
-    Returns:
-        int: receptive field size in sample
-
-    """
     assert total_layers % num_cycles == 0
     layers_per_cycle = total_layers // num_cycles
     dilations = [dilation(i % layers_per_cycle) for i in range(total_layers)]
@@ -65,6 +53,7 @@ def receptive_field_size(
 
 ## The WaveNet model that supports local and global conditioning.
 class WaveNet(torch.nn.Module):
+    conv_layers: Iterable[torch.nn.Module]
 
     ## Initialiser
     # @param out_channels                   Output channels.

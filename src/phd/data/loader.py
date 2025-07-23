@@ -5,7 +5,7 @@ __all__ = [
 
 import torch
 
-from ..util import Compute, Config, Logger
+from ..util import compute, config, logger
 from ..util.file import exists, path
 from ..util.tensor import Tensor, TensorTriple
 from .audio_procs import AudioProcs
@@ -32,7 +32,7 @@ class MyDataset(torch.utils.data.Dataset[DataLoadType]):
     full_info: bool
     map_device: torch.device
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self) -> None:
         self.dataset_name = config.options.dataset_name
         self.sample_rate = config.audio.sample_rate
         self.max_len_seq = config.model.max_len_seq
@@ -42,8 +42,8 @@ class MyDataset(torch.utils.data.Dataset[DataLoadType]):
         self.path_fullwavs = config.paths.fullwavs
         self.path_spmels = config.paths.spmels
         self.full_info = not config.options.train
-        self.myproc = AudioProcs(config)
-        self.parser = DatasetParser(config)
+        self.myproc = AudioProcs()
+        self.parser = DatasetParser()
         self.map_device = torch.device("cpu")
         self.dataset = [
             (
@@ -52,7 +52,9 @@ class MyDataset(torch.utils.data.Dataset[DataLoadType]):
                 self.load_from_meta(self.parser.get_wavfile(speaker, uttr)),
                 self.parser.get_wavfile(speaker, uttr),
             )
-            for speaker in Logger().progress_bar(self.parser.speakers(), desc="speakers loaded")
+            for speaker in logger.progress_bar(
+                self.parser.speakers(), desc="speakers loaded"
+            )
             for uttr in self.parser.get_utterances(speaker)
             if self.uttr_exists(speaker, uttr)
         ]
@@ -64,7 +66,7 @@ class MyDataset(torch.utils.data.Dataset[DataLoadType]):
         )
 
     def pinnable(self) -> bool:
-        return Compute().could_be_gpu() and self.map_device == torch.device("cpu")
+        return compute.could_be_gpu() and self.map_device == torch.device("cpu")
 
     def __len__(self) -> int:
         return self.num_tokens
@@ -150,13 +152,12 @@ def worker_init_fn(x: int) -> None:
 
 
 def get_loader(
-    config: Config, sequential: bool = False, singleitem: bool = False
+    sequential: bool = False, singleitem: bool = False
 ) -> torch.utils.data.DataLoader[DataLoadType]:
     dataset: torch.utils.data.Dataset[DataLoadType]
     sampler: torch.utils.data.sampler.Sampler  # type: ignore
-    dataset = MyDataset(config)
-    device = Compute().device()
-    logger = Logger()
+    dataset = MyDataset()
+    device = compute.device()
     logger.debug(f"Initialising DataLoader for {config.options.dataset_name}")
     batch_size = config.dataloader.batch_size
     samplier = config.dataloader.samplier
@@ -169,7 +170,9 @@ def get_loader(
             replacement=True,
             generator=torch.Generator(device=device),
             num_samples=(
-                (len(dataset) * samplier) if singleitem else (batch_size * len(dataset) * samplier)
+                (len(dataset) * samplier)
+                if singleitem
+                else (batch_size * len(dataset) * samplier)
             ),
         )
     data_loader = torch.utils.data.DataLoader(

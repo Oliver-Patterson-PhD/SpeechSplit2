@@ -1,14 +1,12 @@
 __all__ = [
-    "Compute",
-    "Config",
-    "LogLevel",
-    "Logger",
+    "compute",
+    "config",
+    "logger",
     "NanError",
-    "RunTests",
 ]
 
 
-from .compute import Compute
-from .config import Config, RunTests
+from .compute import compute
+from .config import config
 from .exception import NanError
-from .logging import Logger, LogLevel
+from .logging import logger

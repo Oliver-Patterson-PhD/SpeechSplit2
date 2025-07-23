@@ -5,12 +5,9 @@ import matplotlib
 from torchmetrics.audio.dnsmos import DeepNoiseSuppressionMeanOpinionScore
 
 from ..data import AudioProcs, DatasetParser
-from ..util import Compute, Config, Logger
-from ..util.file import newpath, path, walkdirs, walkfiles, exists
+from ..util import config, logger
+from ..util.file import exists, newpath, path, walkdirs, walkfiles
 
-logger = Logger()
-config = Config("base")
-compute = Compute()
 parser = DatasetParser()
 processor = AudioProcs()
 

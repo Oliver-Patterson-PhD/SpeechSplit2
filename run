@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+run_test(){
+	uv run --dev --extra "${PHD_EXTRA}" python -m mypy ./src/phd
+}
+
+run_experiment(){
+	uv run --dev --extra "${PHD_EXTRA}" "$@"
+}
+
+runtype="$1"; shift;
+case "${runtype}" in
+	experiment) run_experiment "$@" ;;
+	test) run_test "$@" ;;
+	*) exit 1 ;;
+esac

@@ -3,6 +3,7 @@ from itertools import product
 import matplotlib
 import torch
 
+from ..util import config, logger
 from ..util.file import basename, newpath, path
 from ..util.math import find_peaks
 from ..util.plot import plot_things
@@ -17,8 +18,8 @@ class SyllableEstimation(Experiment):
     dims_log: str = "TRACE"
 
     def run(self) -> None:
-        self.logger.debug("Running Syllable Estimation")
-        self.kernel_size = int(self.config.audio.sample_rate * self.kernel_time)
+        logger.debug("Running Syllable Estimation")
+        self.kernel_size = int(config.audio.sample_rate * self.kernel_time)
         self.kernel_hop = int(self.kernel_size * self.kernel_overlap)
         self.fold_params = dict(
             kernel_size=self.kernel_size,
@@ -38,7 +39,7 @@ class SyllableEstimation(Experiment):
             for uttr in sorted(speaker_dict[spk1] & speaker_dict[spk2])
             if spk1 != spk2 and uttr not in {"SA1", "SA2"}
         ]
-        self.logger.info(f"Found {len(speakers)} speakers")
+        logger.info(f"Found {len(speakers)} speakers")
 
         # runs = [
         #     (speaker, fname)
@@ -47,7 +48,7 @@ class SyllableEstimation(Experiment):
         # ]
         # [
         #     self.run_estimation(speaker, fname)  # type: ignore[func-returns-value]
-        #     for speaker, fname in self.logger.progress_bar(runs, unit=" files")
+        #     for speaker, fname in logger.progress_bar(runs, unit=" files")
         # ]
 
     def get_feats(self, wav: Tensor, speaker: str) -> tuple[Tensor, tuple[str, ...]]:
@@ -113,8 +114,10 @@ class SyllableEstimation(Experiment):
     def run_loss(self, spk1: str, spk2: str, uttr: str) -> None:
         assert self.parser.is_timit()
         try:
-            self.logger.debug(f"Running loss with {uttr} between {spk1} and {spk2}")
-            wav1, wav2 = pad_to(self.load_audio(spk1, uttr), self.load_audio(spk2, uttr))
+            logger.debug(f"Running loss with {uttr} between {spk1} and {spk2}")
+            wav1, wav2 = pad_to(
+                self.load_audio(spk1, uttr), self.load_audio(spk2, uttr)
+            )
             plot_items: list[tuple[Tensor, str | tuple[str, ...]]] = [
                 (wav1.squeeze(), "waveform"),
                 self.get_feats(wav1, spk1),
@@ -130,10 +133,12 @@ class SyllableEstimation(Experiment):
             fig.set_dpi(300)
             label_colour = "k"
             sample = f"{uttr}-{spk1}-{spk2}"
-            sample_time = wav1.size(dim=-1) / self.config.audio.sample_rate
+            sample_time = wav1.size(dim=-1) / config.audio.sample_rate
             fig.suptitle(f"Sample: {sample} ({uttrs[0].word})")
             subplots = fig.subplots(len(plot_items), 1)
-            for i, ((item, name), word, ax) in enumerate(zip(plot_items, uttrs, subplots)):
+            for i, ((item, name), word, ax) in enumerate(
+                zip(plot_items, uttrs, subplots)
+            ):
                 sample_div = 1 if sample_time is None else item.size(-1) / sample_time
                 if isinstance(name, tuple):
                     ax = self.plot_features(
@@ -153,10 +158,10 @@ class SyllableEstimation(Experiment):
                             sample_div=sample_div,
                         )
                 for phon in word.phones:
-                    start_time = phon.start / self.config.audio.sample_rate
+                    start_time = phon.start / config.audio.sample_rate
                     half_time = (
                         phon.start + ((phon.end - phon.start) / 2)
-                    ) / self.config.audio.sample_rate
+                    ) / config.audio.sample_rate
                     ax.annotate(
                         text=phon.phon,
                         xy=(half_time, ax.get_ylim()[1]),
@@ -183,7 +188,7 @@ class SyllableEstimation(Experiment):
             fig.tight_layout()
             matplotlib.pyplot.close(fig=fig)
         except RuntimeError as e:
-            self.logger.warn(f"Failed to plot: {uttr}, {spk1}-{spk2}")
+            logger.warn(f"Failed to plot: {uttr}, {spk1}-{spk2}")
             raise e
 
     def run_estimation(self, speaker: str, fname: str) -> None:
@@ -218,45 +223,45 @@ class SyllableEstimation(Experiment):
                 sample=basename(fullpath),
                 things=plot_items,
                 utterances=self.parser.get_utterance(fullpath),
-                sample_time=(wav.size(dim=-1) / self.config.audio.sample_rate),
+                sample_time=(wav.size(dim=-1) / config.audio.sample_rate),
                 ftype="png",
             )
         except RuntimeError:
-            self.logger.warn(f"Failed to plot: {speaker}, {fname}")
+            logger.warn(f"Failed to plot: {speaker}, {fname}")
             return
 
     def load_audio(self, speaker: str, fname: str) -> Tensor:
         subpath = self.parser.get_wavfile(speaker, basename(fname))
-        fullpath = path(self.config.paths.raw_wavs, subpath)
+        fullpath = path(config.paths.raw_wavs, subpath)
         raw, nonoise, nopop, wav = self.audproc.full_load_parts(fullpath, True)
         wav = wav.unsqueeze(0) if wav.dim() == 1 else wav
-        self.logger.trace_tensor(wav, self.dims_log)
+        logger.trace_tensor(wav, self.dims_log)
         return raw if self.parser.is_timit() else wav
 
     def intensity(self, audio: Tensor) -> Tensor:
         intensity = torch.nn.functional.avg_pool1d(audio.abs(), **self.fold_params)
         norm_intensity = intensity / intensity.max()
-        self.logger.trace_tensor(norm_intensity, self.dims_log)
+        logger.trace_tensor(norm_intensity, self.dims_log)
         return norm_intensity
 
     def spectrum(self, wav: Tensor) -> Tensor:
         spmel, _ = self.audproc.get_spmel(wav)
-        self.logger.trace_tensor(spmel, self.dims_log)
+        logger.trace_tensor(spmel, self.dims_log)
         return spmel
 
     def peaks(self, intensity: Tensor) -> Tensor:
         intensity_peaks = find_peaks(intensity, 8) * (intensity > intensity.median())
-        self.logger.trace_tensor(intensity_peaks, self.dims_log)
+        logger.trace_tensor(intensity_peaks, self.dims_log)
         return intensity_peaks
 
     def pitch_contour(self, wav: Tensor, speaker: str) -> Tensor:
         lo, hi = self.audproc.get_f0_lohi(self.parser.sex(speaker))
-        self.logger.trace_var(lo, self.dims_log)
-        self.logger.trace_var(hi, self.dims_log)
+        logger.trace_var(lo, self.dims_log)
+        logger.trace_var(hi, self.dims_log)
         pitch_contour = self.audproc.extract_f0(
             wav.squeeze(), lo, hi, hop_len=self.kernel_hop, otype=1
         )
-        self.logger.trace_tensor(pitch_contour, self.dims_log)
+        logger.trace_tensor(pitch_contour, self.dims_log)
         return pitch_contour
 
     def is_voiced(self, pitch_contour: torch.Tensor) -> Tensor:

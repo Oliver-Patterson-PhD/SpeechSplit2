@@ -4,14 +4,13 @@ from ..data import PreProcess
 from ..experiments import (DisVoiceTest, Immediate, Swapper,
                            SyllableEstimation, TestSamples, Train,
                            TranscriptionLoss)
-from ..util import Compute, Config, Logger, RunTests
+from ..util import compute, config, logger
+from ..util.config import RunTests
 
 
 def main() -> None:
     torch.backends.cudnn.benchmark = True
-    config = Config("base")
-    logger = Logger()
-    Compute().set_gpu()
+    compute.set_gpu()
     logger.debug("Starting Main")
     if config.options.run_tests == RunTests.NOTHING:
         return
@@ -21,32 +20,32 @@ def main() -> None:
     logger.trace_var(modelfiles, level="DEBUG")
 
     try:
-        imm = Immediate(config)
+        imm = Immediate()
         imm.test()
         if imm.exit_after:
             logger.info("Returning from Immediate test")
             return
 
         if RunTests.DISVOICE in config.options.run_tests:
-            disvoice = DisVoiceTest(config)
+            disvoice = DisVoiceTest()
             disvoice.run()
 
-        PreProcess(config)
+        PreProcess()
 
         if RunTests.SYLLABLE_ESTIMATION in config.options.run_tests:
-            syllable = SyllableEstimation(config)
+            syllable = SyllableEstimation()
             syllable.run()
 
         if RunTests.TRANSCRIPTION_LOSS in config.options.run_tests:
-            transcription = TranscriptionLoss(config)
+            transcription = TranscriptionLoss()
             transcription.run()
 
         if RunTests.TEST in config.options.run_tests:
-            tester = TestSamples(config)
+            tester = TestSamples()
             tester.test()
 
         if RunTests.TRAIN in config.options.run_tests:
-            trainer = Train(config)
+            trainer = Train()
             trainer.train()
 
         run_saves: bool = (
@@ -54,7 +53,7 @@ def main() -> None:
             & config.options.run_tests
         ).__bool__()
         if run_saves:
-            swapper = Swapper(config)
+            swapper = Swapper()
             if RunTests.SAVE_LATENTS in config.options.run_tests:
                 swapper.save_latents()
             if RunTests.SWAP_LATENTS in config.options.run_tests:

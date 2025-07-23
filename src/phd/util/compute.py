@@ -1,13 +1,13 @@
 __all__ = [
-    "Compute",
+    "compute",
 ]
 
 from typing import Self, Tuple
 
 import torch
 
+from .logging import logger
 from .patterns import Singleton
-from .logging import Logger
 
 
 ## Compute device handler
@@ -50,7 +50,7 @@ class Compute(metaclass=Singleton):
     def set_cpu(
         self: Self,
     ) -> None:
-        Logger().info("Explicitly setting CPU for inference.")
+        logger.info("Explicitly setting CPU for inference.")
         self.__current_device = torch.device("cpu")
         torch.set_default_device("cpu")
         return None
@@ -58,7 +58,7 @@ class Compute(metaclass=Singleton):
     def set_gpu(
         self: Self,
     ) -> None:
-        Logger().info("Explicitly setting GPU for inference.")
+        logger.info("Explicitly setting GPU for inference.")
         self.__current_device = self.__device
         torch.set_default_device(self.__device)
         return None
@@ -89,7 +89,7 @@ class Compute(metaclass=Singleton):
     def print_compute(
         self: Self,
     ) -> None:
-        Logger().info(self.__str__())
+        logger.info(self.__str__())
 
     def is_cpu(
         self: Self,
@@ -105,3 +105,6 @@ class Compute(metaclass=Singleton):
         self: Self,
     ) -> bool:
         return self.__device != torch.device("cpu")
+
+
+compute = Compute()

@@ -7,7 +7,7 @@ from ..models.whisper.loader import load_model
 from ..models.whisper.model import Whisper
 from ..models.whisper.transcribe import transcribe
 from ..models.whisper.utils import ResultWriter
-from ..util import Config
+from ..util import config, logger
 from ..util.file import path
 
 
@@ -44,7 +44,7 @@ class Transcriber:
     writer: ResultWriter
     model: Whisper
 
-    def __init__(self: Self, device: torch.device, config: Config) -> None:
+    def __init__(self: Self, device: torch.device) -> None:
         self.device = device
         self.model_name = config.options.whisper_type
         self.model = load_model(
@@ -68,9 +68,7 @@ class Transcriber:
             **self.model_args,
         )
         if len(result["text"]) == 0:
-            from util import Logger
-
-            Logger().trace(f"Unable to transcribe: {tuple(padded_melspec.shape)}, {name}")
+            logger.trace(f"Unable to transcribe: {tuple(padded_melspec.shape)}, {name}")
 
         out_str = ""
         for segment in result["segments"]:

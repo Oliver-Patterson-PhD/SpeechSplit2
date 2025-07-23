@@ -1,5 +1,5 @@
 __all__ = [
-    "Logger",
+    "logger",
     "LogLevel",
 ]
 
@@ -12,7 +12,7 @@ from shutil import get_terminal_size
 from sys import _getframe
 from time import gmtime, strftime
 from types import FrameType
-from typing import Any, List, Optional, Self, TextIO, overload, Iterable
+from typing import Any, Iterable, List, Optional, Self, TextIO
 
 from torch import Tensor
 from tqdm import tqdm
@@ -28,7 +28,7 @@ class LogLevel(IntEnum):
     ERROR = 90
     FATAL = 255
 
-    def __str__(self: Self) -> str:
+    def __str__(self) -> str:
         match self:
             case self.TRACE:
                 return "TRACE"
@@ -45,7 +45,7 @@ class LogLevel(IntEnum):
             case _:
                 raise ValueError
 
-    def __repr__(self: Self) -> str:
+    def __repr__(self) -> str:
         return str(self)
 
     @classmethod
@@ -66,7 +66,7 @@ class Logger(metaclass=Singleton):
     __date_format: str = "%Y/%m/%d %H:%M:%S"
 
     def __init__(
-        self: Self, level: Optional[LogLevel] = None, flush: Optional[bool] = None
+        self, level: Optional[LogLevel] = None, flush: Optional[bool] = None
     ) -> None:
         if level is not None:
             self.__level = level
@@ -76,23 +76,23 @@ class Logger(metaclass=Singleton):
     def enable_callgraph(self) -> None:
         self.__print_callgraph = True
 
-    def __reduce__(self: Self):
+    def __reduce__(self):
         print(f"attempted __reduce__ on {self.__class__.__name__}")
         return (self.__class__, ())
 
-    def __format_caller(self: Self, frame: FrameType) -> str:
+    def __format_caller(self, frame: FrameType) -> str:
         base = "/SpeechSplit2/"
         name = frame.f_code.co_qualname
         fname = frame.f_code.co_filename.partition(base)[2]
         return f"[{fname}:{frame.f_lineno}] {name}"
 
-    def __format_callgraph(self: Self, callgraph: str) -> str:
+    def __format_callgraph(self, callgraph: str) -> str:
         # add spaces equal to additional characters in the prefix of the format string
         prefix_str = "\n" + (" " * (len(self.__date_format) + 13))
         calls = [call.strip("'") for call in callgraph.strip("[]").split(", ")]
         return prefix_str.join(calls) + prefix_str
 
-    def __get_caller(self: Self, depth: int = 1) -> str:
+    def __get_caller(self, depth: int = 1) -> str:
         if self.__print_callgraph:
             frame: FrameType | None = inspect.currentframe()
             assert frame is not None
@@ -113,7 +113,7 @@ class Logger(metaclass=Singleton):
             assert tmp_frame is not None
             return tmp_frame.f_code.co_qualname
 
-    def __format_msg(self: Self, level: LogLevel, caller: str, message: str) -> str:
+    def __format_msg(self, level: LogLevel, caller: str, message: str) -> str:
         if self.__print_callgraph:
             return "{} - {} - {} - {}".format(
                 strftime("%Y/%m/%d %H:%M:%S", gmtime()),
@@ -126,11 +126,11 @@ class Logger(metaclass=Singleton):
                 strftime("%Y/%m/%d %H:%M:%S", gmtime()), caller, str(level), message
             )
 
-    def __log(self: Self, level: LogLevel, caller: str, message: str) -> None:
+    def __log(self, level: LogLevel, caller: str, message: str) -> None:
         fullmsg = self.__format_msg(level=level, caller=caller, message=message)
         self.unformatted(level=level, fullmsg=fullmsg)
 
-    def unformatted(self: Self, level: LogLevel | str, fullmsg: str) -> None:
+    def unformatted(self, level: LogLevel | str, fullmsg: str) -> None:
         level = self.__get_level(level)
         if self.__file is not None or level >= self.__level:
             if level >= self.__level:
@@ -141,10 +141,10 @@ class Logger(metaclass=Singleton):
                 print(fullmsg, file=self.__file, flush=self.__flush)
         return None
 
-    def __is_nan(self: Self, x: Tensor) -> bool:
+    def __is_nan(self, x: Tensor) -> bool:
         return True if x.isnan().any().item() else False
 
-    def __get_passed_varnames(self: Self) -> List[str]:
+    def __get_passed_varnames(self) -> List[str]:
         frame = inspect.currentframe()
         assert frame is not None
         finfo = inspect.getouterframes(frame)[2]
@@ -154,32 +154,24 @@ class Logger(metaclass=Singleton):
         args = string[string.find("(") + 1 : -1].split(",")
         return [i.split("=")[1].strip() if i.find("=") != -1 else i for i in args]
 
-    def __get_level(self: Self, level: LogLevel | str) -> LogLevel:
+    def __get_level(self, level: LogLevel | str) -> LogLevel:
         return level if isinstance(level, LogLevel) else LogLevel[level]
 
-    def get_level(self: Self) -> LogLevel:
+    def get_level(self) -> LogLevel:
         return self.__level
 
-    @overload
-    def set_level(self: Self, level: str) -> None:
-        pass
-
-    @overload
-    def set_level(self: Self, level: LogLevel) -> None:
-        pass
-
-    def set_level(self: Self, level: LogLevel | str) -> None:
+    def set_level(self, level: LogLevel | str) -> None:
         self.__level = self.__get_level(level)
 
-    def get_file(self: Self) -> Optional[TextIO]:
+    def get_file(self) -> Optional[TextIO]:
         return self.__file
 
-    def set_file(self: Self, file: str) -> None:
+    def set_file(self, file: str) -> None:
         makedirs(dirname(file), exist_ok=True)
         self.__file = open(file, "wt", encoding="utf-8")
 
     def input(
-        self: Self,
+        self,
         message: str,
         prompt: str = "",
         level: LogLevel | str = LogLevel.INFO,
@@ -190,7 +182,7 @@ class Logger(metaclass=Singleton):
         return input(prompt)
 
     def input_with_default(
-        self: Self,
+        self,
         message: str,
         default: str,
         prompt: str = "",
@@ -206,67 +198,61 @@ class Logger(metaclass=Singleton):
         else:
             return default
 
-    def trace(self: Self, message: str, depth: int = 1) -> None:
+    def trace(self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.TRACE, caller=self.__get_caller(depth), message=message
         )
 
-    def debug(self: Self, message: str, depth: int = 1) -> None:
+    def debug(self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.DEBUG, caller=self.__get_caller(depth), message=message
         )
 
-    def info(self: Self, message: str, depth: int = 1) -> None:
+    def info(self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.INFO, caller=self.__get_caller(depth), message=message
         )
 
-    def warn(self: Self, message: str, depth: int = 1) -> None:
+    def warn(self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.WARN, caller=self.__get_caller(depth), message=message
         )
 
-    def error(self: Self, message: str, depth: int = 1) -> None:
+    def error(self, message: str, depth: int = 1) -> None:
         self.__log(
             level=LogLevel.ERROR, caller=self.__get_caller(depth), message=message
         )
 
-    def fatal(self: Self, message: str | Exception, depth: int = 1) -> None:
+    def fatal(self, message: str | Exception, depth: int = 1) -> None:
         self.__flush = True
         self.__log(
             level=LogLevel.FATAL, caller=self.__get_caller(depth), message=str(message)
         )
 
-    def trace_var(self: Self, var: Any, level: LogLevel | str = LogLevel.TRACE) -> None:
+    def trace_var(self, var: Any, level: LogLevel | str = LogLevel.TRACE) -> None:
         self.__log(
             level=self.__get_level(level),
             caller=self.__get_caller(),
             message=f"{self.__get_passed_varnames()[0]}: {pformat(var, indent=4)}",
         )
 
-    def trace_tensor(
-        self: Self, var: Tensor, level: LogLevel | str = LogLevel.TRACE
-    ) -> None:
+    def trace_tensor(self, var: Tensor, level: LogLevel | str = LogLevel.TRACE) -> None:
         self.__log(
             level=self.__get_level(level),
             caller=self.__get_caller(),
             message=f"{self.__get_passed_varnames()[0]}: ({var.shape})",
         )
 
-    def trace_nans(
-        self: Self, x: Tensor, level: LogLevel | str = LogLevel.ERROR
-    ) -> None:
+    def trace_nans(self, x: Tensor, level: LogLevel | str = LogLevel.ERROR) -> None:
         self.__log(
             level=self.__get_level(level),
             caller=self.__get_caller(),
             message=f"{self.__get_passed_varnames()[0]}: {
-                "Has NaNs" if self.__is_nan(x) else "No NaNs"
+                'Has NaNs' if self.__is_nan(x) else 'No NaNs'
             }",
         )
 
-    def log_if_nan(
-        self: Self, x: Tensor, level: LogLevel | str = LogLevel.ERROR
-    ) -> None:
+    def log_if_nan(self, x: Tensor, level: LogLevel | str = LogLevel.ERROR) -> None:
         if self.__is_nan(x):
             self.__log(
                 level=self.__get_level(level),
@@ -274,9 +260,7 @@ class Logger(metaclass=Singleton):
                 message=f"{self.__get_passed_varnames()[0]}: Has NaNs",
             )
 
-    def log_if_nan_ret(
-        self: Self, x: Tensor, level: LogLevel | str = LogLevel.ERROR
-    ) -> bool:
+    def log_if_nan_ret(self, x: Tensor, level: LogLevel | str = LogLevel.ERROR) -> bool:
         if self.__is_nan(x):
             self.__log(
                 level=self.__get_level(level),
@@ -288,27 +272,26 @@ class Logger(metaclass=Singleton):
             return False
 
     def progress_bar[T](
-        self: Self, iter: Iterable[T], *args: Any, **kwargs: Any
+        self, iter: Iterable[T], *args: Any, **kwargs: Any
     ) -> Iterable[T]:
         self.__pbar_running = True
         for item in tqdm(iter, *args, **kwargs):
             yield item
         self.__pbar_running = False
 
-    def manual_pbar_start(
-        self: Self, *args: Any, **kwargs: Any
-    ) -> None:
+    def manual_pbar_start(self, *args: Any, **kwargs: Any) -> None:
         self.__pbar_running = True
         self.__manual_pbar = tqdm(*args, **kwargs)
 
-    def manual_pbar_update(
-        self: Self, *args: Any, **kwargs: Any
-    ) -> None:
+    def manual_pbar_update(self, *args: Any, **kwargs: Any) -> None:
         self.__manual_pbar.update
 
-    def manual_pbar_end(self: Self) -> None:
+    def manual_pbar_end(self) -> None:
         self.__manual_pbar.close
         self.__pbar_running = False
         return
         self.__pbar_running = False
         return
+
+
+logger = Logger()

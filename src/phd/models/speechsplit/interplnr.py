@@ -2,14 +2,11 @@ from typing import Self, Tuple
 
 import torch
 
-from ...util import Config
+from ...util import config
 
 
 class InterpLnr(torch.nn.Module):
-    def __init__(
-        self: Self,
-        config: Config,
-    ) -> None:
+    def __init__(self: Self) -> None:
         super().__init__()
         self.max_len_pad = config.model.max_len_pad
         self.max_len_seg = config.model.max_len_seg
@@ -66,7 +63,9 @@ class InterpLnr(torch.nn.Module):
         idx_mask_org = idx_scaled_org < (len_seq_rp - 1).unsqueeze(-1)
         idx_mask_final = idx_mask & idx_mask_org
         counts = idx_mask_final.sum(dim=-1).view(batch_size, -1).sum(dim=-1)
-        index_1 = torch.repeat_interleave(torch.arange(batch_size, device=device), counts)
+        index_1 = torch.repeat_interleave(
+            torch.arange(batch_size, device=device), counts
+        )
         index_2_fl = idx_scaled_org[idx_mask_final].long()
         index_2_cl = index_2_fl + 1
         y_fl = x[index_1, index_2_fl, :]

@@ -1,11 +1,10 @@
 from tomllib import load as loadtoml
-from typing import List, Optional, Self
 
 import torch
 from tqdm import tqdm
 
 from ..models.wavenet_vocoder import WaveNet as WavenetGenerator
-from ..util import Config
+from ..util import config
 from .synthesizer import Synthesizer
 
 
@@ -23,14 +22,14 @@ class WavenetConfig:
     dropout: float
     kernel_size: int
     upsample_conditional_features: bool
-    upsample_scales: List[int]
+    upsample_scales: list[int]
     freq_axis_kernel_size: int
     scalar_input: bool
     hop_size: int
     log_scale_min: float
     legacy: bool
 
-    def __init__(self: Self, configdict: dict) -> None:
+    def __init__(self, configdict: dict) -> None:
         self.__dict__.update(configdict)
 
 
@@ -40,16 +39,9 @@ class Wavenet(Synthesizer):
     model_name: str = "wavenet_vocoder"
     checkpoint_path: str = "full_models"
     configtoml: dict
-    config: Config
 
-    def __init__(
-        self: Self,
-        device: torch.device,
-        config: Optional[Config] = None,
-    ) -> None:
-        self.config = config or Config()
-        self.device = device
-        data_dir = self.config.paths.full_models
+    def __init__(self, device: torch.device) -> None:
+        data_dir = config.paths.full_models
         config_file = f"{data_dir}/{self.model_name}.toml"
         self.wavconf = WavenetConfig(loadtoml(open(config_file, "rb")))
         self.model = WavenetGenerator(
@@ -71,10 +63,7 @@ class Wavenet(Synthesizer):
             scalar_input=True,
             legacy=True,
         )
-        ckpt = torch.load(
-            f"{data_dir}/{self.model_name}.pth",
-            weights_only=False,
-        )
+        ckpt = torch.load(f"{data_dir}/{self.model_name}.pth", weights_only=False)
         self.model.load_state_dict(ckpt["state_dict"])
         self.model = self.model.to(self.device)
         self.model.eval()
@@ -82,10 +71,7 @@ class Wavenet(Synthesizer):
         self.model = self.model.to(self.device)
 
     @torch.no_grad()
-    def spect2wav(
-        self: Self,
-        spect: torch.Tensor,
-    ) -> torch.Tensor:
+    def spect2wav(self, spect: torch.Tensor) -> torch.Tensor:
         model_out = self.model.incremental_forward(
             initial_input=None,
             c=spect.mT.to(dtype=torch.float).unsqueeze(0).to(self.device),

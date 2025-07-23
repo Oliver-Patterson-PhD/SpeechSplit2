@@ -1,19 +1,14 @@
-import time
-
 import torch
 
-from ..util import Config
+from ..util import logger
 from .experiment import Experiment
 
 
 class TestSamples(Experiment):
-    def __init__(self, config: Config | None = None, currtime: int = int(time.time())) -> None:
-        self.config = config or Config()
-
     @torch.no_grad()
     def test(self) -> None:
         self.load_data(singleitem=True, full_process=True)
-        self.logger.info("Start eval...")
+        logger.info("Start eval...")
         self.logfile = open("normlog.csv", "wt")
         items: list[str] = [
             "spmel_gt",

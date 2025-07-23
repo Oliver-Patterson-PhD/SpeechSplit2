@@ -1,15 +1,14 @@
 __all__ = [
-    "Config",
-    "RunTests",
+    "config",
 ]
 
 from datetime import datetime
 from enum import Flag, auto
 from tomllib import load as loadtoml
-from typing import Any, Dict, List, Optional, Self
+from typing import Any, Dict, List, Optional
 
 from .file import exists, path
-from .logging import Logger, LogLevel
+from .logging import logger
 from .patterns import Singleton
 
 
@@ -57,7 +56,7 @@ class ConfigAudioProcessing:
     freq_max: int = 7600
     freq_min: int = 90
     hi_pass_cutoff: int = 30
-    hop_len: int = 160
+    hop_len: int = 100
     max_len_pad = 192
     n_fft: int = 400
     sample_rate: int = 16000
@@ -66,12 +65,12 @@ class ConfigAudioProcessing:
 
 
 class ConfigModel:
-    freq_1: int
-    freq_2: int
-    freq_3: int
-    dim_neck_1: int
-    dim_neck_2: int
-    dim_neck_3: int  # 32
+    freq_1: int = 1
+    freq_2: int = 1
+    freq_3: int = 1
+    dim_neck_1: int = 32
+    dim_neck_2: int = 32
+    dim_neck_3: int = 32
 
     dim_con: int = 80  # N_MELS
     dim_dec: int = 512  # HOP_LENGTH * 2
@@ -92,12 +91,6 @@ class ConfigModel:
     max_len_seq: int = 128  # HOP_LENGTH / 2
     min_len_seg: int = 19
     min_len_seq: int = 64
-
-
-class ConfigLogging:
-    level: LogLevel = LogLevel.INFO
-    file: Optional[str] = None
-    callgraph: bool = False
 
 
 class RunTests(Flag):
@@ -155,7 +148,8 @@ class Config(metaclass=Singleton):
     logfile: Optional[str] = None
     original_config: str
 
-    __logging: ConfigLogging = ConfigLogging()
+    __logcallgraph: bool = False
+    __logfile: str | None
     audio: ConfigAudioProcessing = ConfigAudioProcessing()
     paths: ConfigPaths = ConfigPaths()
     model: ConfigModel = ConfigModel()
@@ -169,7 +163,7 @@ class Config(metaclass=Singleton):
 
     ## Initialise configuration object
     # Reads the config toml file and creates a single object with the values
-    def __init__(self: Self, config_name: Optional[str] = None) -> None:
+    def __init__(self, config_name: Optional[str] = None) -> None:
         self.start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         if config_name is not None:
             if ".toml" not in config_name:
@@ -183,12 +177,12 @@ class Config(metaclass=Singleton):
     ## Load config file and update values
     #  Duplicate values will be overwritten, existing config options that not
     #  specified in the loaded files are not removed.
-    def load_config(self: Self, config_name: str) -> None:
+    def load_config(self, config_name: str) -> None:
         config_str = "configs/{}.toml"
         config_file = config_str.format(config_name)
         if not exists(config_file):
             err_str = f"Could not find file: {config_file}"
-            Logger().fatal(err_str)
+            logger.fatal(err_str)
             raise FileNotFoundError(err_str)
         tomldict = loadtoml(open(config_file, "rb"))
         if (
@@ -196,7 +190,7 @@ class Config(metaclass=Singleton):
             and "bottleneck" not in tomldict["options"].keys()
         ):
             err_str = "Could not find options.experiment and options.bottleneck in config file"
-            Logger().fatal(err_str)
+            logger.fatal(err_str)
             raise RuntimeError(err_str)
         elif config_name == "scratch":
             model_name = "models/" + tomldict["options"]["bottleneck"]
@@ -223,8 +217,8 @@ class Config(metaclass=Singleton):
             )
         self.__fill_nulls()
 
-    def __print_config(self: Self, config_dict: dict) -> None:
-        Logger().info(
+    def __print_config(self, config_dict: dict) -> None:
+        logger.info(
             f"config: {self.original_config}\n"
             + "\n".join(
                 [
@@ -238,28 +232,30 @@ class Config(metaclass=Singleton):
             )
         )
 
-    def __merge_dicts(self: Self, *dict_args) -> dict:
+    def __merge_dicts(self, *dict_args) -> dict:
         result = {}
         for dictionary in dict_args:
             result.update(dictionary)
         return result
 
-    def __map_categories(self: Self, key: str, subdict: Dict[str, Any]) -> None:
+    def __map_categories(self, key: str, subdict: Dict[str, Any]) -> None:
         match key.lower():
             case "log":
                 if "level" in subdict:
-                    Logger().set_level(subdict["level"])
+                    logger.set_level(subdict["level"])
                 if "file" in subdict:
                     if subdict["file"] is False:
-                        self.__logging.file = None
+                        self.__logfile = None
                     elif subdict["file"] is True:
-                        self.__logging.file = "SET_ME"
+                        self.__logfile = "SET_ME"
+                if "callgraph" in subdict:
+                    self.__logcallgraph = subdict["callgraph"]
             case "paths":
                 if not subdict.keys() >= {"raw_data", "proc_data"}:
                     err_str = (
                         "Could not find paths.proc_data and paths.raw_data in config"
                     )
-                    Logger().fatal(err_str)
+                    logger.fatal(err_str)
                     raise RuntimeError(err_str)
                 self.paths.__dict__.update(subdict)
             case "model":
@@ -273,7 +269,7 @@ class Config(metaclass=Singleton):
             case "options":
                 if not subdict.keys() >= {"dataset_name"}:
                     err_str = "Could not find options.dataset_name in config"
-                    Logger().fatal(err_str)
+                    logger.fatal(err_str)
                     raise RuntimeError(err_str)
                 if "run_tests" in subdict.keys():
                     subdict["run_tests"] = self.__set_runtypes(subdict["run_tests"])
@@ -284,7 +280,7 @@ class Config(metaclass=Singleton):
                 self.__dict__.update(subdict)
         return
 
-    def __set_runtypes(self: Self, runtype_list: List[str]) -> RunTests:
+    def __set_runtypes(self, runtype_list: List[str]) -> RunTests:
         runtype = RunTests.NOTHING
         for runtype_str in runtype_list:
             runtype_str = runtype_str.upper().strip()
@@ -295,24 +291,24 @@ class Config(metaclass=Singleton):
                     f"Invalid options.run_tests value in config: {runtype_str}\n"
                     f"Options: {[str(test) for test in RunTests]}"
                 )
-                Logger().fatal(err_str)
+                logger.fatal(err_str)
                 raise Exception(err_str) from e
         return runtype
 
-    def __fill_nulls(self: Self) -> None:
+    def __fill_nulls(self) -> None:
         self.__set_dataset_paths()
         self.__set_data_and_feat()
         self.__set_artefact_paths()
-        if self.__logging.file == "SET_ME":
-            self.__logging.file = path(
+        if self.__logfile == "SET_ME":
+            self.__logfile = path(
                 self.paths.logging,
                 f"{self.start_time}-{self.options.experiment}.log",
             )
-            Logger().set_file(self.__logging.file)
-        if self.__logging.callgraph:
-            Logger().enable_callgraph()
+            logger.set_file(self.__logfile)
+        if self.__logcallgraph:
+            logger.enable_callgraph()
 
-    def __set_artefact_paths(self: Self) -> None:
+    def __set_artefact_paths(self) -> None:
         if not hasattr(self.paths, "logging"):
             self.paths.logging = path(self.paths.artefacts, "logs")
         if not hasattr(self.paths, "full_models"):
@@ -337,7 +333,7 @@ class Config(metaclass=Singleton):
         if not hasattr(self.paths, "cleanwavs"):
             self.paths.cleanwavs = path(self.paths.features, "cleanwavs")
 
-    def __set_dataset_paths(self: Self) -> None:
+    def __set_dataset_paths(self) -> None:
         if not hasattr(self.paths, "raw_timit"):
             self.paths.raw_timit = path(self.paths.raw_data, "TIMIT")
         if not hasattr(self.paths, "dataset_timit"):
@@ -367,7 +363,7 @@ class Config(metaclass=Singleton):
         if not hasattr(self.paths, "dataset_smolvctk"):
             self.paths.dataset_smolvctk = path(self.paths.proc_data, "SmolVCTK")
 
-    def __set_data_and_feat(self: Self) -> None:
+    def __set_data_and_feat(self) -> None:
         if self.options.dataset_name == "vctk":
             data_dir = self.paths.raw_vctk
             feat_dir = self.paths.dataset_vctk
@@ -387,7 +383,10 @@ class Config(metaclass=Singleton):
             err_str = (
                 f"Invalid options.dataset_name in config: {self.options.dataset_name}"
             )
-            Logger().fatal(err_str)
+            logger.fatal(err_str)
             raise RuntimeError(err_str)
         self.paths.features = feat_dir
         self.paths.raw_wavs = data_dir
+
+
+config = Config("base")

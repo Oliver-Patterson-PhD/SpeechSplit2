@@ -10,13 +10,16 @@ import torchaudio
 from pysptk.sptk import rapt
 from torch.types import Number
 
-from ..util import Compute, Config
+from ..util import compute, config
 from ..util.tensor import Tensor, TensorQuad, TensorTriple
 from .dataset import DatasetParser
 
 
 def hz_to_mel[T: (float, Tensor)](freq: T) -> T:
-    return 2595.0 * log10(1.0 + (freq / 700.0))
+    if isinstance(freq, Tensor):
+        return 2595.0 * torch.log10(1.0 + (freq / 700.0))
+    else:
+        return 2595.0 * log10(1.0 + (freq / 700.0))
 
 
 def mel_to_hz[T: (float, Tensor)](mel_idx: T) -> T:
@@ -26,10 +29,8 @@ def mel_to_hz[T: (float, Tensor)](mel_idx: T) -> T:
 class AudioProcs:
     min_level = torch.exp(-100 / 20 * torch.log(torch.tensor(10)))
 
-    def __init__(self, config: Config | None = None) -> None:
-        self.__parser = DatasetParser(config=config)
-        if config is None:
-            config = Config()
+    def __init__(self) -> None:
+        self.__parser = DatasetParser()
         self.__dim_freq = config.model.dim_freq
         self.__n_fft = config.audio.n_fft
         self.__sample_rate = config.audio.sample_rate
@@ -146,11 +147,11 @@ class AudioProcs:
         return mags
 
     def get_spmel(self, wav: Tensor) -> tuple[Tensor, Tensor]:
-        self.__melbasis = self.__melbasis.to(Compute().device())
+        self.__melbasis = self.__melbasis.to(compute.device())
         rawspec: Tensor = self.stft(wav.float())
         mags: Tensor = rawspec.abs()
         phases: Tensor = rawspec.angle()
-        mel_spec = self.__melbasis(mags.to(Compute().device())).mT
+        mel_spec = self.__melbasis(mags.to(compute.device())).mT
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0

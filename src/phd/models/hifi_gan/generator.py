@@ -75,6 +75,7 @@ class HiFiGanGenerator(torch.nn.Module):
                     xs = self.resblocks[i * self.num_kernels + j](x)
                 else:
                     xs += self.resblocks[i * self.num_kernels + j](x)
+            assert xs is not None
             x = xs / self.num_kernels
         x = torch.nn.functional.leaky_relu(x)
         x = self.conv_post(x)

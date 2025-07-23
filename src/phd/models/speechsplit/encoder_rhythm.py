@@ -1,16 +1,11 @@
-from typing import Self
-
 import torch
 
-from ...util import Config
+from ...util import config
 from ..layers.conv_norm import ConvNorm
 
 
 class EncoderRhythm(torch.nn.Module):
-    def __init__(
-        self: Self,
-        config: Config,
-    ) -> None:
+    def __init__(self) -> None:
         super().__init__()
         self.chs_grp = config.model.chs_grp
         self.dim_emb = config.model.dim_spk_emb
@@ -43,11 +38,7 @@ class EncoderRhythm(torch.nn.Module):
             bidirectional=True,
         )
 
-    def forward(
-        self: Self,
-        x: torch.Tensor,
-        mask: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         for conv in self.convolutions:
             x = torch.nn.functional.relu(conv(x))
         x = x.transpose(-2, -1)

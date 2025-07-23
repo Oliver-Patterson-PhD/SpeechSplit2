@@ -197,7 +197,7 @@ class AudioEncoder(torch.nn.Module):
         self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
         self.register_buffer("positional_embedding", sinusoids(n_ctx, n_state))
 
-        self.blocks: Iterable[ResidualAttentionBlock] = torch.nn.ModuleList(
+        self.blocks: Iterable[torch.nn.Module] = torch.nn.ModuleList(
             [ResidualAttentionBlock(n_state, n_head) for _ in range(n_layer)]
         )
         self.ln_post = LayerNorm(n_state)
@@ -226,7 +226,7 @@ class TextDecoder(torch.nn.Module):
         self.token_embedding = torch.nn.Embedding(n_vocab, n_state)
         self.positional_embedding = torch.nn.Parameter(torch.empty(n_ctx, n_state))
 
-        self.blocks: Iterable[ResidualAttentionBlock] = torch.nn.ModuleList(
+        self.blocks: Iterable[torch.nn.Module] = torch.nn.ModuleList(
             [
                 ResidualAttentionBlock(n_state, n_head, cross_attention=True)
                 for _ in range(n_layer)

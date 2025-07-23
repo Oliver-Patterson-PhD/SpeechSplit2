@@ -3,11 +3,12 @@ __all__ = [
     "DType",
     "Phoneme",
     "Utterance",
+    "SampleInfo",
 ]
 
 from enum import Enum, auto
 
-from ..util import Config
+from ..util import config
 from ..util.file import (basename, dirname, freadline, freadlist, myglob, path,
                          strip_ext)
 from .dataset_detail import (smolspeech_speakers, smolvctk_speakers,
@@ -96,8 +97,7 @@ class DatasetParser:
     __dsettype: DType
     __ua_phone_labels: dict[str, Utterance]
 
-    def __init__(self, config: Config | None = None) -> None:
-        config = config or Config()
+    def __init__(self) -> None:
         self.__dsettype = self.__get_type(config.options.dataset_name)
         self.__is_smol = config.options.dataset_name.lower().startswith("smol")
         self.__raw_timit = config.paths.raw_timit
@@ -323,3 +323,24 @@ class DatasetParser:
 
     def get_utterances(self, speaker: str) -> set[str]:
         return set(self.utterance(file) for file in self.raw_samples(speaker))
+
+    def file_to_info(self, fpath: str) -> tuple[str, str]:
+        spk = self.speaker(fpath)
+        uttr = self.utterance(fpath)
+        return spk, uttr
+
+
+parser = DatasetParser()
+
+
+class SampleInfo:
+    speaker: str
+    utterance: str
+    sex: str
+    dysarthric: bool
+
+    def __init__(self, fpath: str):
+        self.speaker = parser.speaker(fpath)
+        self.utterance = parser.utterance(fpath)
+        self.sex = parser.sex(self.speaker)
+        self.dysarthric = parser.dysarthric(self.speaker)

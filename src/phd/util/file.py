@@ -12,31 +12,69 @@ __all__ = [
 
 import glob
 import os
+from pathlib import Path
+from typing import Literal, overload
 
-PathVar = str | os.PathLike[str]
+FilePath = str | os.PathLike[str] | Path
 
 
-def fread(file: PathVar, binary: bool = False) -> str:
+@overload
+def fread(file: FilePath, binary: Literal[True]) -> bytes:
+    pass
+
+
+@overload
+def fread(file: FilePath, binary: Literal[False]) -> str:
+    pass
+
+
+@overload
+def fread(file: FilePath) -> str:
+    pass
+
+
+def fread(file: FilePath, binary: bool = False) -> str | bytes:
     with open(file, "rb" if binary else "r") as f:
-        return f.read()
+        if binary:
+            return bytes(f.read())
+        else:
+            return str(f.read())
 
 
-def fwrite(file: PathVar, buffer: str, binary: bool = False) -> int:
+def fwrite(file: FilePath, buffer: str, binary: bool = False) -> int:
     with open(file, "wb" if binary else "w") as f:
         return f.write(buffer)
 
 
-def freadlist(file: PathVar, binary: bool = False) -> list[str]:
+@overload
+def freadline(file: FilePath, binary: Literal[True]) -> bytes:
+    pass
+
+
+@overload
+def freadline(file: FilePath, binary: Literal[False]) -> str:
+    pass
+
+
+@overload
+def freadline(file: FilePath) -> str:
+    pass
+
+
+def freadline(file: FilePath, binary: bool = False) -> str | bytes:
     with open(file, "rb" if binary else "r") as f:
+        if binary:
+            return bytes(next(f))
+        else:
+            return str(next(f))
+
+
+def freadlist(file: FilePath) -> list[str]:
+    with open(file, "r") as f:
         return [line for line in f]
 
 
-def freadline(file: PathVar, binary: bool = False) -> str:
-    with open(file, "rb" if binary else "r") as f:
-        return next(f)
-
-
-def lsdir(dir: PathVar, showfiles: bool = True, showdirs: bool = False) -> list[str]:
+def lsdir(dir: FilePath, showfiles: bool = True, showdirs: bool = False) -> list[str]:
     assert showfiles or showdirs
     root, dirs, files = next(os.walk(dir))[2]
     retval: list[str] = []
@@ -47,7 +85,7 @@ def lsdir(dir: PathVar, showfiles: bool = True, showdirs: bool = False) -> list[
     return retval
 
 
-def mywalk(top: PathVar, retdirs: bool, fullpaths: bool) -> list[str]:
+def mywalk(top: FilePath, retdirs: bool, fullpaths: bool) -> list[str]:
     return [
         os.path.join(root, path) if fullpaths else path
         for root, dirs, files in os.walk(top)
@@ -55,27 +93,27 @@ def mywalk(top: PathVar, retdirs: bool, fullpaths: bool) -> list[str]:
     ]
 
 
-def walkfiles(top: PathVar, fullpaths: bool = False) -> list[str]:
+def walkfiles(top: FilePath, fullpaths: bool = False) -> list[str]:
     return mywalk(top, retdirs=False, fullpaths=fullpaths)
 
 
-def walkdirs(top: PathVar, fullpaths: bool = False) -> list[str]:
+def walkdirs(top: FilePath, fullpaths: bool = False) -> list[str]:
     return mywalk(top, retdirs=True, fullpaths=fullpaths)
 
 
-def strip_path(fullpath: PathVar) -> str:
+def strip_path(fullpath: FilePath) -> str:
     return os.path.split(str(fullpath))[-1]
 
 
-def strip_ext(fullpath: PathVar) -> str:
+def strip_ext(fullpath: FilePath) -> str:
     return os.path.splitext(str(fullpath))[0]
 
 
-def basename(fullpath: PathVar) -> str:
+def basename(fullpath: FilePath) -> str:
     return strip_path(strip_ext(fullpath))
 
 
-def dirname(fullpath: PathVar) -> str:
+def dirname(fullpath: FilePath) -> str:
     return os.path.dirname(str(fullpath))
 
 

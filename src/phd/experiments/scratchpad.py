@@ -5,6 +5,7 @@ import torchaudio
 
 from ..synthesizers import Synthesizer
 from ..transcribers import CompareItem, Transcriber
+from ..util import compute, config, logger
 from ..util.tensor import Tensor, TensorPair, save_tensor
 from .experiment import Experiment
 
@@ -33,22 +34,19 @@ class Scratchpad(Experiment):
 
     @torch.no_grad()
     def run(self) -> None:
-        self.transcriber = Transcriber(
-            device=self.compute.device(),
-            config=self.config,
-        )
+        self.transcriber = Transcriber(device=compute.device())
         model_name = os.path.join(
             "speechsplit2-large",
             "trainmask-large-SpeechSplit2-2024-11-07.ckpt",
         )
         self.load_trained(model_name)
-        self.logger.info("Full Process On")
-        self.compute.set_gpu()
+        logger.info("Full Process On")
+        compute.set_gpu()
         self.synth_list = [
             getattr(
                 __import__("synthesizers"),
                 synthname,
-            )(self.compute.device())
+            )(compute.device())
             for synthname in [
                 # "MelGan",
                 "ParallelWaveGan",
@@ -57,7 +55,7 @@ class Scratchpad(Experiment):
                 # "GriffinLim",
             ]
         ]
-        ddir = os.path.join(self.experiment_dir, self.config.options.dataset_name)
+        ddir = os.path.join(self.experiment_dir, config.options.dataset_name)
         self.lossdir = os.path.join(ddir, "losses")
         self.normdir = os.path.join(ddir, "norm")
         self.spmldir = os.path.join(ddir, "spmels")
@@ -75,7 +73,7 @@ class Scratchpad(Experiment):
         proc_data = sorted(proc_data, key=lambda i: i[0])[:5]
         proc_name: set[str]
         proc_name = set(self.parser.sample_name(item[0][0]) for item in proc_data)
-        self.logger.trace_var(proc_name, "DEBUG")
+        logger.trace_var(proc_name, "DEBUG")
         for name in proc_name:
             items: list[DataType] = sorted(
                 [item for item in proc_data if str(item[0][0]).find(name) != -1],
@@ -103,15 +101,15 @@ class Scratchpad(Experiment):
                 )
                 list_gt.append(spmel_outgt)
                 list_out.append(spmel_output)
-            self.logger.trace_var(list_gt)
+            logger.trace_var(list_gt)
             orig_spmel = self.audproc.combine(list_gt)
-            self.logger.trace_var(list_out)
+            logger.trace_var(list_out)
             proc_spmel = self.audproc.combine(list_out)
             self.save_item(name, orig_spmel, proc_spmel)
 
     @torch.no_grad()
     def save_item(self, name: str, orig: Tensor, proc: Tensor) -> None:
-        self.logger.debug(f"Processing: {name}")
+        logger.debug(f"Processing: {name}")
         open(os.path.join(self.lossdir, name + ".txt"), "w").write(
             CompareItem(
                 name,
@@ -122,7 +120,7 @@ class Scratchpad(Experiment):
             ).__str__()
         )
         raw_audio_file = os.path.join(
-            self.config.paths.raw_wavs, self.parser.speaker(name), f"{name}.wav"
+            config.paths.raw_wavs, self.parser.speaker(name), f"{name}.wav"
         )
         raw_aud_raw, _ = torchaudio.load(raw_audio_file)
         raws, _ = self.audproc.get_spmel(
@@ -136,7 +134,7 @@ class Scratchpad(Experiment):
 
     def get_phases(self, name: str) -> Tensor:
         raw_phase_file = os.path.join(
-            self.config.paths.features,
+            config.paths.features,
             "phases",
             self.parser.speaker(name),
             f"{name}.pt",
@@ -144,23 +142,23 @@ class Scratchpad(Experiment):
         raw_phases = torch.load(
             raw_phase_file,
             weights_only=True,
-        ).to(self.compute.device())
+        ).to(compute.device())
         return raw_phases
 
     def full_convert(self, name: str, orig: Tensor, proc: Tensor) -> None:
-        self.logger.trace_tensor(orig, "DEBUG")
-        self.logger.trace_tensor(proc, "DEBUG")
-        self.logger.debug(f"orig: {orig.device.__str__()}")
-        self.logger.debug(f"proc: {proc.device.__str__()}")
+        logger.trace_tensor(orig, "DEBUG")
+        logger.trace_tensor(proc, "DEBUG")
+        logger.debug(f"orig: {orig.device.__str__()}")
+        logger.debug(f"proc: {proc.device.__str__()}")
         origmt = self.audproc.rev_spmel(orig.mT)
         procmt = self.audproc.rev_spmel(proc.mT)
-        self.logger.debug(f"origmt: {origmt.device.__str__()}")
-        self.logger.debug(f"procmt: {procmt.device.__str__()}")
+        logger.debug(f"origmt: {origmt.device.__str__()}")
+        logger.debug(f"procmt: {procmt.device.__str__()}")
         raw_mags_orig = torch.sqrt(origmt)
         raw_mags_proc = torch.sqrt(procmt)
 
         raw_audio_file = os.path.join(
-            self.config.paths.raw_wavs, self.parser.speaker(name), f"{name}.wav"
+            config.paths.raw_wavs, self.parser.speaker(name), f"{name}.wav"
         )
         raw_aud_raw, _ = torchaudio.load(raw_audio_file)
         raw_raw_stft = self.audproc.stft(raw_aud_raw.squeeze())
@@ -172,10 +170,10 @@ class Scratchpad(Experiment):
         raw_phases = torch.nn.functional.pad(
             raw_phases, (0, raw_mags_proc.size(-1) - raw_phases.size(-1))
         )
-        self.logger.trace_tensor(raw_phases, "DEBUG")
+        logger.trace_tensor(raw_phases, "DEBUG")
 
-        self.logger.trace_tensor(raw_mags_orig, "DEBUG")
-        self.logger.trace_tensor(raw_mags_proc, "DEBUG")
+        logger.trace_tensor(raw_mags_orig, "DEBUG")
+        logger.trace_tensor(raw_mags_proc, "DEBUG")
 
         # fmt: off
         save_tensor(zero_one_norm(pad_raw_stft.abs()), os.path.join(self.spmldir, f"{name}-raw-stft.png"))
@@ -186,64 +184,72 @@ class Scratchpad(Experiment):
         raw_spec_orig = torch.polar(raw_mags_orig, raw_phases)
         raw_spec_proc = torch.polar(raw_mags_proc, raw_phases)
 
-        self.logger.trace_tensor(pad_raw_stft, "DEBUG")
-        self.logger.trace_tensor(raw_spec_orig, "DEBUG")
-        self.logger.trace_tensor(raw_spec_proc, "DEBUG")
+        logger.trace_tensor(pad_raw_stft, "DEBUG")
+        logger.trace_tensor(raw_spec_orig, "DEBUG")
+        logger.trace_tensor(raw_spec_proc, "DEBUG")
 
         raw_audio_stft = self.audproc.istft(pad_raw_stft).unsqueeze(0)
         raw_audio_orig = self.audproc.istft(raw_spec_orig).unsqueeze(0)
         raw_audio_proc = self.audproc.istft(raw_spec_proc).unsqueeze(0)
 
-        self.logger.trace_tensor(raw_audio_stft, "DEBUG")
-        self.logger.trace_tensor(raw_audio_orig, "DEBUG")
-        self.logger.trace_tensor(raw_audio_proc, "DEBUG")
+        logger.trace_tensor(raw_audio_stft, "DEBUG")
+        logger.trace_tensor(raw_audio_orig, "DEBUG")
+        logger.trace_tensor(raw_audio_proc, "DEBUG")
 
-        self.save_audio(raw_audio_stft, os.path.join(self.wavsdir, f"{name}-raw-stft.wav"))
-        self.save_audio(raw_audio_orig, os.path.join(self.wavsdir, f"{name}-raw-orig.wav"))
-        self.save_audio(raw_audio_proc, os.path.join(self.wavsdir, f"{name}-raw-proc.wav"))
+        self.save_audio(
+            raw_audio_stft, os.path.join(self.wavsdir, f"{name}-raw-stft.wav")
+        )
+        self.save_audio(
+            raw_audio_orig, os.path.join(self.wavsdir, f"{name}-raw-orig.wav")
+        )
+        self.save_audio(
+            raw_audio_proc, os.path.join(self.wavsdir, f"{name}-raw-proc.wav")
+        )
         return
 
     def save_audio(self, wav: Tensor, file: str) -> None:
         torchaudio.save(
             file,
             wav.cpu(),
-            sample_rate=self.config.audio.sample_rate,
+            sample_rate=config.audio.sample_rate,
             backend="sox",
         )
         torchaudio.save(
             file.replace(self.wavsdir, self.normdir),
             self.audproc.norm_audio(wav).cpu(),
-            sample_rate=self.config.audio.sample_rate,
+            sample_rate=config.audio.sample_rate,
             backend="sox",
         )
         return
 
     @torch.no_grad()
-    def process_synth(self, synt: Synthesizer, name: str, orig: Tensor, proc: Tensor) -> None:
-        self.logger.debug(f"Synthesizing: {synt}")
+    def process_synth(
+        self, synt: Synthesizer, name: str, orig: Tensor, proc: Tensor
+    ) -> None:
+        logger.debug(f"Synthesizing: {synt}")
         synth_gt = os.path.join(self.wavsdir, f"{name}-{synt}-orig.wav")
         synth_out = os.path.join(self.wavsdir, f"{name}-{synt}-proc.wav")
         os.makedirs(os.path.dirname(synth_gt), exist_ok=True)
         os.makedirs(os.path.dirname(synth_out), exist_ok=True)
-        self.logger.trace_tensor(orig)
-        self.logger.trace_tensor(proc)
+        logger.trace_tensor(orig)
+        logger.trace_tensor(proc)
         self.single_spmel_to_audio(synth_gt, orig, synt)
         self.single_spmel_to_audio(synth_out, proc, synt)
 
     @torch.no_grad()
     def single_spmel_to_audio(self, file: str, spec: Tensor, synt: Synthesizer) -> None:
         wav = synt.spect2wav(spec).unsqueeze(dim=0)
-        self.logger.trace_tensor(wav)
+        logger.trace_tensor(wav)
         torchaudio.save(
             file,
             wav.cpu(),
-            sample_rate=self.config.audio.sample_rate,
+            sample_rate=config.audio.sample_rate,
             backend="sox",
         )
         torchaudio.save(
             file.replace(self.wavsdir, self.normdir),
             self.audproc.norm_audio(wav).cpu(),
-            sample_rate=self.config.audio.sample_rate,
+            sample_rate=config.audio.sample_rate,
             backend="sox",
         )
 
@@ -257,18 +263,18 @@ class Scratchpad(Experiment):
         timbre_input: Tensor,
         len_crop: Tensor,
     ) -> TensorPair:
-        spmel_gt = spmel_gt.to(self.compute.device())
-        rhythm_input = rhythm_input.to(self.compute.device())
-        content_input = content_input.to(self.compute.device())
-        pitch_input = pitch_input.to(self.compute.device()).unsqueeze(-1)
-        timbre_input = timbre_input.to(self.compute.device())
-        len_crop = len_crop.to(self.compute.device())
+        spmel_gt = spmel_gt.to(compute.device())
+        rhythm_input = rhythm_input.to(compute.device())
+        content_input = content_input.to(compute.device())
+        pitch_input = pitch_input.to(compute.device()).unsqueeze(-1)
+        timbre_input = timbre_input.to(compute.device())
+        len_crop = len_crop.to(compute.device())
         content_pitch_input = self.prepare_input(
             content_input,
             pitch_input,
             len_crop,
         )
-        if self.config.options.return_latents:
+        if config.options.return_latents:
             (
                 spmel_output,
                 code_exp_1,

@@ -2,16 +2,13 @@ from typing import Self, Tuple
 
 import torch
 
-from ...util import Config
+from ...util import config
 from ..layers.conv_norm import ConvNorm
 from .interplnr import InterpLnr
 
 
 class EncoderSync(torch.nn.Module):
-    def __init__(
-        self: Self,
-        config: Config,
-    ) -> None:
+    def __init__(self) -> None:
         super().__init__()
         self.chs_grp = config.model.chs_grp
         self.dim_con = config.model.dim_con
@@ -67,9 +64,7 @@ class EncoderSync(torch.nn.Module):
         self.interp = InterpLnr(config)
 
     def forward(
-        self: Self,
-        x_f0: torch.Tensor,
-        rr: bool = True,
+        self, x_f0: torch.Tensor, rr: bool = True
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         x = x_f0[:, : self.dim_con, :]
         f0 = x_f0[:, self.dim_con :, :]
