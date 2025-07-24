@@ -243,12 +243,13 @@ class Logger(metaclass=Singleton):
             message=f"{self.__get_passed_varnames()[0]}: ({var.shape})",
         )
 
-    def trace_nans(self, x: Tensor, level: LogLevel | str = LogLevel.ERROR) -> None:
+    def trace_nans(self, x: Tensor) -> None:
+        isnan = self.__is_nan(x)
         self.__log(
-            level=self.__get_level(level),
+            level=(LogLevel.WARN if isnan else LogLevel.TRACE),
             caller=self.__get_caller(),
             message=f"{self.__get_passed_varnames()[0]}: {
-                'Has NaNs' if self.__is_nan(x) else 'No NaNs'
+                'Has NaNs' if isnan else 'No NaNs'
             }",
         )
 

@@ -24,6 +24,8 @@ experiment_dir = newpath(config.paths.artefacts, basename(__name__))
 in_path = config.paths.raw_wavs
 out_path = newpath(experiment_dir, str(parser.dataset_type()))
 sample_rate = config.audio.sample_rate
+lld_len = 27
+testing = True
 
 LLD_Data = tuple[str, Tensor]
 
@@ -148,7 +150,6 @@ def make_lld(name: list[str], tensor: Tensor) -> list[LLD]:
 
 
 def make_lld(name: str | list[str], tensor: Tensor) -> LLD | list[LLD]:
-    lld_len = 27
     if not tensor.size(dim=-1) == lld_len:
         raise TypeError(
             f"Invalid LLD tensor shape: {tensor.shape}\n"
@@ -200,9 +201,14 @@ def make_lld(name: str | list[str], tensor: Tensor) -> LLD | list[LLD]:
 
 class LLDDataset(torch.utils.data.Dataset[LLD_Data]):
     dataset: list[LLD]
-    cache_file: str = path(config.paths.proc_data, "OpenSMILE", "LLDDataset.pkl")
+    small_cache_file: str = path(
+        config.paths.proc_data, "OpenSMILE", "LLDDataset-small.pkl"
+    )
+    large_cache_file: str = path(config.paths.proc_data, "OpenSMILE", "LLDDataset.pkl")
+    cache_file: str
 
     def __init__(self) -> None:
+        self.cache_file = self.small_cache_file if testing else self.large_cache_file
         if not exists(self.cache_file):
             logger.info("Generating LLD Dataset")
             lld_path = path(config.paths.proc_data, "OpenSMILE", "custom-arff")
@@ -221,8 +227,12 @@ class LLDDataset(torch.utils.data.Dataset[LLD_Data]):
                 for file in logger.progress_bar(arff_files, unit="files")
             ]
             logger.info("Saving LLD Dataset")
-            with open(self.cache_file, "wb") as pklfile:
+            with open(self.large_cache_file, "wb") as pklfile:
                 pickle.dump(self.dataset, pklfile, protocol=pickle.HIGHEST_PROTOCOL)
+            with open(self.small_cache_file, "wb") as pklfile:
+                pickle.dump(
+                    self.dataset[0:100], pklfile, protocol=pickle.HIGHEST_PROTOCOL
+                )
         else:
             logger.info("Loading LLD Dataset")
             with open(self.cache_file, "rb") as pklfile:
@@ -236,18 +246,97 @@ class LLDDataset(torch.utils.data.Dataset[LLD_Data]):
         return self.dataset[index].to_data()
 
 
+class LLDClassifier(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.conv = torch.nn.Conv1d(
+            in_channels=9,
+            out_channels=2,
+            kernel_size=3,
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        x_vdim = (x.size(dim=0), 9, 3) if x.ndim == 2 else (9, 3)
+        x_view = x.view(*x_vdim)
+        logger.trace_tensor(x_view)
+        x_conv = self.conv(x_view)
+        logger.trace_tensor(x_conv)
+        return x_conv
+
+
+def arff_init_worker(x: int) -> None:
+    return ((torch.initial_seed()) % (2**32),)  # type: ignore
+
+
+def arff_result(name: str) -> SampleInfo:
+    return SampleInfo(name)
+
+
+def arff_results(names: list[str]) -> Tensor:
+    results = torch.tensor(
+        [[0.0, 1.0] if arff_result(name).dysarthric else [1.0, 0.0] for name in names]
+    ).unsqueeze(-1)
+    logger.trace_tensor(results)
+    return results
+
+
 def lld_classify() -> None:
+    compute.set_gpu()
+    compute.set_default()
+
     arff_dataset = LLDDataset()
-    arff_data = torch.utils.data.DataLoader(dataset=arff_dataset)
-    for names, items in arff_data:
-        for name, item in zip(names, items):
-            logger.trace_var(name, "DEBUG")
-            logger.trace_var(item, "DEBUG")
-            lld = make_lld(name, item)
-            info = SampleInfo(name)
-            logger.trace_var(info.speaker, "DEBUG")
-            logger.trace_var(info.utterance, "DEBUG")
-            logger.trace_var(info.sex, "DEBUG")
-            logger.trace_var(info.dysarthric, "DEBUG")
-            logger.trace_var(lld, "DEBUG")
-    return
+    arff_batch_size = 8
+    arff_samplier = 8
+    arff_n_workers = 0
+    arff_sampler = torch.utils.data.RandomSampler(
+        data_source=arff_dataset,
+        replacement=True,
+        generator=torch.Generator(device=compute.device()),
+        num_samples=(arff_batch_size * len(arff_dataset) * arff_samplier),
+    )
+    arff_data = torch.utils.data.DataLoader(
+        dataset=arff_dataset,
+        batch_size=arff_batch_size,
+        sampler=arff_sampler,
+        num_workers=arff_n_workers,
+        prefetch_factor=None if arff_n_workers == 0 else arff_n_workers,
+        drop_last=False,
+        pin_memory=False,
+        worker_init_fn=arff_init_worker,
+    )
+
+    arff_model = LLDClassifier()
+    arff_model.train()
+    arff_optim = torch.optim.SGD(
+        arff_model.parameters(),
+        lr=0.001,
+        momentum=0.9,
+    )
+    arff_loss = torch.nn.CrossEntropyLoss()
+
+    log_div = 1
+    logger.set_level("TRACE")
+    for epoch in range(1):
+        logger.debug(f"Epoch: {epoch}")
+        running_loss = 0.0
+        for i, (names, items) in enumerate(arff_data):
+            logger.trace_tensor(items)
+            logger.trace_nans(items)
+
+            out_data = arff_model(items)
+            logger.trace_tensor(out_data)
+            logger.trace_nans(out_data)
+
+            truth = arff_results(names)
+            logger.trace_tensor(truth)
+            logger.trace_nans(truth)
+
+            loss = arff_loss(out_data, truth)
+            loss.backward()
+            arff_optim.step()
+            running_loss += loss.item()
+
+            if i % log_div == 0:
+                logger.info(f"[{epoch + 1}, {i + 1:7d}] loss: {running_loss / log_div}")
+                running_loss = 0.0
+            return
