@@ -218,7 +218,7 @@ class Config(metaclass=Singleton):
         self.__fill_nulls()
 
     def __print_config(self, config_dict: dict) -> None:
-        logger.info(
+        logger.trace(
             f"config: {self.original_config}\n"
             + "\n".join(
                 [

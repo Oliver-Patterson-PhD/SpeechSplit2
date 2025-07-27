@@ -24,8 +24,8 @@ experiment_dir = newpath(config.paths.artefacts, basename(__name__))
 in_path = config.paths.raw_wavs
 out_path = newpath(experiment_dir, str(parser.dataset_type()))
 sample_rate = config.audio.sample_rate
-lld_len = 27
-testing = True
+lld_len = 26
+testing = False
 
 LLD_Data = tuple[str, Tensor]
 
@@ -58,7 +58,6 @@ class LLD:
     f3frequency: float
     f3bandwidth: float
     f3amplitude: float
-    theclass: float
 
     def __init__(self, row: ArffRowType | None = None) -> None:
         if row is None:
@@ -100,7 +99,6 @@ class LLD:
         add_attr("f3frequency", "F3frequency_sma3nz", float)
         add_attr("f3bandwidth", "F3bandwidth_sma3nz", float)
         add_attr("f3amplitude", "F3amplitudeLogRelF0_sma3nz", float)
-        add_attr("theclass", "class", float)
 
     def to_data(self) -> LLD_Data:
         return (
@@ -133,7 +131,6 @@ class LLD:
                     self.f3frequency,
                     self.f3bandwidth,
                     self.f3amplitude,
-                    self.theclass,
                 ]
             ),
         )
@@ -188,7 +185,6 @@ def make_lld(name: str | list[str], tensor: Tensor) -> LLD | list[LLD]:
         lld.f3frequency = tensor[23].item()
         lld.f3bandwidth = tensor[24].item()
         lld.f3amplitude = tensor[25].item()
-        lld.theclass = tensor[26].item()
         return lld
     elif tensor.ndimension() == 2:
         if not isinstance(name, list):
@@ -250,17 +246,19 @@ class LLDClassifier(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.conv = torch.nn.Conv1d(
-            in_channels=9,
+            in_channels=13,
             out_channels=2,
-            kernel_size=3,
+            kernel_size=2,
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        x_vdim = (x.size(dim=0), 9, 3) if x.ndim == 2 else (9, 3)
+        x_vdim = (x.size(dim=0), 13, 2) if x.ndim == 2 else (13, 2)
         x_view = x.view(*x_vdim)
         logger.trace_tensor(x_view)
+        logger.trace_nans(x_view)
         x_conv = self.conv(x_view)
         logger.trace_tensor(x_conv)
+        logger.trace_nans(x_conv)
         return x_conv
 
 
@@ -281,13 +279,15 @@ def arff_results(names: list[str]) -> Tensor:
 
 
 def lld_classify() -> None:
+    torch.multiprocessing.set_sharing_strategy("file_system")
+    torch.multiprocessing.set_start_method("spawn", force=True)
     compute.set_gpu()
     compute.set_default()
 
     arff_dataset = LLDDataset()
-    arff_batch_size = 8
-    arff_samplier = 8
-    arff_n_workers = 0
+    arff_batch_size = 64
+    arff_samplier = 1
+    arff_n_workers = 8
     arff_sampler = torch.utils.data.RandomSampler(
         data_source=arff_dataset,
         replacement=True,
@@ -314,12 +314,12 @@ def lld_classify() -> None:
     )
     arff_loss = torch.nn.CrossEntropyLoss()
 
-    log_div = 1
-    logger.set_level("TRACE")
-    for epoch in range(1):
+    log_div = 100
+    for epoch in range(100):
         logger.debug(f"Epoch: {epoch}")
         running_loss = 0.0
         for i, (names, items) in enumerate(arff_data):
+            logger.trace_var(items)
             logger.trace_tensor(items)
             logger.trace_nans(items)
 
@@ -337,6 +337,6 @@ def lld_classify() -> None:
             running_loss += loss.item()
 
             if i % log_div == 0:
-                logger.info(f"[{epoch + 1}, {i + 1:7d}] loss: {running_loss / log_div}")
+                logger.info(f"[{epoch}, {i:7d}] loss: {running_loss / log_div}")
                 running_loss = 0.0
-            return
+        torch.save((arff_model, arff_optim), path(config.paths.artefacts, f"arff_model-{epoch}-{i}.pt"))
