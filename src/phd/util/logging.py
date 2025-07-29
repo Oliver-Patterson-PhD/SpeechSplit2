@@ -73,12 +73,20 @@ class Logger(metaclass=Singleton):
         if flush is not None:
             self.__flush = flush
 
-    def enable_callgraph(self) -> None:
-        self.__print_callgraph = True
+    def __copy__(self):
+        print(f"attempted __copy__ on {self.__class__.__name__}")
+        return self
+
+    def __deepcopy__(self, memo):
+        print(f"attempted __deepcopy__ on {self.__class__.__name__}")
+        return self
 
     def __reduce__(self):
         print(f"attempted __reduce__ on {self.__class__.__name__}")
         return (self.__class__, ())
+
+    def enable_callgraph(self) -> None:
+        self.__print_callgraph = True
 
     def __format_caller(self, frame: FrameType) -> str:
         base = "/SpeechSplit2/"

@@ -106,5 +106,14 @@ class Compute(metaclass=Singleton):
     ) -> bool:
         return self.__device != torch.device("cpu")
 
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
+    def __reduce__(self):
+        return (self.__class__, ())
+
 
 compute = Compute()

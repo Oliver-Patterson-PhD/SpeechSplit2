@@ -5,6 +5,7 @@ import pickle
 from typing import overload
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 from ..data import AudioProcs, DatasetParser
 from ..data.dataset import SampleInfo
@@ -24,10 +25,17 @@ experiment_dir = newpath(config.paths.artefacts, basename(__name__))
 in_path = config.paths.raw_wavs
 out_path = newpath(experiment_dir, str(parser.dataset_type()))
 sample_rate = config.audio.sample_rate
-lld_len = 26
 testing = False
 
 LLD_Data = tuple[str, Tensor]
+
+
+def add_attr(self: object, row: ArffRowType, name: str, item: str, t: type) -> None:
+    thing = row.get(item)
+    if isinstance(thing, t):
+        setattr(self, name, thing)
+    else:
+        raise ValueError(f"Incorrect type for {item}: {type(thing)}, expected {t}")
 
 
 class LLD:
@@ -59,46 +67,41 @@ class LLD:
     f3bandwidth: float
     f3amplitude: float
 
+    @classmethod
+    def n_llds(cls) -> int:
+        return 26
+
     def __init__(self, row: ArffRowType | None = None) -> None:
         if row is None:
             return
 
-        def add_attr(name: str, item: str, t: type) -> None:
-            thing = row.get(item)
-            if isinstance(thing, t):
-                setattr(self, name, thing)
-            else:
-                raise ValueError(
-                    f"Incorrect type for {item}: {type(thing)}, expected {t}"
-                )
-
-        add_attr("name", "name", str)
-        add_attr("frametime", "frameTime", float)
-        add_attr("loudness", "Loudness_sma3", float)
-        add_attr("alpharatio", "alphaRatio_sma3", float)
-        add_attr("hammarbergindex", "hammarbergIndex_sma3", float)
-        add_attr("slope0to500", "slope0-500_sma3", float)
-        add_attr("slope500to1500", "slope500-1500_sma3", float)
-        add_attr("spectralflux", "spectralFlux_sma3", float)
-        add_attr("mfcc1", "mfcc1_sma3", float)
-        add_attr("mfcc2", "mfcc2_sma3", float)
-        add_attr("mfcc3", "mfcc3_sma3", float)
-        add_attr("mfcc4", "mfcc4_sma3", float)
-        add_attr("f0semitone", "F0semitoneFrom27.5Hz_sma3nz", float)
-        add_attr("jitter", "jitterLocal_sma3nz", float)
-        add_attr("shimmer", "shimmerLocaldB_sma3nz", float)
-        add_attr("hnr", "HNRdBACF_sma3nz", float)
-        add_attr("logrelf0h1h2", "logRelF0-H1-H2_sma3nz", float)
-        add_attr("logrelf0h1a3", "logRelF0-H1-A3_sma3nz", float)
-        add_attr("f1frequency", "F1frequency_sma3nz", float)
-        add_attr("f1bandwidth", "F1bandwidth_sma3nz", float)
-        add_attr("f1amplitude", "F1amplitudeLogRelF0_sma3nz", float)
-        add_attr("f2frequency", "F2frequency_sma3nz", float)
-        add_attr("f2bandwidth", "F2bandwidth_sma3nz", float)
-        add_attr("f2amplitude", "F2amplitudeLogRelF0_sma3nz", float)
-        add_attr("f3frequency", "F3frequency_sma3nz", float)
-        add_attr("f3bandwidth", "F3bandwidth_sma3nz", float)
-        add_attr("f3amplitude", "F3amplitudeLogRelF0_sma3nz", float)
+        add_attr(self, row, "name", "name", str)
+        add_attr(self, row, "frametime", "frameTime", float)
+        add_attr(self, row, "loudness", "Loudness_sma3", float)
+        add_attr(self, row, "alpharatio", "alphaRatio_sma3", float)
+        add_attr(self, row, "hammarbergindex", "hammarbergIndex_sma3", float)
+        add_attr(self, row, "slope0to500", "slope0-500_sma3", float)
+        add_attr(self, row, "slope500to1500", "slope500-1500_sma3", float)
+        add_attr(self, row, "spectralflux", "spectralFlux_sma3", float)
+        add_attr(self, row, "mfcc1", "mfcc1_sma3", float)
+        add_attr(self, row, "mfcc2", "mfcc2_sma3", float)
+        add_attr(self, row, "mfcc3", "mfcc3_sma3", float)
+        add_attr(self, row, "mfcc4", "mfcc4_sma3", float)
+        add_attr(self, row, "f0semitone", "F0semitoneFrom27.5Hz_sma3nz", float)
+        add_attr(self, row, "jitter", "jitterLocal_sma3nz", float)
+        add_attr(self, row, "shimmer", "shimmerLocaldB_sma3nz", float)
+        add_attr(self, row, "hnr", "HNRdBACF_sma3nz", float)
+        add_attr(self, row, "logrelf0h1h2", "logRelF0-H1-H2_sma3nz", float)
+        add_attr(self, row, "logrelf0h1a3", "logRelF0-H1-A3_sma3nz", float)
+        add_attr(self, row, "f1frequency", "F1frequency_sma3nz", float)
+        add_attr(self, row, "f1bandwidth", "F1bandwidth_sma3nz", float)
+        add_attr(self, row, "f1amplitude", "F1amplitudeLogRelF0_sma3nz", float)
+        add_attr(self, row, "f2frequency", "F2frequency_sma3nz", float)
+        add_attr(self, row, "f2bandwidth", "F2bandwidth_sma3nz", float)
+        add_attr(self, row, "f2amplitude", "F2amplitudeLogRelF0_sma3nz", float)
+        add_attr(self, row, "f3frequency", "F3frequency_sma3nz", float)
+        add_attr(self, row, "f3bandwidth", "F3bandwidth_sma3nz", float)
+        add_attr(self, row, "f3amplitude", "F3amplitudeLogRelF0_sma3nz", float)
 
     def to_data(self) -> LLD_Data:
         return (
@@ -147,10 +150,10 @@ def make_lld(name: list[str], tensor: Tensor) -> list[LLD]:
 
 
 def make_lld(name: str | list[str], tensor: Tensor) -> LLD | list[LLD]:
-    if not tensor.size(dim=-1) == lld_len:
+    if not tensor.size(dim=-1) == LLD.n_llds():
         raise TypeError(
             f"Invalid LLD tensor shape: {tensor.shape}\n"
-            f"Last dimension must be {lld_len}"
+            f"Last dimension must be {LLD.n_llds()}"
         )
     if tensor.size(dim=0) == 1:
         tensor.squeeze_()
@@ -284,22 +287,23 @@ def lld_classify() -> None:
     compute.set_gpu()
     compute.set_default()
 
+    arff_writer = SummaryWriter(log_dir=path(newpath(config.paths.tensorboard)))
     arff_dataset = LLDDataset()
-    arff_batch_size = 64
-    arff_samplier = 1
-    arff_n_workers = 8
+    arff_train, arff_validation = torch.utils.data.random_split(
+        arff_dataset, [0.8, 0.2]
+    )
     arff_sampler = torch.utils.data.RandomSampler(
-        data_source=arff_dataset,
-        replacement=True,
+        data_source=arff_train,
+        replacement=False,
         generator=torch.Generator(device=compute.device()),
-        num_samples=(arff_batch_size * len(arff_dataset) * arff_samplier),
+        num_samples=len(arff_train),
     )
     arff_data = torch.utils.data.DataLoader(
-        dataset=arff_dataset,
-        batch_size=arff_batch_size,
+        dataset=arff_train,
+        batch_size=64,
         sampler=arff_sampler,
-        num_workers=arff_n_workers,
-        prefetch_factor=None if arff_n_workers == 0 else arff_n_workers,
+        num_workers=0,
+        prefetch_factor=None,
         drop_last=False,
         pin_memory=False,
         worker_init_fn=arff_init_worker,
@@ -319,6 +323,7 @@ def lld_classify() -> None:
         logger.debug(f"Epoch: {epoch}")
         running_loss = 0.0
         for i, (names, items) in enumerate(arff_data):
+            step = (epoch * len(arff_data)) + i
             logger.trace_var(items)
             logger.trace_tensor(items)
             logger.trace_nans(items)
@@ -336,7 +341,14 @@ def lld_classify() -> None:
             arff_optim.step()
             running_loss += loss.item()
 
-            if i % log_div == 0:
+            arff_writer.add_scalar(
+                tag="lld_classify/loss", scalar_value=loss.item(), global_step=step
+            )
+            if i % log_div == 0 and i != 0:
                 logger.info(f"[{epoch}, {i:7d}] loss: {running_loss / log_div}")
                 running_loss = 0.0
-        torch.save((arff_model, arff_optim), path(config.paths.artefacts, f"arff_model-{epoch}-{i}.pt"))
+                arff_writer.add_pr_curve("lld_classify/pr_curve", arff_train, )
+                arff_writer.flush()
+        torch.save(
+            (arff_model, arff_optim), path(out_path, f"arff_model-{epoch}-{i}.pt")
+        )

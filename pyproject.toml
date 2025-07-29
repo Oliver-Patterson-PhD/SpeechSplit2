@@ -3,7 +3,7 @@ name = "phd"
 version = "0.1.0"
 description = "Fork of SpeechSplit2 for my PhD project"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "cement",
     "disvoice",
@@ -42,6 +42,7 @@ experiment = "phd:main"
 check = "phd:check"
 scratch = "phd:scratch"
 lld_classify = "phd:lld_classify"
+spect_classify = "phd:spect_classify"
 
 [build-system]
 requires = [ "setuptools" ]
@@ -75,6 +76,11 @@ explicit = true
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/nightly/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "tensorflow-rocm"
+url = "https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.2"
 explicit = true
 
 [tool.mypy]
@@ -124,9 +130,10 @@ rocm = [
     "pytorch-triton-xpu",
     "safetensors",
     "setuptools",
+    "tensorflow-rocm",
     "tiktoken",
-    "torch==2.9.0.dev20250714+rocm6.4",
-    "torchaudio==2.8.0.dev20250714+rocm6.4",
+    "torch",
+    "torchaudio",
     "torchtune",
     "torchvision",
     "tqdm",
@@ -148,6 +155,7 @@ cuda = [
     "pytorch-triton-xpu",
     "safetensors",
     "setuptools",
+    "tensorflow[and-cuda]",
     "tiktoken",
     "torch<2.8",
     "torchaudio",
@@ -172,6 +180,7 @@ cpu = [
     "pytorch-triton-xpu",
     "safetensors",
     "setuptools",
+    "tensorflow",
     "tiktoken",
     "torch",
     "torchaudio",
@@ -184,23 +193,98 @@ cpu = [
 
 
 [tool.uv.sources]
-disvoice = { path = "external/disvoice", editable = true }
-lightning-utilities = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-matplotlib = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-mypy-extensions = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-numpy = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-pandas = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-pillow = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-pytorch-triton = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-pytorch-triton-rocm = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-pytorch-triton-xpu = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-safetensors = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-setuptools = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-tiktoken = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-torch = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-torchaudio = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-torchtune = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-torchvision = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-tqdm = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-typing-extensions = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
-typing-inspect = [ {index = "pytorch-rocm", extra = "rocm"}, {index = "pytorch-cuda", extra = "cuda"}, {index = "pytorch-cpu",  extra = "cpu" }, ]
+disvoice = { path = "external/disvoice" }
+tensorflow-rocm = [
+    { url = "https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.2/tensorflow_rocm-2.17.1-cp312-cp312-manylinux_2_28_x86_64.whl", extra = "rocm" },
+]
+
+lightning-utilities = [
+    { index = "pytorch-rocm", extra = "rocm"},
+    { index = "pytorch-cuda", extra = "cuda"},
+    { index = "pytorch-cpu",  extra = "cpu" },
+]
+matplotlib = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+mypy-extensions = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+numpy = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+pandas = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+pillow = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+pytorch-triton = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+pytorch-triton-rocm = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+pytorch-triton-xpu = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+safetensors = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+setuptools = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+tiktoken = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+torch = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+torchaudio = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+torchtune = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+torchvision = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+tqdm = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+typing-extensions = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
+typing-inspect = [
+    { index = "pytorch-rocm", extra = "rocm" },
+    { index = "pytorch-cuda", extra = "cuda" },
+    { index = "pytorch-cpu",  extra = "cpu"  },
+]
