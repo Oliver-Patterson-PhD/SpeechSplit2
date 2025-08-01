@@ -17,8 +17,7 @@ from ..util.tensor import Tensor
 from ..util.tensorboard import TensorBoard
 
 TESTING = False
-log_div = 100
-eval_div = 1000
+log_div = 1000
 
 parser = DatasetParser()
 processor = AudioProcs()
@@ -347,7 +346,7 @@ def lld_classify() -> None:
     arff_train, arff_test = split_loaders(LLDDataset(), parallel=False)
     arff_model = LLDClassifier()
     arff_model.train()
-    arff_optim = torch.optim.SGD(arff_model.parameters(), lr=0.001, momentum=0.9)
+    arff_optim = torch.optim.SGD(arff_model.parameters(), lr=0.001)
     arff_loss = torch.nn.CrossEntropyLoss()
 
     for epoch in range(100):
@@ -377,8 +376,7 @@ def lld_classify() -> None:
                     )
                 )
                 running_loss = 0.0
-            if i % eval_div == 0:
-                lld_evaluate(arff_model, arff_test, step)
+        lld_evaluate(arff_model, arff_test, step)
         torch.save(
             (arff_model, arff_optim), path(out_path, f"arff_model-{epoch}-{i}.pt")
         )
