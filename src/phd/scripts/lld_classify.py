@@ -9,6 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from ..data import AudioProcs, DatasetParser
 from ..data.dataset import SampleInfo
+from ..data.utils import Dataset, split_loaders
 from ..util import compute, config, logger
 from ..util.arff import ArffRowType
 from ..util.arff import load as arff_load
@@ -198,7 +199,7 @@ def make_lld(name: str | list[str], tensor: Tensor) -> LLD | list[LLD]:
     return lld
 
 
-class LLDDataset(torch.utils.data.Dataset[LLD_Data]):
+class LLDDataset(Dataset[LLD_Data]):
     dataset: list[LLD]
     small_cache_file: str = path(
         config.paths.proc_data, "OpenSMILE", "LLDDataset-small.pkl"
@@ -289,25 +290,7 @@ def lld_classify() -> None:
 
     arff_writer = SummaryWriter(log_dir=path(newpath(config.paths.tensorboard)))
     arff_dataset = LLDDataset()
-    arff_train, arff_validation = torch.utils.data.random_split(
-        arff_dataset, [0.8, 0.2]
-    )
-    arff_sampler = torch.utils.data.RandomSampler(
-        data_source=arff_train,
-        replacement=False,
-        generator=torch.Generator(device=compute.device()),
-        num_samples=len(arff_train),
-    )
-    arff_data = torch.utils.data.DataLoader(
-        dataset=arff_train,
-        batch_size=64,
-        sampler=arff_sampler,
-        num_workers=0,
-        prefetch_factor=None,
-        drop_last=False,
-        pin_memory=False,
-        worker_init_fn=arff_init_worker,
-    )
+    arff_train, arff_test = split_loaders(arff_dataset)
 
     arff_model = LLDClassifier()
     arff_model.train()
@@ -322,8 +305,8 @@ def lld_classify() -> None:
     for epoch in range(100):
         logger.debug(f"Epoch: {epoch}")
         running_loss = 0.0
-        for i, (names, items) in enumerate(arff_data):
-            step = (epoch * len(arff_data)) + i
+        for i, (names, items) in enumerate(arff_train):
+            step = (epoch * len(arff_train)) + i
             logger.trace_var(items)
             logger.trace_tensor(items)
             logger.trace_nans(items)
@@ -347,8 +330,23 @@ def lld_classify() -> None:
             if i % log_div == 0 and i != 0:
                 logger.info(f"[{epoch}, {i:7d}] loss: {running_loss / log_div}")
                 running_loss = 0.0
-                arff_writer.add_pr_curve("lld_classify/pr_curve", arff_train, )
+                arff_model.eval()
+                arff_predictions = [arff_model(items) for _, items in arff_test]
+                arff_labels = [
+                    (
+                        torch.tensor([0.0, 1.0])
+                        if parser.dysarthric(spk)
+                        else torch.tensor([1.0, 0.0])
+                    )
+                    for spk, _ in arff_test
+                ]
+                arff_writer.add_pr_curve(
+                    "lld_classify/pr_curve",
+                    arff_labels,
+                    arff_predictions,
+                )
                 arff_writer.flush()
+                arff_model.train()
         torch.save(
             (arff_model, arff_optim), path(out_path, f"arff_model-{epoch}-{i}.pt")
         )
