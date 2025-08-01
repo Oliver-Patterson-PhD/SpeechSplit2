@@ -1,6 +1,14 @@
+from __future__ import annotations
+
 __all__ = [
     "logger",
     "LogLevel",
+    "TRACE",
+    "DEBUG",
+    "INFO",
+    "WARN",
+    "ERROR",
+    "FATAL",
 ]
 
 import inspect
@@ -12,7 +20,7 @@ from shutil import get_terminal_size
 from sys import _getframe
 from time import gmtime, strftime
 from types import FrameType
-from typing import Any, Iterable, List, Optional, Self, TextIO
+from typing import Any, Iterable, Optional, TextIO
 
 from torch import Tensor
 from tqdm import tqdm
@@ -49,7 +57,7 @@ class LogLevel(IntEnum):
         return str(self)
 
     @classmethod
-    def _missing_(cls, value: object) -> Optional[Self]:
+    def _missing_(cls, value: object) -> LogLevel | None:
         if isinstance(value, str):
             for member in cls:
                 if str(member.value) == value.upper().strip():
@@ -57,8 +65,17 @@ class LogLevel(IntEnum):
         return None
 
 
+LogStr = LogLevel | str
+TRACE = LogLevel.TRACE
+DEBUG = LogLevel.DEBUG
+INFO = LogLevel.INFO
+WARN = LogLevel.WARN
+ERROR = LogLevel.ERROR
+FATAL = LogLevel.FATAL
+
+
 class Logger(metaclass=Singleton):
-    __level: LogLevel = LogLevel.DEBUG
+    __level: LogLevel = DEBUG
     __file: Optional[TextIO] = None
     __flush: bool = False
     __pbar_running: bool = False
@@ -66,7 +83,7 @@ class Logger(metaclass=Singleton):
     __date_format: str = "%Y/%m/%d %H:%M:%S"
 
     def __init__(
-        self, level: Optional[LogLevel] = None, flush: Optional[bool] = None
+        self, level: LogLevel | None = None, flush: bool | None = None
     ) -> None:
         if level is not None:
             self.__level = level
@@ -89,7 +106,7 @@ class Logger(metaclass=Singleton):
         self.__print_callgraph = True
 
     def __format_caller(self, frame: FrameType) -> str:
-        base = "/SpeechSplit2/"
+        base = "/src/"
         name = frame.f_code.co_qualname
         fname = frame.f_code.co_filename.partition(base)[2]
         return f"[{fname}:{frame.f_lineno}] {name}"
@@ -110,8 +127,6 @@ class Logger(metaclass=Singleton):
                 if frame is None:
                     break
                 name = frame.f_code.co_qualname
-                if name == "<module>":
-                    break
                 if name.startswith("Logger"):
                     continue
                 names.append(self.__format_caller(frame))
@@ -138,7 +153,7 @@ class Logger(metaclass=Singleton):
         fullmsg = self.__format_msg(level=level, caller=caller, message=message)
         self.unformatted(level=level, fullmsg=fullmsg)
 
-    def unformatted(self, level: LogLevel | str, fullmsg: str) -> None:
+    def unformatted(self, level: LogStr, fullmsg: str) -> None:
         level = self.__get_level(level)
         if self.__file is not None or level >= self.__level:
             if level >= self.__level:
@@ -152,7 +167,7 @@ class Logger(metaclass=Singleton):
     def __is_nan(self, x: Tensor) -> bool:
         return True if x.isnan().any().item() else False
 
-    def __get_passed_varnames(self) -> List[str]:
+    def __get_passed_varnames(self) -> list[str]:
         frame = inspect.currentframe()
         assert frame is not None
         finfo = inspect.getouterframes(frame)[2]
@@ -162,13 +177,13 @@ class Logger(metaclass=Singleton):
         args = string[string.find("(") + 1 : -1].split(",")
         return [i.split("=")[1].strip() if i.find("=") != -1 else i for i in args]
 
-    def __get_level(self, level: LogLevel | str) -> LogLevel:
+    def __get_level(self, level: LogStr) -> LogLevel:
         return level if isinstance(level, LogLevel) else LogLevel[level]
 
     def get_level(self) -> LogLevel:
         return self.__level
 
-    def set_level(self, level: LogLevel | str) -> None:
+    def set_level(self, level: LogStr) -> None:
         self.__level = self.__get_level(level)
 
     def get_file(self) -> Optional[TextIO]:
@@ -178,23 +193,14 @@ class Logger(metaclass=Singleton):
         makedirs(dirname(file), exist_ok=True)
         self.__file = open(file, "wt", encoding="utf-8")
 
-    def input(
-        self,
-        message: str,
-        prompt: str = "",
-        level: LogLevel | str = LogLevel.INFO,
-    ) -> str:
+    def input(self, message: str, prompt: str = "", level: LogStr = INFO) -> str:
         self.__log(
             level=self.__get_level(level), caller=self.__get_caller(), message=message
         )
         return input(prompt)
 
     def input_with_default(
-        self,
-        message: str,
-        default: str,
-        prompt: str = "",
-        level: LogLevel | str = LogLevel.INFO,
+        self, message: str, default: str, prompt: str = "", level: LogStr = INFO
     ) -> str:
         if self.__level <= self.__get_level(level):
             self.__log(
@@ -207,44 +213,32 @@ class Logger(metaclass=Singleton):
             return default
 
     def trace(self, message: str, depth: int = 1) -> None:
-        self.__log(
-            level=LogLevel.TRACE, caller=self.__get_caller(depth), message=message
-        )
+        self.__log(level=TRACE, caller=self.__get_caller(depth), message=message)
 
     def debug(self, message: str, depth: int = 1) -> None:
-        self.__log(
-            level=LogLevel.DEBUG, caller=self.__get_caller(depth), message=message
-        )
+        self.__log(level=DEBUG, caller=self.__get_caller(depth), message=message)
 
     def info(self, message: str, depth: int = 1) -> None:
-        self.__log(
-            level=LogLevel.INFO, caller=self.__get_caller(depth), message=message
-        )
+        self.__log(level=INFO, caller=self.__get_caller(depth), message=message)
 
     def warn(self, message: str, depth: int = 1) -> None:
-        self.__log(
-            level=LogLevel.WARN, caller=self.__get_caller(depth), message=message
-        )
+        self.__log(level=WARN, caller=self.__get_caller(depth), message=message)
 
     def error(self, message: str, depth: int = 1) -> None:
-        self.__log(
-            level=LogLevel.ERROR, caller=self.__get_caller(depth), message=message
-        )
+        self.__log(level=ERROR, caller=self.__get_caller(depth), message=message)
 
     def fatal(self, message: str | Exception, depth: int = 1) -> None:
         self.__flush = True
-        self.__log(
-            level=LogLevel.FATAL, caller=self.__get_caller(depth), message=str(message)
-        )
+        self.__log(level=FATAL, caller=self.__get_caller(depth), message=str(message))
 
-    def trace_var(self, var: Any, level: LogLevel | str = LogLevel.TRACE) -> None:
+    def trace_var(self, var: Any, level: LogStr = TRACE) -> None:
         self.__log(
             level=self.__get_level(level),
             caller=self.__get_caller(),
             message=f"{self.__get_passed_varnames()[0]}: {pformat(var, indent=4)}",
         )
 
-    def trace_tensor(self, var: Tensor, level: LogLevel | str = LogLevel.TRACE) -> None:
+    def trace_tensor(self, var: Tensor, level: LogStr = TRACE) -> None:
         self.__log(
             level=self.__get_level(level),
             caller=self.__get_caller(),
@@ -254,14 +248,14 @@ class Logger(metaclass=Singleton):
     def trace_nans(self, x: Tensor) -> None:
         isnan = self.__is_nan(x)
         self.__log(
-            level=(LogLevel.WARN if isnan else LogLevel.TRACE),
+            level=(WARN if isnan else TRACE),
             caller=self.__get_caller(),
             message=f"{self.__get_passed_varnames()[0]}: {
                 'Has NaNs' if isnan else 'No NaNs'
             }",
         )
 
-    def log_if_nan(self, x: Tensor, level: LogLevel | str = LogLevel.ERROR) -> None:
+    def log_if_nan(self, x: Tensor, level: LogStr = ERROR) -> None:
         if self.__is_nan(x):
             self.__log(
                 level=self.__get_level(level),
@@ -269,7 +263,7 @@ class Logger(metaclass=Singleton):
                 message=f"{self.__get_passed_varnames()[0]}: Has NaNs",
             )
 
-    def log_if_nan_ret(self, x: Tensor, level: LogLevel | str = LogLevel.ERROR) -> bool:
+    def log_if_nan_ret(self, x: Tensor, level: LogStr = ERROR) -> bool:
         if self.__is_nan(x):
             self.__log(
                 level=self.__get_level(level),

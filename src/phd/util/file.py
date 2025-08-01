@@ -139,3 +139,11 @@ def rm_rf(dir: str) -> None:
     for root, _, files in os.walk(dir, topdown=False):
         for name in files:
             os.remove(path(root, name))
+
+
+def filesize(fullpath: str) -> int:
+    return os.path.getsize(fullpath)
+
+
+def delete(fullpath: str) -> None:
+    os.remove(fullpath)

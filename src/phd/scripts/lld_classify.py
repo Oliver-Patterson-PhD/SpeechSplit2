@@ -5,28 +5,29 @@ import pickle
 from typing import overload
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
 
 from ..data import AudioProcs, DatasetParser
 from ..data.dataset import SampleInfo
-from ..data.utils import Dataset, split_loaders
+from ..data.utils import DataLoader, Dataset, split_loaders
 from ..util import compute, config, logger
 from ..util.arff import ArffRowType
 from ..util.arff import load as arff_load
 from ..util.file import basename, exists, newpath, path, walkfiles
 from ..util.tensor import Tensor
+from ..util.tensorboard import TensorBoard
+
+TESTING = False
+log_div = 100
+eval_div = 1000
 
 parser = DatasetParser()
 processor = AudioProcs()
-
-compute.set_gpu()
-compute.set_default()
+tb: TensorBoard
 
 experiment_dir = newpath(config.paths.artefacts, basename(__name__))
 in_path = config.paths.raw_wavs
 out_path = newpath(experiment_dir, str(parser.dataset_type()))
 sample_rate = config.audio.sample_rate
-testing = False
 
 LLD_Data = tuple[str, Tensor]
 
@@ -37,6 +38,17 @@ def add_attr(self: object, row: ArffRowType, name: str, item: str, t: type) -> N
         setattr(self, name, thing)
     else:
         raise ValueError(f"Incorrect type for {item}: {type(thing)}, expected {t}")
+
+
+def dys_tensor(dysarthric: bool) -> list[float]:
+    return [0.0, 1.0] if dysarthric else [1.0, 0.0]
+
+
+def dys_bool(label: Tensor | list[float]) -> bool:
+    if isinstance(label, Tensor):
+        return label[0].item() < label[1].item()
+    else:
+        return label[0] < label[1]
 
 
 class LLD:
@@ -206,64 +218,95 @@ class LLDDataset(Dataset[LLD_Data]):
     )
     large_cache_file: str = path(config.paths.proc_data, "OpenSMILE", "LLDDataset.pkl")
     cache_file: str
+    small_size: int = 100
 
-    def __init__(self) -> None:
-        self.cache_file = self.small_cache_file if testing else self.large_cache_file
-        if not exists(self.cache_file):
-            logger.info("Generating LLD Dataset")
-            lld_path = path(config.paths.proc_data, "OpenSMILE", "custom-arff")
-            arff_files = walkfiles(lld_path, fullpaths=True)
-            if len(arff_files) == 0:
-                raise Exception("ERROR: No LLD files in dataset")
-            self.dataset = []
-            [
-                self.dataset.extend(
-                    [
-                        lld
-                        for lld in [LLD(line) for line in arff_load(file)]
-                        if lld.name is not None
-                    ]
-                )
-                for file in logger.progress_bar(arff_files, unit="files")
-            ]
-            logger.info("Saving LLD Dataset")
-            with open(self.large_cache_file, "wb") as pklfile:
-                pickle.dump(self.dataset, pklfile, protocol=pickle.HIGHEST_PROTOCOL)
-            with open(self.small_cache_file, "wb") as pklfile:
-                pickle.dump(
-                    self.dataset[0:100], pklfile, protocol=pickle.HIGHEST_PROTOCOL
-                )
+    def __init__(self, rawdata: list[LLD] | None = None) -> None:
+        if rawdata is None:
+            self.cache_file = (
+                self.small_cache_file if TESTING else self.large_cache_file
+            )
+            if not exists(self.cache_file):
+                logger.debug("LLDDataset Generating")
+                lld_path = path(config.paths.proc_data, "OpenSMILE", "custom-arff")
+                arff_files = walkfiles(lld_path, fullpaths=True)
+                if len(arff_files) == 0:
+                    raise Exception("ERROR: No LLD files in dataset")
+                self.dataset = []
+                [
+                    self.dataset.extend(
+                        [
+                            lld
+                            for lld in [LLD(line) for line in arff_load(file)]
+                            if lld.name is not None
+                        ]
+                    )
+                    for file in logger.progress_bar(arff_files, unit="files")
+                ]
+                logger.debug("LLDDataset Saving")
+                with open(self.large_cache_file, "wb") as pklfile:
+                    pickle.dump(
+                        self.dataset,
+                        pklfile,
+                        protocol=pickle.HIGHEST_PROTOCOL,
+                    )
+                with open(self.small_cache_file, "wb") as pklfile:
+                    pickle.dump(
+                        self.dataset[0 : self.small_size - 1],
+                        pklfile,
+                        protocol=pickle.HIGHEST_PROTOCOL,
+                    )
+                logger.debug("LLDDataset Saved")
+            else:
+                logger.debug("LLDDataset Loading")
+                with open(self.cache_file, "rb") as pklfile:
+                    self.dataset = pickle.load(pklfile)
+                logger.debug("LLDDataset Loaded")
         else:
-            logger.info("Loading LLD Dataset")
-            with open(self.cache_file, "rb") as pklfile:
-                self.dataset = pickle.load(pklfile)
+            logger.debug("LLDDataset creating from raw list")
+            self.dataset = rawdata
+            logger.debug("LLDDataset created from raw list")
         self.length = len(self.dataset)
 
     def __len__(self) -> int:
         return self.length
 
     def __getitem__(self, index: int) -> LLD_Data:
-        return self.dataset[index].to_data()
+        item = self.dataset[index]
+        if isinstance(item, LLD):
+            return item.to_data()
+        else:
+            return item
 
 
 class LLDClassifier(torch.nn.Module):
+    n_classes: int = 2
+    __view_div: int = 2
+
     def __init__(self) -> None:
         super().__init__()
-        self.conv = torch.nn.Conv1d(
-            in_channels=13,
-            out_channels=2,
-            kernel_size=2,
+        assert LLD.n_llds() % self.__view_div == 0
+        self.__i_len = LLD.n_llds() // self.__view_div
+        i_size = self.__i_len * 2
+        self.feat_layers = torch.nn.Sequential(
+            torch.nn.Conv1d(self.__i_len, i_size, 2),
+            torch.nn.ReLU(True),
+            torch.nn.MaxPool1d(2, 1, 1, 1),
+        )
+        self.out_layers = torch.nn.Sequential(
+            torch.nn.Linear(i_size * 2, self.n_classes),
+            torch.nn.Sigmoid(),
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        x_vdim = (x.size(dim=0), 13, 2) if x.ndim == 2 else (13, 2)
-        x_view = x.view(*x_vdim)
-        logger.trace_tensor(x_view)
-        logger.trace_nans(x_view)
-        x_conv = self.conv(x_view)
-        logger.trace_tensor(x_conv)
-        logger.trace_nans(x_conv)
-        return x_conv
+        assert x.size(dim=-1) == LLD.n_llds()
+        x_vdim = (
+            (x.size(dim=0), self.__i_len, self.__view_div)
+            if x.ndim == 2
+            else (self.__i_len, self.__view_div)
+        )
+        return self.out_layers(
+            torch.flatten(self.feat_layers(x.view(*x_vdim)), start_dim=-2)
+        )
 
 
 def arff_init_worker(x: int) -> None:
@@ -275,48 +318,50 @@ def arff_result(name: str) -> SampleInfo:
 
 
 def arff_results(names: list[str]) -> Tensor:
-    results = torch.tensor(
-        [[0.0, 1.0] if arff_result(name).dysarthric else [1.0, 0.0] for name in names]
-    ).unsqueeze(-1)
-    logger.trace_tensor(results)
+    reslist = [dys_tensor(arff_result(name).dysarthric) for name in names]
+    results = torch.tensor(reslist)
     return results
 
 
+@torch.no_grad()
+def lld_evaluate(model: LLDClassifier, val: DataLoader[LLD_Data], step: int) -> None:
+    model.eval()
+    valitems = [(n, i) for nn, ii in val for n, i in zip(nn, ii)]
+    predictions = torch.tensor([model(items).tolist() for _, items in valitems])
+    labels = torch.tensor([dys_tensor(parser.dysarthric(spk)) for spk, _ in valitems])
+    tb.add_pr_curve("pr_curve", labels, predictions, step)
+    good = [(dys_bool(pred) == dys_bool(lbl)) for pred, lbl in zip(predictions, labels)]
+    tb.add_scalar("eval_true", sum(good) / len(good), step)
+    tb.flush()
+    model.train()
+
+
 def lld_classify() -> None:
+    global tb
+    tb = TensorBoard()
     torch.multiprocessing.set_sharing_strategy("file_system")
     torch.multiprocessing.set_start_method("spawn", force=True)
     compute.set_gpu()
     compute.set_default()
 
-    arff_writer = SummaryWriter(log_dir=path(newpath(config.paths.tensorboard)))
-    arff_dataset = LLDDataset()
-    arff_train, arff_test = split_loaders(arff_dataset)
-
+    arff_train, arff_test = split_loaders(LLDDataset(), parallel=False)
     arff_model = LLDClassifier()
     arff_model.train()
-    arff_optim = torch.optim.SGD(
-        arff_model.parameters(),
-        lr=0.001,
-        momentum=0.9,
-    )
+    arff_optim = torch.optim.SGD(arff_model.parameters(), lr=0.001, momentum=0.9)
     arff_loss = torch.nn.CrossEntropyLoss()
 
-    log_div = 100
     for epoch in range(100):
-        logger.debug(f"Epoch: {epoch}")
         running_loss = 0.0
-        for i, (names, items) in enumerate(arff_train):
+        i = 0
+        for names, items in arff_train:
+            i += 1
             step = (epoch * len(arff_train)) + i
-            logger.trace_var(items)
-            logger.trace_tensor(items)
             logger.trace_nans(items)
 
             out_data = arff_model(items)
-            logger.trace_tensor(out_data)
             logger.trace_nans(out_data)
 
             truth = arff_results(names)
-            logger.trace_tensor(truth)
             logger.trace_nans(truth)
 
             loss = arff_loss(out_data, truth)
@@ -324,29 +369,16 @@ def lld_classify() -> None:
             arff_optim.step()
             running_loss += loss.item()
 
-            arff_writer.add_scalar(
-                tag="lld_classify/loss", scalar_value=loss.item(), global_step=step
-            )
-            if i % log_div == 0 and i != 0:
-                logger.info(f"[{epoch}, {i:7d}] loss: {running_loss / log_div}")
-                running_loss = 0.0
-                arff_model.eval()
-                arff_predictions = [arff_model(items) for _, items in arff_test]
-                arff_labels = [
-                    (
-                        torch.tensor([0.0, 1.0])
-                        if parser.dysarthric(spk)
-                        else torch.tensor([1.0, 0.0])
+            tb.add_scalar(name="loss", item=loss.item(), step=step)
+            if i % log_div == 0:
+                logger.info(
+                    "[{:10d}: {:5d}, {:7d}] loss: {}".format(
+                        step, epoch, i, running_loss / log_div
                     )
-                    for spk, _ in arff_test
-                ]
-                arff_writer.add_pr_curve(
-                    "lld_classify/pr_curve",
-                    arff_labels,
-                    arff_predictions,
                 )
-                arff_writer.flush()
-                arff_model.train()
+                running_loss = 0.0
+            if i % eval_div == 0:
+                lld_evaluate(arff_model, arff_test, step)
         torch.save(
             (arff_model, arff_optim), path(out_path, f"arff_model-{epoch}-{i}.pt")
         )

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
 
 from ..data import AudioProcs, DatasetParser
 from ..util import compute, config, logger
@@ -10,10 +9,6 @@ from ..util.file import basename, exists, newpath, path, walkfiles
 
 parser = DatasetParser()
 processor = AudioProcs()
-writer = SummaryWriter(log_dir=path(newpath(config.paths.tensorboard)))
-
-compute.set_gpu()
-compute.set_default()
 
 experiment_dir = newpath(config.paths.artefacts, basename(__name__))
 in_path = config.paths.raw_wavs

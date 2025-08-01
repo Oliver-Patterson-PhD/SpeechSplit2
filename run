@@ -1,17 +1,38 @@
 #!/bin/sh
 set -eu
+progname="${0##/}"
+
+run_tool(){
+	set -x
+	uv tool run "$@"
+	set +x
+}
 
 run_test(){
+	set -x
 	uv run --dev --extra "${PHD_EXTRA}" python -m mypy ./src/phd
+	set +x
 }
 
 run_experiment(){
+	set -x
 	uv run --dev --extra "${PHD_EXTRA}" "$@"
+	set +x
+}
+
+run_tensorboard(){
+	run_tool tensorboard --logdir 'artefacts/tensorboard'
+}
+
+helpmsg(){
+	echo "${progname}: experiment runner"
+	echo "usage: ${progname} <experiment-name|test>"
 }
 
 runtype="$1"; shift;
 case "${runtype}" in
-	experiment) run_experiment "$@" ;;
+	help) helpmsg; exit 1 ;;
 	test) run_test "$@" ;;
-	*) exit 1 ;;
+	tensorboard) run_tensorboard ;;
+	*) run_experiment "${runtype}" "$@" ;;
 esac

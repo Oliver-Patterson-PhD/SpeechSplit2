@@ -38,6 +38,7 @@ dependencies = [
 ]
 
 [project.scripts]
+tensorboard = "phd:tensorboard"
 experiment = "phd:main"
 check = "phd:check"
 scratch = "phd:scratch"
