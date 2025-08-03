@@ -202,7 +202,8 @@ class Config(metaclass=Singleton):
             experiment_name = "experiments/" + tomldict["options"]["experiment"]
             experiment_dict = loadtoml(open(config_str.format(experiment_name), "rb"))
             audio_name = "audio/" + tomldict["options"]["audio"]
-            audio_dict = loadtoml(open(config_str.format(audio_name), "rb"))
+            with open(config_str.format(audio_name), "rb") as openconf:
+                audio_dict = loadtoml(openconf)
             tomldict = self.__merge_dicts(
                 tomldict,
                 model_dict,
@@ -396,5 +397,6 @@ class Config(metaclass=Singleton):
 
     def __reduce__(self):
         return (self.__class__, ())
+
 
 config = Config("base")

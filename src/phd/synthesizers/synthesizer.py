@@ -16,7 +16,8 @@ class Synthesizer(object):
         self.device = device
         config_file = f"{config.paths.full_models}/{self.model_name}.toml"
         pickle_file = f"{config.paths.full_models}/{self.model_name}.pkl"
-        tomlconfig = loadtoml(open(config_file, "rb"))
+        with open(config_file, "rb") as openconf:
+            tomlconfig = loadtoml(openconf)
         state_dict = torch.load(pickle_file, map_location="cpu", weights_only=True)
         model_params = {
             k.replace("upsample_kernal_sizes", "upsample_kernel_sizes"): v

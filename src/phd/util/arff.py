@@ -260,8 +260,9 @@ def loadarff(ofile: TextIOWrapper) -> tuple[list[ArffRowType], MetaData]:
     return data, meta
 
 
-def load(fname: str) -> ArffData:
-    # data, meta = loadarff(fname)
+def load(fname: str) -> ArffData | None:
     with open(fname) as ofile:
         data, meta = loadarff(ofile)
+    if len(data) == 0:
+        return None
     return ArffData(data, meta)

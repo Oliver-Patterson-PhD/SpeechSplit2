@@ -110,15 +110,16 @@ class Scratchpad(Experiment):
     @torch.no_grad()
     def save_item(self, name: str, orig: Tensor, proc: Tensor) -> None:
         logger.debug(f"Processing: {name}")
-        open(os.path.join(self.lossdir, name + ".txt"), "w").write(
-            CompareItem(
-                name,
-                mel1=orig,
-                mel2=proc,
-                model=self.transcriber,
-                text=self.parser.get_real_text(name),
-            ).__str__()
-        )
+        with open(os.path.join(self.lossdir, name + ".txt"), "w") as openout:
+            openout.write(
+                CompareItem(
+                    name,
+                    mel1=orig,
+                    mel2=proc,
+                    model=self.transcriber,
+                    text=self.parser.get_real_text(name),
+                ).__str__()
+            )
         raw_audio_file = os.path.join(
             config.paths.raw_wavs, self.parser.speaker(name), f"{name}.wav"
         )

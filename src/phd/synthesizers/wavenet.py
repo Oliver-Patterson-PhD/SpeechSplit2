@@ -43,7 +43,8 @@ class Wavenet(Synthesizer):
     def __init__(self, device: torch.device) -> None:
         data_dir = config.paths.full_models
         config_file = f"{data_dir}/{self.model_name}.toml"
-        self.wavconf = WavenetConfig(loadtoml(open(config_file, "rb")))
+        with open(config_file, "rb") as openconfig:
+            self.wavconf = WavenetConfig(loadtoml(openconfig))
         self.model = WavenetGenerator(
             out_channels=self.wavconf.out_channels,
             layers=self.wavconf.layers,

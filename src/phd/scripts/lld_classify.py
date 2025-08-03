@@ -1,280 +1,132 @@
 # mypy: disable-error-code="func-returns-value"
 from __future__ import annotations
 
-import pickle
-from typing import overload
-
+import inspect
 import torch
 
 from ..data import AudioProcs, DatasetParser
 from ..data.dataset import SampleInfo
-from ..data.utils import DataLoader, Dataset, split_loaders
+from ..data.utils import Dataset, split_loaders
 from ..util import compute, config, logger
-from ..util.arff import ArffRowType
-from ..util.arff import load as arff_load
+from ..util.arff import ArffRowType, load
 from ..util.file import basename, exists, newpath, path, walkfiles
 from ..util.tensor import Tensor
 from ..util.tensorboard import TensorBoard
 
-TESTING = False
+TESTING = True
 log_div = 1000
+
+LLD_Data = tuple[str, Tensor]
+tb: TensorBoard
 
 parser = DatasetParser()
 processor = AudioProcs()
-tb: TensorBoard
-
-experiment_dir = newpath(config.paths.artefacts, basename(__name__))
 in_path = config.paths.raw_wavs
-out_path = newpath(experiment_dir, str(parser.dataset_type()))
 sample_rate = config.audio.sample_rate
+smile_path = path(config.paths.proc_data, "OpenSMILE")
 
-LLD_Data = tuple[str, Tensor]
+
+def ret_attr[T](row: ArffRowType, item: str, t: type[T]) -> T:
+    thing = row.get(item)
+    if not isinstance(thing, t):
+        raise ValueError(f"Incorrect type for {item}: {type(thing)}, expected {t}")
+    return thing
 
 
 def add_attr(self: object, row: ArffRowType, name: str, item: str, t: type) -> None:
     thing = row.get(item)
-    if isinstance(thing, t):
-        setattr(self, name, thing)
-    else:
+    if not isinstance(thing, t):
         raise ValueError(f"Incorrect type for {item}: {type(thing)}, expected {t}")
+    setattr(self, name, thing)
 
 
-def dys_tensor(dysarthric: bool) -> list[float]:
-    return [0.0, 1.0] if dysarthric else [1.0, 0.0]
+def dys_tensor(dysarthric: bool) -> Tensor:
+    return torch.tensor([0.0, 1.0] if dysarthric else [1.0, 0.0])
 
 
-def dys_bool(label: Tensor | list[float]) -> bool:
-    if isinstance(label, Tensor):
-        return label[0].item() < label[1].item()
-    else:
-        return label[0] < label[1]
+N_LLDS = 26
 
 
-class LLD:
-    name: str
-    frametime: float
-    loudness: float
-    alpharatio: float
-    hammarbergindex: float
-    slope0to500: float
-    slope500to1500: float
-    spectralflux: float
-    mfcc1: float
-    mfcc2: float
-    mfcc3: float
-    mfcc4: float
-    f0semitone: float
-    jitter: float
-    shimmer: float
-    hnr: float
-    logrelf0h1h2: float
-    logrelf0h1a3: float
-    f1frequency: float
-    f1bandwidth: float
-    f1amplitude: float
-    f2frequency: float
-    f2bandwidth: float
-    f2amplitude: float
-    f3frequency: float
-    f3bandwidth: float
-    f3amplitude: float
-
-    @classmethod
-    def n_llds(cls) -> int:
-        return 26
-
-    def __init__(self, row: ArffRowType | None = None) -> None:
-        if row is None:
-            return
-
-        add_attr(self, row, "name", "name", str)
-        add_attr(self, row, "frametime", "frameTime", float)
-        add_attr(self, row, "loudness", "Loudness_sma3", float)
-        add_attr(self, row, "alpharatio", "alphaRatio_sma3", float)
-        add_attr(self, row, "hammarbergindex", "hammarbergIndex_sma3", float)
-        add_attr(self, row, "slope0to500", "slope0-500_sma3", float)
-        add_attr(self, row, "slope500to1500", "slope500-1500_sma3", float)
-        add_attr(self, row, "spectralflux", "spectralFlux_sma3", float)
-        add_attr(self, row, "mfcc1", "mfcc1_sma3", float)
-        add_attr(self, row, "mfcc2", "mfcc2_sma3", float)
-        add_attr(self, row, "mfcc3", "mfcc3_sma3", float)
-        add_attr(self, row, "mfcc4", "mfcc4_sma3", float)
-        add_attr(self, row, "f0semitone", "F0semitoneFrom27.5Hz_sma3nz", float)
-        add_attr(self, row, "jitter", "jitterLocal_sma3nz", float)
-        add_attr(self, row, "shimmer", "shimmerLocaldB_sma3nz", float)
-        add_attr(self, row, "hnr", "HNRdBACF_sma3nz", float)
-        add_attr(self, row, "logrelf0h1h2", "logRelF0-H1-H2_sma3nz", float)
-        add_attr(self, row, "logrelf0h1a3", "logRelF0-H1-A3_sma3nz", float)
-        add_attr(self, row, "f1frequency", "F1frequency_sma3nz", float)
-        add_attr(self, row, "f1bandwidth", "F1bandwidth_sma3nz", float)
-        add_attr(self, row, "f1amplitude", "F1amplitudeLogRelF0_sma3nz", float)
-        add_attr(self, row, "f2frequency", "F2frequency_sma3nz", float)
-        add_attr(self, row, "f2bandwidth", "F2bandwidth_sma3nz", float)
-        add_attr(self, row, "f2amplitude", "F2amplitudeLogRelF0_sma3nz", float)
-        add_attr(self, row, "f3frequency", "F3frequency_sma3nz", float)
-        add_attr(self, row, "f3bandwidth", "F3bandwidth_sma3nz", float)
-        add_attr(self, row, "f3amplitude", "F3amplitudeLogRelF0_sma3nz", float)
-
-    def to_data(self) -> LLD_Data:
-        return (
-            self.name,
-            torch.tensor(
-                [
-                    self.frametime,
-                    self.loudness,
-                    self.alpharatio,
-                    self.hammarbergindex,
-                    self.slope0to500,
-                    self.slope500to1500,
-                    self.spectralflux,
-                    self.mfcc1,
-                    self.mfcc2,
-                    self.mfcc3,
-                    self.mfcc4,
-                    self.f0semitone,
-                    self.jitter,
-                    self.shimmer,
-                    self.hnr,
-                    self.logrelf0h1h2,
-                    self.logrelf0h1a3,
-                    self.f1frequency,
-                    self.f1bandwidth,
-                    self.f1amplitude,
-                    self.f2frequency,
-                    self.f2bandwidth,
-                    self.f2amplitude,
-                    self.f3frequency,
-                    self.f3bandwidth,
-                    self.f3amplitude,
-                ]
-            ),
-        )
-
-
-@overload
-def make_lld(name: str, tensor: Tensor) -> LLD:
-    pass
-
-
-@overload
-def make_lld(name: list[str], tensor: Tensor) -> list[LLD]:
-    pass
-
-
-def make_lld(name: str | list[str], tensor: Tensor) -> LLD | list[LLD]:
-    if not tensor.size(dim=-1) == LLD.n_llds():
-        raise TypeError(
-            f"Invalid LLD tensor shape: {tensor.shape}\n"
-            f"Last dimension must be {LLD.n_llds()}"
-        )
-    if tensor.size(dim=0) == 1:
-        tensor.squeeze_()
-    if tensor.ndimension() == 1:
-        if not isinstance(name, str):
-            raise TypeError(f"invalid LLD set with tensor shape: {tensor.shape}")
-        lld = LLD()
-        lld.name = name
-        lld.frametime = tensor[0].item()
-        lld.loudness = tensor[1].item()
-        lld.alpharatio = tensor[2].item()
-        lld.hammarbergindex = tensor[3].item()
-        lld.slope0to500 = tensor[4].item()
-        lld.slope500to1500 = tensor[5].item()
-        lld.spectralflux = tensor[6].item()
-        lld.mfcc1 = tensor[7].item()
-        lld.mfcc2 = tensor[8].item()
-        lld.mfcc3 = tensor[9].item()
-        lld.mfcc4 = tensor[10].item()
-        lld.f0semitone = tensor[11].item()
-        lld.jitter = tensor[12].item()
-        lld.shimmer = tensor[13].item()
-        lld.hnr = tensor[14].item()
-        lld.logrelf0h1h2 = tensor[15].item()
-        lld.logrelf0h1a3 = tensor[16].item()
-        lld.f1frequency = tensor[17].item()
-        lld.f1bandwidth = tensor[18].item()
-        lld.f1amplitude = tensor[19].item()
-        lld.f2frequency = tensor[20].item()
-        lld.f2bandwidth = tensor[21].item()
-        lld.f2amplitude = tensor[22].item()
-        lld.f3frequency = tensor[23].item()
-        lld.f3bandwidth = tensor[24].item()
-        lld.f3amplitude = tensor[25].item()
-        return lld
-    elif tensor.ndimension() == 2:
-        if not isinstance(name, list):
-            raise TypeError(f"invalid LLD set with tensor shape: {tensor.shape}")
-        return [make_lld(iname, batch) for iname, batch in zip(name, tensor)]
-    else:
-        raise RuntimeError(f"Invalid tensor dimensions for: {tensor.shape}")
-    return lld
+def row_to_data(row: ArffRowType) -> LLD_Data:
+    return (
+        ret_attr(row, "name", str),
+        torch.tensor(
+            [
+                ret_attr(row, "frameTime", float),
+                ret_attr(row, "Loudness_sma3", float),
+                ret_attr(row, "alphaRatio_sma3", float),
+                ret_attr(row, "hammarbergIndex_sma3", float),
+                ret_attr(row, "slope0-500_sma3", float),
+                ret_attr(row, "slope500-1500_sma3", float),
+                ret_attr(row, "spectralFlux_sma3", float),
+                ret_attr(row, "mfcc1_sma3", float),
+                ret_attr(row, "mfcc2_sma3", float),
+                ret_attr(row, "mfcc3_sma3", float),
+                ret_attr(row, "mfcc4_sma3", float),
+                ret_attr(row, "F0semitoneFrom27.5Hz_sma3nz", float),
+                ret_attr(row, "jitterLocal_sma3nz", float),
+                ret_attr(row, "shimmerLocaldB_sma3nz", float),
+                ret_attr(row, "HNRdBACF_sma3nz", float),
+                ret_attr(row, "logRelF0-H1-H2_sma3nz", float),
+                ret_attr(row, "logRelF0-H1-A3_sma3nz", float),
+                ret_attr(row, "F1frequency_sma3nz", float),
+                ret_attr(row, "F1bandwidth_sma3nz", float),
+                ret_attr(row, "F1amplitudeLogRelF0_sma3nz", float),
+                ret_attr(row, "F2frequency_sma3nz", float),
+                ret_attr(row, "F2bandwidth_sma3nz", float),
+                ret_attr(row, "F2amplitudeLogRelF0_sma3nz", float),
+                ret_attr(row, "F3frequency_sma3nz", float),
+                ret_attr(row, "F3bandwidth_sma3nz", float),
+                ret_attr(row, "F3amplitudeLogRelF0_sma3nz", float),
+            ]
+        ),
+    )
 
 
 class LLDDataset(Dataset[LLD_Data]):
-    dataset: list[LLD]
-    small_cache_file: str = path(
-        config.paths.proc_data, "OpenSMILE", "LLDDataset-small.pkl"
-    )
-    large_cache_file: str = path(config.paths.proc_data, "OpenSMILE", "LLDDataset.pkl")
+    dataset: list[LLD_Data]
+    small_cache_file: str = path(smile_path, "LLDDataset-small.pt")
+    large_cache_file: str = path(smile_path, "LLDDataset.pt")
     cache_file: str
-    small_size: int = 100
+    small_size: int = 1000
 
-    def __init__(self, rawdata: list[LLD] | None = None) -> None:
-        if rawdata is None:
-            self.cache_file = (
-                self.small_cache_file if TESTING else self.large_cache_file
-            )
-            if not exists(self.cache_file):
-                logger.debug("LLDDataset Generating")
-                lld_path = path(config.paths.proc_data, "OpenSMILE", "custom-arff")
-                arff_files = walkfiles(lld_path, fullpaths=True)
-                if len(arff_files) == 0:
-                    raise Exception("ERROR: No LLD files in dataset")
-                self.dataset = []
-                [
-                    self.dataset.extend(
-                        [
-                            lld
-                            for lld in [LLD(line) for line in arff_load(file)]
-                            if lld.name is not None
-                        ]
-                    )
-                    for file in logger.progress_bar(arff_files, unit="files")
-                ]
-                logger.debug("LLDDataset Saving")
-                with open(self.large_cache_file, "wb") as pklfile:
-                    pickle.dump(
-                        self.dataset,
-                        pklfile,
-                        protocol=pickle.HIGHEST_PROTOCOL,
-                    )
-                with open(self.small_cache_file, "wb") as pklfile:
-                    pickle.dump(
-                        self.dataset[0 : self.small_size - 1],
-                        pklfile,
-                        protocol=pickle.HIGHEST_PROTOCOL,
-                    )
-                logger.debug("LLDDataset Saved")
-            else:
-                logger.debug("LLDDataset Loading")
-                with open(self.cache_file, "rb") as pklfile:
-                    self.dataset = pickle.load(pklfile)
-                logger.debug("LLDDataset Loaded")
-        else:
+    def __init__(self, rawdata: list[LLD_Data] | None = None) -> None:
+        self.cache_file = self.small_cache_file if TESTING else self.large_cache_file
+        if rawdata is not None:
             logger.debug("LLDDataset creating from raw list")
             self.dataset = rawdata
             logger.debug("LLDDataset created from raw list")
+        elif exists(self.cache_file):
+            logger.debug("LLDDataset Loading")
+            self.dataset = torch.load(self.cache_file)
+            logger.debug("LLDDataset Loaded")
+        else:
+            logger.debug("LLDDataset Generating")
+            with torch.multiprocessing.Pool(4) as pool:
+                arff_path = path(smile_path, "custom-arff")
+                arff_files = walkfiles(arff_path, fullpaths=True)
+                arff_data = pool.map(
+                    load, logger.progress_bar(arff_files, unit="files")
+                )
+                arff_flat = [
+                    item for row in arff_data if row is not None for item in row
+                ]
+                self.dataset = pool.map(
+                    row_to_data, logger.progress_bar(arff_flat, unit="results")
+                )
+            logger.debug("LLDDataset Saving")
+            torch.save(self.dataset, self.large_cache_file)
+            torch.save(self.dataset[0 : self.small_size - 1], self.small_cache_file)
+            logger.debug("LLDDataset Saved")
         self.length = len(self.dataset)
+        if self.length == 0:
+            raise Exception("ERROR: No LLD files in dataset")
 
     def __len__(self) -> int:
         return self.length
 
     def __getitem__(self, index: int) -> LLD_Data:
-        item = self.dataset[index]
-        if isinstance(item, LLD):
-            return item.to_data()
-        else:
-            return item
+        return self.dataset[index]
 
 
 class LLDClassifier(torch.nn.Module):
@@ -283,8 +135,8 @@ class LLDClassifier(torch.nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        assert LLD.n_llds() % self.__view_div == 0
-        self.__i_len = LLD.n_llds() // self.__view_div
+        assert N_LLDS % self.__view_div == 0
+        self.__i_len = N_LLDS // self.__view_div
         i_size = self.__i_len * 2
         self.feat_layers = torch.nn.Sequential(
             torch.nn.Conv1d(self.__i_len, i_size, 2),
@@ -297,7 +149,7 @@ class LLDClassifier(torch.nn.Module):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        assert x.size(dim=-1) == LLD.n_llds()
+        assert x.size(dim=-1) == N_LLDS
         x_vdim = (
             (x.size(dim=0), self.__i_len, self.__view_div)
             if x.ndim == 2
@@ -308,29 +160,26 @@ class LLDClassifier(torch.nn.Module):
         )
 
 
-def arff_init_worker(x: int) -> None:
-    return ((torch.initial_seed()) % (2**32),)  # type: ignore
-
-
-def arff_result(name: str) -> SampleInfo:
-    return SampleInfo(name)
-
-
 def arff_results(names: list[str]) -> Tensor:
-    reslist = [dys_tensor(arff_result(name).dysarthric) for name in names]
+    reslist = [dys_tensor(SampleInfo(name).dysarthric) for name in names]
     results = torch.tensor(reslist)
     return results
 
 
 @torch.no_grad()
-def lld_evaluate(model: LLDClassifier, val: DataLoader[LLD_Data], step: int) -> None:
+def lld_evaluate(model: LLDClassifier, valitems: list[LLD_Data], step: int) -> None:
     model.eval()
-    valitems = [(n, i) for nn, ii in val for n, i in zip(nn, ii)]
-    predictions = torch.tensor([model(items).tolist() for _, items in valitems])
-    labels = torch.tensor([dys_tensor(parser.dysarthric(spk)) for spk, _ in valitems])
+    logger.info(f"Evaluating step: {step}")
+    predictions = torch.tensor(model(items) for _, items in valitems)
+    label_bools = torch.tensor(parser.dysarthric(spk) for spk, _ in valitems)
+    labels = torch.tensor(dys_tensor(val) for val in label_bools)
     tb.add_pr_curve("pr_curve", labels, predictions, step)
-    good = [(dys_bool(pred) == dys_bool(lbl)) for pred, lbl in zip(predictions, labels)]
-    tb.add_scalar("eval_true", sum(good) / len(good), step)
+    logger.debug("Calculating hit-rate")
+    pred_bools = predictions[:, 0] < predictions[:, 1]
+    good = pred_bools == label_bools
+    good_ave = good.sum() / good.size(dim=-1)
+    logger.trace_var(good_ave, "DEBUG")
+    tb.add_scalar("eval_true", good_ave.item(), step)
     tb.flush()
     model.train()
 
@@ -338,18 +187,27 @@ def lld_evaluate(model: LLDClassifier, val: DataLoader[LLD_Data], step: int) -> 
 def lld_classify() -> None:
     global tb
     tb = TensorBoard()
+    experiment = basename(inspect.stack()[0].filename)
+    experiment_dir = newpath(config.paths.artefacts, experiment)
+    out_path = newpath(experiment_dir, str(parser.dataset_type()))
+    logger.trace_var(out_path, "DEBUG")
     torch.multiprocessing.set_sharing_strategy("file_system")
-    torch.multiprocessing.set_start_method("spawn", force=True)
+    torch.multiprocessing.set_start_method("forkserver", force=True)
     compute.set_gpu()
     compute.set_default()
 
-    arff_train, arff_test = split_loaders(LLDDataset(), parallel=False)
+    logger.info("Building Model")
     arff_model = LLDClassifier()
-    arff_model.train()
-    arff_optim = torch.optim.SGD(arff_model.parameters(), lr=0.001)
-    arff_loss = torch.nn.CrossEntropyLoss()
+    arff_optim = torch.optim.Adam(arff_model.parameters())
+    arff_loss = torch.nn.BCELoss()
 
-    for epoch in range(100):
+    arff_train, arff_test = split_loaders(LLDDataset(), parallel=False)
+    logger.info("Loading evaluation data")
+    valitems = [(n, i) for nn, ii in arff_test for n, i in zip(nn, ii)]
+
+    logger.info("Starting Training")
+    arff_model.train()
+    for epoch in range(10):
         running_loss = 0.0
         i = 0
         for names, items in arff_train:
@@ -370,13 +228,11 @@ def lld_classify() -> None:
 
             tb.add_scalar(name="loss", item=loss.item(), step=step)
             if i % log_div == 0:
-                logger.info(
-                    "[{:10d}: {:5d}, {:7d}] loss: {}".format(
-                        step, epoch, i, running_loss / log_div
-                    )
-                )
+                ave_loss = running_loss / log_div
+                logger.info(f"[{step:8d}: {epoch:3d}, {i:7d}] loss: {ave_loss}")
                 running_loss = 0.0
-        lld_evaluate(arff_model, arff_test, step)
+        lld_evaluate(arff_model, valitems, step)
         torch.save(
-            (arff_model, arff_optim), path(out_path, f"arff_model-{epoch}-{i}.pt")
+            (arff_model, arff_optim),
+            path(out_path, f"arff_model{config.start_time}-{epoch}.pt"),
         )

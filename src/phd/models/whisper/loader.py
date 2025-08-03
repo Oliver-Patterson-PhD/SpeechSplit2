@@ -77,7 +77,8 @@ def _download(url: str, root: str) -> str:
                     break
                 output.write(buffer)
                 loop.update(len(buffer))
-    model_bytes = open(download_target, "rb").read()
+    with open(download_target, "rb") as modelfile:
+        model_bytes = modelfile.read()
     assert hashlib.sha256(model_bytes).hexdigest() == expected_sha256
     return download_target
 

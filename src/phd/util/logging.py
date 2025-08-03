@@ -120,7 +120,8 @@ class Logger(metaclass=Singleton):
     def __get_caller(self, depth: int = 1) -> str:
         if self.__print_callgraph:
             frame: FrameType | None = inspect.currentframe()
-            assert frame is not None
+            if frame is None:
+                return "<unknown>"
             names: list[str] = []
             while True:
                 frame = frame.f_back
@@ -133,7 +134,8 @@ class Logger(metaclass=Singleton):
             return f"{list(reversed(names))}"
         else:
             tmp_frame = _getframe(depth).f_back
-            assert tmp_frame is not None
+            if tmp_frame is None:
+                return "<unknown>"
             return tmp_frame.f_code.co_qualname
 
     def __format_msg(self, level: LogLevel, caller: str, message: str) -> str:
@@ -169,10 +171,12 @@ class Logger(metaclass=Singleton):
 
     def __get_passed_varnames(self) -> list[str]:
         frame = inspect.currentframe()
-        assert frame is not None
+        if frame is None:
+            return ["<unknown>"]
         finfo = inspect.getouterframes(frame)[2]
         context = inspect.getframeinfo(finfo[0]).code_context
-        assert context is not None
+        if context is None:
+            return ["<unknown>"]
         string = context[0].strip().replace("Logger()", "logger")
         args = string[string.find("(") + 1 : -1].split(",")
         return [i.split("=")[1].strip() if i.find("=") != -1 else i for i in args]
