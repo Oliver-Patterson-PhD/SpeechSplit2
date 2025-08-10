@@ -16,7 +16,7 @@ from ..util.tensor import Tensor
 parser = DatasetParser()
 processor = AudioProcs()
 
-TESTING = True
+TESTING = False
 
 tb: TensorBoard
 
