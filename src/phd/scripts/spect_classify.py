@@ -163,23 +163,19 @@ def spect_classify() -> None:
     experiment_path = newpath(config.paths.artefacts, basename(__name__))
     out_path = newpath(experiment_path, str(parser.dataset_type()))
     model.train()
-    for epoch in range(10):
+    for epoch in range(100):
         running_loss = 0.0
         for i, (truths, raw_specs) in enumerate(spect_train):
             truths = truths.to(compute.device())
             raw_specs = raw_specs.to(compute.device())
-            logger.trace_tensor(raw_specs)
             specs = spect_process(raw_specs.unsqueeze(1))
-            logger.trace_tensor(truths)
-            logger.trace_tensor(specs)
             step = (epoch * (len(spect_train))) + i
             out_data = model(specs)
             loss = loss_fn(out_data, truths)
             loss.backward()
-            logger.trace_var(loss)
             running_loss += loss.item()
             tb.add_scalar(name="loss", item=loss.item(), step=step)
-            if i % log_div == 0:
+            if i % log_div == 0 and i != 0:
                 ave_loss = running_loss / log_div
                 logger.info(f"[{step:8d}: {epoch:3d}, {i:7d}] loss: {ave_loss}")
                 running_loss = 0.0
