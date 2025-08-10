@@ -183,8 +183,8 @@ def spect_classify() -> None:
                 ave_loss = running_loss / log_div
                 logger.info(f"[{step:8d}: {epoch:3d}, {i:7d}] loss: {ave_loss}")
                 running_loss = 0.0
-            evaluate(model, testdata, step)
-            torch.save(
-                (model, optim),
-                path(out_path, f"SpectClassifier-{start_time}-{epoch}.pt"),
-            )
+        evaluate(model, testdata, step)
+        torch.save(
+            (model, optim),
+            path(out_path, f"SpectClassifier-{start_time}-{epoch}.pt"),
+        )
