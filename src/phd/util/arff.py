@@ -253,16 +253,16 @@ def generator(
         yield data
 
 
-def loadarff(ofile: TextIOWrapper) -> tuple[list[ArffRowType], MetaData]:
+def _loadarff(ofile: TextIOWrapper) -> tuple[list[ArffRowType], MetaData]:
     rel, attr = read_header(ofile)
     meta = MetaData(rel, attr)
     data = list(generator(ofile, attr))
     return data, meta
 
 
-def load(fname: str) -> ArffData | None:
+def loadarff(fname: str) -> ArffData | None:
     with open(fname) as ofile:
-        data, meta = loadarff(ofile)
+        data, meta = _loadarff(ofile)
     if len(data) == 0:
         return None
     return ArffData(data, meta)

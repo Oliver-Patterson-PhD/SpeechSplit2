@@ -2,7 +2,6 @@ __all__ = [
     "config",
 ]
 
-from datetime import datetime
 from enum import Flag, auto
 from tomllib import load as loadtoml
 from typing import Any, Dict, List, Optional
@@ -144,12 +143,9 @@ class ConfigDataLoader:
 # The Config object is a Singleton,
 # The config file is generally only read once at the beginning of execution
 class Config(metaclass=Singleton):
-    start_time: str
     logfile: Optional[str] = None
     original_config: str
 
-    __logcallgraph: bool = False
-    __logfile: str | None
     audio: ConfigAudioProcessing = ConfigAudioProcessing()
     paths: ConfigPaths = ConfigPaths()
     model: ConfigModel = ConfigModel()
@@ -164,7 +160,6 @@ class Config(metaclass=Singleton):
     ## Initialise configuration object
     # Reads the config toml file and creates a single object with the values
     def __init__(self, config_name: Optional[str] = None) -> None:
-        self.start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         if config_name is not None:
             if ".toml" not in config_name:
                 self.original_config = f"configs/{config_name}.toml"
@@ -241,16 +236,6 @@ class Config(metaclass=Singleton):
 
     def __map_categories(self, key: str, subdict: Dict[str, Any]) -> None:
         match key.lower():
-            case "log":
-                if "level" in subdict:
-                    logger.set_level(subdict["level"])
-                if "file" in subdict:
-                    if subdict["file"] is False:
-                        self.__logfile = None
-                    elif subdict["file"] is True:
-                        self.__logfile = "SET_ME"
-                if "callgraph" in subdict:
-                    self.__logcallgraph = subdict["callgraph"]
             case "paths":
                 if not subdict.keys() >= {"raw_data", "proc_data"}:
                     err_str = (
@@ -275,8 +260,6 @@ class Config(metaclass=Singleton):
                 if "run_tests" in subdict.keys():
                     subdict["run_tests"] = self.__set_runtypes(subdict["run_tests"])
                 self.options.__dict__.update(subdict)
-                if not subdict.keys() >= {"experiment"}:
-                    self.options.experiment = self.start_time
             case _:
                 self.__dict__.update(subdict)
         return
@@ -300,14 +283,6 @@ class Config(metaclass=Singleton):
         self.__set_dataset_paths()
         self.__set_data_and_feat()
         self.__set_artefact_paths()
-        if self.__logfile == "SET_ME":
-            self.__logfile = path(
-                self.paths.logging,
-                f"{self.start_time}-{self.options.experiment}.log",
-            )
-            logger.set_file(self.__logfile)
-        if self.__logcallgraph:
-            logger.enable_callgraph()
 
     def __set_artefact_paths(self) -> None:
         if not hasattr(self.paths, "logging"):

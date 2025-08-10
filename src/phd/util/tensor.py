@@ -26,6 +26,10 @@ TensorTriple = tuple[Tensor, Tensor, Tensor]
 TensorQuad = tuple[Tensor, Tensor, Tensor, Tensor]
 
 
+## Save a tensor as an image if possible or as a `.pth` file if not
+# @param tensor     The tensor to save
+# @param save_path  Image path
+# @param save_raw   Don't save as an image, only as a `.pth` file
 @torch.no_grad()
 def save_tensor(tensor: Tensor, save_path: str, save_raw: bool = False) -> None:
     image = None
@@ -56,8 +60,8 @@ def _try_resize(tensor: Tensor) -> Tensor | None:
 
 
 ## Save a given Tensor into an image file.
-# @param tensor Image to be saved. If given a mini-batch tensor, saves the tensor as a grid of images by calling ``make_grid``.
-# @param fp     A filename
+# @param tensor     Image to be saved. If given a mini-batch tensor, saves the tensor as a grid of images by calling ``make_grid``.
+# @param filename   The filename
 @torch.no_grad()
 def save_image(tensor: Tensor, filename: str | Path) -> None:
     grid = make_grid(tensor)
@@ -127,30 +131,34 @@ def plot_batch(batch: Tensor, base: str) -> Figure:
     return fig
 
 
+## Pad a tensor's final dimension to match a reference
+# @param x      Tensor to pad
+# @param ref    Reference tensor
 def pad_like(x: Tensor, ref: Tensor) -> Tensor:
     assert x.shape <= ref.shape
     return torch.nn.functional.pad(x, (0, ref.size(dim=-1) - x.size(dim=-1)))
 
 
+## Pad the final dimension of tensors in a list to the largest contained final dimension
 def pad_list(xlist: list[Tensor]) -> list[Tensor]:
     biggest = max(xlist, key=lambda x: x.size(dim=-1)).size(dim=-1)
     return [torch.nn.functional.pad(x, (0, biggest - x.size(dim=-1))) for x in xlist]
 
 
+## Stack a list of tensors, padding them to match the largest final dimension
 def stack_list(xlist: list[Tensor]) -> Tensor:
-    biggest = max(xlist, key=lambda x: x.size(dim=-1)).size(dim=-1)
-    return torch.stack(
-        [torch.nn.functional.pad(x, (0, biggest - x.size(dim=-1))) for x in xlist]
-    )
+    return torch.stack(pad_list(xlist))
 
 
+## Pad the final dimension of x and y to the larger of the two.
 def pad_to(x: Tensor, y: Tensor) -> TensorPair:
     if x.size(dim=-1) < y.size(dim=-1):
-        x = torch.nn.functional.pad(x, (0, y.size(dim=-1) - x.size(dim=-1)))
+        x = pad_like(x, y)
     if x.size(dim=-1) > y.size(dim=-1):
-        y = torch.nn.functional.pad(y, (0, x.size(dim=-1) - y.size(dim=-1)))
+        y = pad_like(y, x)
     return x, y
 
 
+## Check if a tensor has any NaN values in it.
 def is_nan(x: Tensor) -> bool:
     return True if x.isnan().any().item() else False

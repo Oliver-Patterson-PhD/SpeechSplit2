@@ -12,9 +12,8 @@ __all__ = [
 ]
 
 import inspect
+from datetime import datetime
 from enum import IntEnum
-from os import makedirs
-from os.path import dirname
 from pprint import pformat
 from shutil import get_terminal_size
 from sys import _getframe
@@ -25,6 +24,7 @@ from typing import Any, Iterable, Optional, TextIO
 from torch import Tensor
 from tqdm import tqdm
 
+from .file import basename, dirname, newpath, path
 from .patterns import Singleton
 
 
@@ -77,7 +77,7 @@ FATAL = LogLevel.FATAL
 class Logger(metaclass=Singleton):
     __level: LogLevel = DEBUG
     __file: Optional[TextIO] = None
-    __flush: bool = False
+    __flush: bool = True
     __pbar_running: bool = False
     __print_callgraph: bool = False
     __date_format: str = "%Y/%m/%d %H:%M:%S"
@@ -157,13 +157,12 @@ class Logger(metaclass=Singleton):
 
     def unformatted(self, level: LogStr, fullmsg: str) -> None:
         level = self.__get_level(level)
-        if self.__file is not None or level >= self.__level:
-            if level >= self.__level:
-                if self.__pbar_running:
-                    tqdm.write("\r" + (" " * get_terminal_size().columns), end="\r")
-                tqdm.write(fullmsg)
-            if self.__file is not None:
-                print(fullmsg, file=self.__file, flush=self.__flush)
+        if level >= self.__level:
+            if self.__pbar_running:
+                tqdm.write("\r" + (" " * get_terminal_size().columns), end="\r")
+            tqdm.write(fullmsg)
+        if self.__file is not None:
+            print(fullmsg, file=self.__file, flush=self.__flush)
         return None
 
     def __is_nan(self, x: Tensor) -> bool:
@@ -190,11 +189,19 @@ class Logger(metaclass=Singleton):
     def set_level(self, level: LogStr) -> None:
         self.__level = self.__get_level(level)
 
-    def get_file(self) -> Optional[TextIO]:
-        return self.__file
+    def set_file(self, file: str | None = None) -> None:
+        from .config import config
 
-    def set_file(self, file: str) -> None:
-        makedirs(dirname(file), exist_ok=True)
+        if self.__file is not None:
+            self.__file.close()
+        if file is None:
+            start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            file = path(
+                config.paths.logging,
+                f"{start_time}-{basename(inspect.stack()[1].filename)}.log",
+            )
+        newpath(dirname(file))
+        self.info(f"Opening file for logging: {file}", depth=2)
         self.__file = open(file, "wt", encoding="utf-8")
 
     def input(self, message: str, prompt: str = "", level: LogStr = INFO) -> str:
@@ -249,6 +256,14 @@ class Logger(metaclass=Singleton):
             message=f"{self.__get_passed_varnames()[0]}: ({var.shape})",
         )
 
+    def check_inline(self, var: Tensor, level: LogStr = TRACE) -> Tensor:
+        self.__log(
+            level=self.__get_level(level),
+            caller=self.__get_caller(),
+            message=f"{self.__get_passed_varnames()[0]}: ({var.shape})",
+        )
+        return var
+
     def trace_nans(self, x: Tensor) -> None:
         isnan = self.__is_nan(x)
         self.__log(
@@ -281,12 +296,16 @@ class Logger(metaclass=Singleton):
     def progress_bar[T](
         self, iter: Iterable[T], *args: Any, **kwargs: Any
     ) -> Iterable[T]:
+        assert self.__file is not None
+        self.__file.flush()
         self.__pbar_running = True
         for item in tqdm(iter, *args, **kwargs):
             yield item
         self.__pbar_running = False
 
     def manual_pbar_start(self, *args: Any, **kwargs: Any) -> None:
+        assert self.__file is not None
+        self.__file.flush()
         self.__pbar_running = True
         self.__manual_pbar = tqdm(*args, **kwargs)
 

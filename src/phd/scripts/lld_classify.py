@@ -2,18 +2,18 @@
 from __future__ import annotations
 
 import inspect
+from datetime import datetime
+
 import torch
 
-from ..data import AudioProcs, DatasetParser
-from ..data.dataset import SampleInfo
-from ..data.utils import Dataset, split_loaders
-from ..util import compute, config, logger
-from ..util.arff import ArffRowType, load
+from ..data import (AudioProcs, Dataset, DatasetParser, SampleInfo,
+                    split_loaders)
+from ..util import TensorBoard, compute, config, logger
+from ..util.arff import ArffRowType, loadarff
 from ..util.file import basename, exists, newpath, path, walkfiles
 from ..util.tensor import Tensor
-from ..util.tensorboard import TensorBoard
 
-TESTING = True
+TESTING = False
 log_div = 1000
 
 LLD_Data = tuple[str, Tensor]
@@ -40,8 +40,20 @@ def add_attr(self: object, row: ArffRowType, name: str, item: str, t: type) -> N
     setattr(self, name, thing)
 
 
-def dys_tensor(dysarthric: bool) -> Tensor:
-    return torch.tensor([0.0, 1.0] if dysarthric else [1.0, 0.0])
+def dys_tensor(dysarthric: bool) -> list[float]:
+    return [0.0, 1.0] if dysarthric else [1.0, 0.0]
+
+
+def dys_probs(dystensor: Tensor) -> Tensor:
+    return dystensor[..., 1]
+
+
+def cln_probs(dystensor: Tensor) -> Tensor:
+    return dystensor[..., 0]
+
+
+def is_dys(dystensor: Tensor) -> Tensor:
+    return cln_probs(dystensor) < dys_probs(dystensor)
 
 
 N_LLDS = 26
@@ -102,18 +114,16 @@ class LLDDataset(Dataset[LLD_Data]):
             logger.debug("LLDDataset Loaded")
         else:
             logger.debug("LLDDataset Generating")
-            with torch.multiprocessing.Pool(4) as pool:
-                arff_path = path(smile_path, "custom-arff")
-                arff_files = walkfiles(arff_path, fullpaths=True)
-                arff_data = pool.map(
-                    load, logger.progress_bar(arff_files, unit="files")
-                )
-                arff_flat = [
-                    item for row in arff_data if row is not None for item in row
-                ]
-                self.dataset = pool.map(
-                    row_to_data, logger.progress_bar(arff_flat, unit="results")
-                )
+            arff_path = path(smile_path, "custom-arff")
+            arff_files = walkfiles(arff_path, fullpaths=True)
+            arff_data = [
+                loadarff(file) for file in logger.progress_bar(arff_files, unit="files")
+            ]
+            arff_flat = [item for row in arff_data if row is not None for item in row]
+            self.dataset = [
+                row_to_data(row)
+                for row in logger.progress_bar(arff_flat, unit="results")
+            ]
             logger.debug("LLDDataset Saving")
             torch.save(self.dataset, self.large_cache_file)
             torch.save(self.dataset[0 : self.small_size - 1], self.small_cache_file)
@@ -161,25 +171,30 @@ class LLDClassifier(torch.nn.Module):
 
 
 def arff_results(names: list[str]) -> Tensor:
-    reslist = [dys_tensor(SampleInfo(name).dysarthric) for name in names]
-    results = torch.tensor(reslist)
-    return results
+    return torch.tensor([dys_tensor(SampleInfo(name).dysarthric) for name in names])
 
 
 @torch.no_grad()
 def lld_evaluate(model: LLDClassifier, valitems: list[LLD_Data], step: int) -> None:
     model.eval()
     logger.info(f"Evaluating step: {step}")
-    predictions = torch.tensor(model(items) for _, items in valitems)
-    label_bools = torch.tensor(parser.dysarthric(spk) for spk, _ in valitems)
-    labels = torch.tensor(dys_tensor(val) for val in label_bools)
+
+    predictions = torch.stack([model(items) for _, items in valitems])
+    label_bools = torch.tensor([parser.dysarthric(spk) for spk, _ in valitems])
+    labels = torch.tensor([dys_tensor(val) for val in label_bools])
     tb.add_pr_curve("pr_curve", labels, predictions, step)
+
     logger.debug("Calculating hit-rate")
-    pred_bools = predictions[:, 0] < predictions[:, 1]
+    pred_bools = is_dys(predictions)
     good = pred_bools == label_bools
     good_ave = good.sum() / good.size(dim=-1)
-    logger.trace_var(good_ave, "DEBUG")
+    logger.trace_var(good_ave)
     tb.add_scalar("eval_true", good_ave.item(), step)
+
+    logger.trace_var(label_bools)
+    logger.trace_var(dys_probs(predictions))
+    logger.trace_var(cln_probs(predictions))
+
     tb.flush()
     model.train()
 
@@ -187,10 +202,10 @@ def lld_evaluate(model: LLDClassifier, valitems: list[LLD_Data], step: int) -> N
 def lld_classify() -> None:
     global tb
     tb = TensorBoard()
+    logger.set_file()
     experiment = basename(inspect.stack()[0].filename)
     experiment_dir = newpath(config.paths.artefacts, experiment)
     out_path = newpath(experiment_dir, str(parser.dataset_type()))
-    logger.trace_var(out_path, "DEBUG")
     torch.multiprocessing.set_sharing_strategy("file_system")
     torch.multiprocessing.set_start_method("forkserver", force=True)
     compute.set_gpu()
@@ -200,10 +215,16 @@ def lld_classify() -> None:
     arff_model = LLDClassifier()
     arff_optim = torch.optim.Adam(arff_model.parameters())
     arff_loss = torch.nn.BCELoss()
-
     arff_train, arff_test = split_loaders(LLDDataset(), parallel=False)
+
+    logger.info("Calculating data distribution")
+    dys_rate = [parser.dysarthric(spk) for spks, _ in arff_train for spk in spks]
+    logger.trace_var(sum(dys_rate))
+    logger.trace_var(len(dys_rate))
+
     logger.info("Loading evaluation data")
     valitems = [(n, i) for nn, ii in arff_test for n, i in zip(nn, ii)]
+    start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
     logger.info("Starting Training")
     arff_model.train()
@@ -213,19 +234,13 @@ def lld_classify() -> None:
         for names, items in arff_train:
             i += 1
             step = (epoch * len(arff_train)) + i
-            logger.trace_nans(items)
-
             out_data = arff_model(items)
-            logger.trace_nans(out_data)
-
             truth = arff_results(names)
-            logger.trace_nans(truth)
-
             loss = arff_loss(out_data, truth)
             loss.backward()
+            logger.trace_var(loss)
             arff_optim.step()
             running_loss += loss.item()
-
             tb.add_scalar(name="loss", item=loss.item(), step=step)
             if i % log_div == 0:
                 ave_loss = running_loss / log_div
@@ -234,5 +249,5 @@ def lld_classify() -> None:
         lld_evaluate(arff_model, valitems, step)
         torch.save(
             (arff_model, arff_optim),
-            path(out_path, f"arff_model{config.start_time}-{epoch}.pt"),
+            path(out_path, f"arff_model{start_time}-{epoch}.pt"),
         )

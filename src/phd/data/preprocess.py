@@ -1,5 +1,5 @@
 __all__ = [
-    "PreProcess",
+    "preprocess_data",
 ]
 
 import torch

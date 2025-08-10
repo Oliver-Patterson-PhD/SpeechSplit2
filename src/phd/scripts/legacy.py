@@ -1,6 +1,6 @@
 import torch
 
-from ..data import PreProcess
+from ..data import preprocess_data
 from ..experiments import (DisVoiceTest, Immediate, Swapper,
                            SyllableEstimation, TestSamples, Train,
                            TranscriptionLoss)
@@ -30,7 +30,7 @@ def main() -> None:
             disvoice = DisVoiceTest()
             disvoice.run()
 
-        PreProcess()
+        preprocess_data()
 
         if RunTests.SYLLABLE_ESTIMATION in config.options.run_tests:
             syllable = SyllableEstimation()
