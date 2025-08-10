@@ -81,9 +81,9 @@ def split_loaders[T](
         generator=gen,
     )
     logger.debug(f"Splitting training data for {dset.__class__.__name__}")
-    train_data = dset_t([dset[i] for i in train.indices])
+    train_data = dset_t([dset.dump(i) for i in train.indices])
     logger.debug(f"Splitting testing data for {dset.__class__.__name__}")
-    test_data = dset_t([dset[i] for i in test.indices])
+    test_data = dset_t([dset.dump(i) for i in test.indices])
     logger.debug(f"Creating Samplers for {dset.__class__.__name__}")
     train_sampler = RandomSampler(
         data_source=train_data,

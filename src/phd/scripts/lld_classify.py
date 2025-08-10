@@ -127,16 +127,21 @@ class LLDDataset(Dataset[LLD_Data]):
             logger.debug("LLDDataset Saving")
             torch.save(self.dataset, self.large_cache_file)
             torch.save(self.dataset[0 : self.small_size - 1], self.small_cache_file)
+            if self.cache_file == self.small_cache_file:
+                self.dataset = self.dataset[0 : self.small_size - 1]
             logger.debug("LLDDataset Saved")
         self.length = len(self.dataset)
         if self.length == 0:
             raise Exception("ERROR: No LLD files in dataset")
 
+    def dump(self, index: int) -> LLD_Data:
+        return self.dataset[index]
+
     def __len__(self) -> int:
         return self.length
 
     def __getitem__(self, index: int) -> LLD_Data:
-        return self.dataset[index]
+        return self.dump(index)
 
 
 class LLDClassifier(torch.nn.Module):
@@ -192,8 +197,14 @@ def lld_evaluate(model: LLDClassifier, valitems: list[LLD_Data], step: int) -> N
     tb.add_scalar("eval_true", good_ave.item(), step)
 
     logger.trace_var(label_bools)
-    logger.trace_var(dys_probs(predictions))
-    logger.trace_var(cln_probs(predictions))
+    dysprobs = dys_probs(predictions)
+    clnprobs = cln_probs(predictions)
+    logger.trace_var(dysprobs.min())
+    logger.trace_var(clnprobs.min())
+    logger.trace_var(dysprobs.max())
+    logger.trace_var(clnprobs.max())
+    logger.trace_var(dysprobs.mean())
+    logger.trace_var(clnprobs.mean())
 
     tb.flush()
     model.train()
