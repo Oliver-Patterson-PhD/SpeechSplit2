@@ -86,10 +86,13 @@ class SpectDataset(Dataset[tuple[Tensor, Tensor]]):
 
 class SpectClassifier(torchvision.models.AlexNet):
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(num_classes=2)
         weights = torchvision.models.AlexNet_Weights.DEFAULT
-        self.load_state_dict(weights.get_state_dict(progress=True, check_hash=True))
-        self.classifier[-1] = torch.nn.Linear(4096, 2)
+        state = weights.get_state_dict(progress=True, check_hash=True)
+        state.popitem("classifier.6.weight")
+        state.popitem("classifier.6.bias")
+        self.load_state_dict(state, strict=False)
+        self.classifier[-1].zero_grad()
         self.features.train(False)
         self.avgpool.train(False)
 
@@ -106,8 +109,10 @@ def evaluate(
     model.eval()
     logger.info(f"Evaluating step: {step}")
 
-    predictions = torch.stack([model(data) for _, data in testdata])
-    labels = torch.tensor([val for val, _ in testdata])
+    predictions = torch.stack(
+        [model(data.unsqueeze(0)) for _, data in testdata]
+    ).squeeze(-2)
+    labels = torch.stack([val for val, _ in testdata])
     tb.add_pr_curve("pr_curve", labels, predictions, step)
 
     logger.debug("Calculating hit-rate")
@@ -116,9 +121,14 @@ def evaluate(
     good_vals = preds_bools == label_bools
     good_ave = (good_vals.sum() / good_vals.size(dim=-1)).item()
     tb.add_scalar("eval_rate", good_ave, step)
-    logger.trace_var(good_ave)
-    logger.trace_var(dys_probs(predictions))
-    logger.trace_var(cln_probs(predictions))
+
+    logger.trace("")
+    logger.trace(f"Correct prediction rate: {good_ave}")
+    logger.trace(f"Dysarthric mean actual vals: {dys_probs(labels).mean()}")
+    logger.trace(f"Dysarthric mean predictions: {dys_probs(predictions).mean()}")
+    logger.trace(f"Clean mean actual vals: {cln_probs(labels).mean()}")
+    logger.trace(f"Clean mean predictions: {cln_probs(predictions).mean()}")
+    logger.trace("")
 
     tb.flush()
     model.train()
@@ -139,19 +149,20 @@ def spect_classify() -> None:
     model = SpectClassifier()
     logger.trace_var(model)
     optim = torch.optim.Adam(model.parameters())
-    loss_fn = torch.nn.BCELoss()
+    loss_fn = torch.nn.CrossEntropyLoss()
 
     spect_train, spect_test = split_loaders(SpectDataset(), parallel=False)
+    spect_process = v2.Compose([v2.Resize((224, 224)), v2.RGB()]).to(compute.device())
     testdata = [
-        (dyst, spec) for dysts, specs in spect_test for dyst, spec in zip(dysts, specs)
+        (dyst, spect_process(spec.unsqueeze(0).to(compute.device())))
+        for dysts, specs in spect_test
+        for dyst, spec in zip(dysts, specs)
     ]
-    loss_fn = torch.nn.BCELoss()
     start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
     experiment_path = newpath(config.paths.artefacts, basename(__name__))
     out_path = newpath(experiment_path, str(parser.dataset_type()))
     model.train()
-    spect_process = v2.Compose([v2.Resize((224, 224)), v2.RGB()]).to(compute.device())
     for epoch in range(10):
         running_loss = 0.0
         for i, (truths, raw_specs) in enumerate(spect_train):
