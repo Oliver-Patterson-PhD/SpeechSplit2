@@ -6,8 +6,7 @@ from datetime import datetime
 
 import torch
 
-from ..data import (AudioProcs, Dataset, DatasetParser, SampleInfo,
-                    split_loaders)
+from ..data import Dataset, SampleInfo, parser, split_loaders
 from ..util import TensorBoard, compute, config, logger
 from ..util.arff import ArffRowType, loadarff
 from ..util.file import basename, exists, newpath, path, walkfiles
@@ -19,8 +18,6 @@ log_div = 1000
 LLD_Data = tuple[str, Tensor]
 tb: TensorBoard
 
-parser = DatasetParser()
-processor = AudioProcs()
 in_path = config.paths.raw_wavs
 sample_rate = config.audio.sample_rate
 smile_path = path(config.paths.proc_data, "OpenSMILE")

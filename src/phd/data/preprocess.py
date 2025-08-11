@@ -8,19 +8,15 @@ import torchaudio
 from ..util import config, logger
 from ..util.file import exists, newpath, path, strip_ext
 from ..util.patterns import Singleton
-from .audio_procs import AudioProcs
-from .dataset import DatasetParser
+from .audio_procs import processor
+from .dataset import parser
 
 
 class PreProcess(metaclass=Singleton):
     __in_path: str
     __out_path: str
-    __proc: AudioProcs
-    __parser: DatasetParser
 
     def __init__(self) -> None:
-        self.__proc = AudioProcs()
-        self.__parser = DatasetParser()
         self.__in_path = config.paths.raw_wavs
         self.__out_path = config.paths.features
         logger.debug(f"Out Path: {self.__out_path}")
@@ -34,57 +30,57 @@ class PreProcess(metaclass=Singleton):
         self.path_cleanwavs = config.paths.cleanwavs
         procdata_exists = all(
             [
-                exists(path(self.__out_path, "freqs", self.__parser.get_spkdir(speaker)))
-                for speaker in self.__parser.speakers()
+                exists(path(self.__out_path, "freqs", parser.get_spkdir(speaker)))
+                for speaker in parser.speakers()
             ]
         )
         if procdata_exists and not config.options.regenerate_data:
             logger.info("Preprocessing Skipped")
             return
-        speakers = self.__parser.speakers()
+        speakers = parser.speakers()
         logger.info(f"Found {len(speakers)} speakers")
         [
             self.process_file(spk=spk, fname=fname)  # type: ignore[func-returns-value]
             for spk in sorted(speakers)
             for fname in logger.progress_bar(
-                sorted(self.__parser.raw_samples(spk)),
+                sorted(parser.raw_samples(spk)),
                 desc=f"items in {spk}",
             )
         ]
         logger.info("Preprocessing Complete")
 
     def process_file(self, spk: str, fname: str) -> None:
-        raw_path = path(self.__in_path, self.__parser.get_spkdir(spk), fname)
+        raw_path = path(self.__in_path, parser.get_spkdir(spk), fname)
         logger.trace(f"Processing: {raw_path}")
-        raw_wav, nonoise, nopop, wav = self.__proc.full_load_parts(raw_path, keep=False)
-        if not self.__proc.is_valid(raw_wav):
+        raw_wav, nonoise, nopop, wav = processor.full_load_parts(raw_path, keep=False)
+        if not processor.is_valid(raw_wav):
             logger.warn(f"No Content in raw file: {raw_path}")
             return
-        if not self.__proc.is_valid(nonoise):
+        if not processor.is_valid(nonoise):
             logger.warn(f"No Content after noisereduction: {raw_path}")
             return
-        if not self.__proc.is_valid(nopop):
+        if not processor.is_valid(nopop):
             logger.warn(f"No Content after removing pop: {raw_path}")
             return
-        if not self.__proc.only_content(wav):
+        if not processor.only_content(wav):
             logger.warn(f"No Content after filtering: {raw_path}")
             return
 
-        lo, hi = self.__proc.get_f0_lohi(self.__parser.sex(spk))
-        f0, sp, ap = self.__proc.get_world_params(wav=wav)
+        lo, hi = processor.get_f0_lohi(parser.sex(spk))
+        f0, sp, ap = processor.get_world_params(wav=wav)
 
-        wav_mono = self.__proc.get_monotonic_wav(wav=wav, f0=f0, sp=sp, ap=ap)
-        if not self.__proc.only_content(wav_mono):
+        wav_mono = processor.get_monotonic_wav(wav=wav, f0=f0, sp=sp, ap=ap)
+        if not processor.only_content(wav_mono):
             logger.warn(f"Failed to get monotonic wav for: {raw_path}")
             return
 
-        spmel, phase = self.__proc.get_spmel(wav)
-        if not self.__proc.only_content(spmel):
+        spmel, phase = processor.get_spmel(wav)
+        if not processor.only_content(spmel):
             logger.warn(f"Failed to get mel spectrogram for: {raw_path}")
             return
 
-        f0_norm = self.__proc.extract_f0(wav=wav, lo=lo, hi=hi)
-        if not self.__proc.only_content(f0_norm):
+        f0_norm = processor.extract_f0(wav=wav, lo=lo, hi=hi)
+        if not processor.only_content(f0_norm):
             logger.warn(f"Failed to get f0 for: {raw_path}")
             return
 
@@ -100,12 +96,16 @@ class PreProcess(metaclass=Singleton):
                 logger.fatal(msg)
                 raise Exception(msg)
 
-        wav_full_split = self.__proc.fold_pad(wav, self.max_len_pad * (self.hop_length - 1))
-        wav_mono_split = self.__proc.fold_pad(wav_mono, self.max_len_pad * (self.hop_length - 1))
-        spmel_split = self.__proc.fold_pad(spmel, self.max_len_pad)
-        f0_split = self.__proc.fold_pad(f0_norm, self.max_len_pad)
+        wav_full_split = processor.fold_pad(
+            wav, self.max_len_pad * (self.hop_length - 1)
+        )
+        wav_mono_split = processor.fold_pad(
+            wav_mono, self.max_len_pad * (self.hop_length - 1)
+        )
+        spmel_split = processor.fold_pad(spmel, self.max_len_pad)
+        f0_split = processor.fold_pad(f0_norm, self.max_len_pad)
 
-        spk_dir = self.__parser.get_spkdir(spk)
+        spk_dir = parser.get_spkdir(spk)
         fullwavs = newpath(self.path_fullwavs, spk_dir)
         monowavs = newpath(self.path_monowavs, spk_dir)
         spmels = newpath(self.path_spmels, spk_dir)
@@ -123,10 +123,10 @@ class PreProcess(metaclass=Singleton):
         ):
             filename = f"{namebase}_{idx}.pt"
             if (
-                self.__proc.only_content(wav_full_i)
-                and self.__proc.only_content(wav_mono_i)
-                and self.__proc.only_content(spmel_i)
-                and self.__proc.only_content(f0_i)
+                processor.only_content(wav_full_i)
+                and processor.only_content(wav_mono_i)
+                and processor.only_content(spmel_i)
+                and processor.only_content(f0_i)
             ):
                 torch.save(wav_full_i.to("cpu"), path(fullwavs, filename))
                 torch.save(wav_mono_i.to("cpu"), path(monowavs, filename))

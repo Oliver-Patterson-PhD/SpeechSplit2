@@ -10,7 +10,8 @@ from typing import Any
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from ..data import AudioProcs, DatasetParser, get_loader
+
+from ..data import get_loader, processor
 from ..models.speechsplit import InterpLnr, SpeechSplit
 from ..util import NanError, compute, config, logger
 from ..util.file import path
@@ -25,8 +26,6 @@ class Experiment(object):
     writer: SummaryWriter
     tb_prefix: str
     experiment_dir: str
-    parser: DatasetParser
-    audproc: AudioProcs
     ret_item_t = tuple[
         str,
         str,
@@ -75,8 +74,6 @@ class Experiment(object):
             config.paths.artefacts,
             config.options.experiment,
         )
-        self.parser = DatasetParser()
-        self.audproc = AudioProcs()
         os.makedirs(self.experiment_dir, exist_ok=True)
 
     def tb_add_scalar(self, name: str, value: float, step: int) -> None:
@@ -217,7 +214,7 @@ class Experiment(object):
         content_pitch_input_intrp = self.intrp(
             content_pitch_input, len_crop
         )  # [B, T, F+1]
-        pitch_input_intrp = self.audproc.quantize_f0(
+        pitch_input_intrp = processor.quantize_f0(
             content_pitch_input_intrp[:, :, -1],
         )  # [B, T, 257]
         content_pitch_input_intrp_2 = torch.cat(

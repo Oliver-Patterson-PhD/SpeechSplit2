@@ -8,8 +8,8 @@ import torch
 from ..util import compute, config, logger
 from ..util.file import exists, path
 from ..util.tensor import Tensor, TensorTriple
-from .audio_procs import AudioProcs
-from .dataset import DatasetParser
+from .audio_procs import processor
+from .dataset import parser
 
 DataItem = tuple[
     str,  # speaker
@@ -42,27 +42,25 @@ class MyDataset(torch.utils.data.Dataset[DataLoadType]):
         self.path_fullwavs = config.paths.fullwavs
         self.path_spmels = config.paths.spmels
         self.full_info = not config.options.train
-        self.myproc = AudioProcs()
-        self.parser = DatasetParser()
         self.map_device = torch.device("cpu")
         self.dataset = [
             (
                 speaker,
                 self.speaker_id_mask(speaker),
-                self.load_from_meta(self.parser.get_wavfile(speaker, uttr)),
-                self.parser.get_wavfile(speaker, uttr),
+                self.load_from_meta(parser.get_wavfile(speaker, uttr)),
+                parser.get_wavfile(speaker, uttr),
             )
             for speaker in logger.progress_bar(
-                self.parser.speakers(), desc="speakers loaded"
+                parser.speakers(), desc="speakers loaded"
             )
-            for uttr in self.parser.get_utterances(speaker)
+            for uttr in parser.get_utterances(speaker)
             if self.uttr_exists(speaker, uttr)
         ]
         self.num_tokens = len(self.dataset)
 
     def speaker_id_mask(self, speaker: str) -> Tensor:
         return torch.zeros((self.dim_spk_emb,), dtype=torch.float32).index_fill(
-            0, torch.tensor([self.parser.get_speaker_id(speaker)]), 1
+            0, torch.tensor([parser.get_speaker_id(speaker)]), 1
         )
 
     def pinnable(self) -> bool:
@@ -78,10 +76,10 @@ class MyDataset(torch.utils.data.Dataset[DataLoadType]):
             p_mono = wav_mono
         else:
             alpha: float = 0.2 * torch.rand(1).item() + 0.9
-            p_mono = self.myproc.vtlp(wav_mono, self.sample_rate, alpha)
+            p_mono = processor.vtlp(wav_mono, self.sample_rate, alpha)
         len_crop = torch.tensor([self.max_len_seq], dtype=torch.double, device="cpu")
-        spenv = self.check(self.myproc.get_spenv(p_mono), f"spenv invalid: {fname}")
-        p_mel, _ = self.myproc.get_spmel(p_mono)
+        spenv = self.check(processor.get_spenv(p_mono), f"spenv invalid: {fname}")
+        p_mel, _ = processor.get_spmel(p_mono)
         spmel = self.check(p_mel, f"spmel invalid: {fname}")
         return (
             fname,  # Filename
@@ -95,7 +93,7 @@ class MyDataset(torch.utils.data.Dataset[DataLoadType]):
         )
 
     def uttr_exists(self, speaker: str, uttr: str) -> bool:
-        filepath = self.parser.get_wavfile(speaker, uttr)
+        filepath = parser.get_wavfile(speaker, uttr)
         return (
             exists(path(self.path_fullwavs, filepath))
             and exists(path(self.path_monowavs, filepath))

@@ -122,9 +122,9 @@ def path(*args: str) -> str:
 
 
 def newpath(*args: str) -> str:
-    dir = path(*args)
-    os.makedirs(dir, exist_ok=True)
-    return dir
+    dir = Path(*args)
+    dir.mkdir(parents=True, exist_ok=True)
+    return str(dir)
 
 
 def exists(dir: str) -> bool:

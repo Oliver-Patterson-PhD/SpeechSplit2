@@ -4,12 +4,9 @@ import pickle
 import matplotlib
 from torchmetrics.audio.dnsmos import DeepNoiseSuppressionMeanOpinionScore
 
-from ..data import AudioProcs, DatasetParser
+from ..data import parser, processor
 from ..util import config, logger
 from ..util.file import exists, newpath, path, walkdirs, walkfiles
-
-parser = DatasetParser()
-processor = AudioProcs()
 
 experiment_dir = newpath(config.paths.artefacts, "scratch")
 in_path = config.paths.raw_wavs

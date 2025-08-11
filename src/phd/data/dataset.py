@@ -1,5 +1,5 @@
 __all__ = [
-    "DatasetParser",
+    "parser",
     "DType",
     "Phoneme",
     "Utterance",

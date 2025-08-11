@@ -5,7 +5,7 @@ import matplotlib.ticker as ticker
 import torch
 import torchaudio
 
-from ..data import AudioProcs, DatasetParser
+from ..data import parser
 from ..util import config, logger
 from ..util.file import (basename, exists, newpath, path, rm_rf, strip_path,
                          walkdirs, walkfiles)
@@ -40,12 +40,10 @@ class Immediate:
         self.max_len_pad = config.audio.max_len_pad
         self.hop_length = config.audio.hop_len
         self.fs = config.audio.sample_rate
-        self.proc = AudioProcs()
-        self.parser = DatasetParser()
         logger.debug(f"In  Path: {self.in_path}")
         logger.debug(f"Out Path: {self.out_path}")
         speakers = set(
-            spk for spk in walkdirs(self.in_path) if spk in self.parser.speakers()
+            spk for spk in walkdirs(self.in_path) if spk in parser.speakers()
         )
         logger.info(f"Found {len(speakers)} speakers")
         for spk_idx, spk_dir in enumerate(speakers):
@@ -81,7 +79,7 @@ class Immediate:
             procdata_exists = all(
                 [
                     exists(path(self.clean_path, speaker))
-                    for speaker in self.parser.speakers()
+                    for speaker in parser.speakers()
                 ]
             )
             if procdata_exists and not self.clean_data_before_run:
@@ -209,7 +207,7 @@ class Immediate:
             logger.warn(f"Failure in {failure}: {fname}")
             if exists(path(self.clean_path, fname)):
                 logger.warn("Failure is in immediate data")
-            if exists(path(config.paths.cleanwavs, self.parser.speaker(fname), fname)):
+            if exists(path(config.paths.cleanwavs, parser.speaker(fname), fname)):
                 logger.warn("Failure is in clean data")
         plot_items: list[tuple[tuple[Tensor, str], ...]] = [
             self.debug_audio(raw_wav, "Raw"),
@@ -218,7 +216,7 @@ class Immediate:
             self.debug_audio(cln_wav, "Clean"),
         ]
         fig = matplotlib.pyplot.figure()
-        word = self.parser.get_real_text(sfname)
+        word = parser.get_real_text(sfname)
         fig.set_size_inches(24, 12)
         fig.set_dpi(300)
         fig.suptitle(f"Sample: {sfname} ({word})")
@@ -249,7 +247,7 @@ class Immediate:
         try:
             full_path = path(self.in_path, spk_dir, fname)
             wav_prc = self.proc.full_load_parts(full_path)[-1]
-            lo, hi = self.proc.get_f0_lohi(self.parser.sex(spk_dir))
+            lo, hi = self.proc.get_f0_lohi(parser.sex(spk_dir))
             f0, sp, ap = self.proc.get_world_params(wav=wav_prc)
             wav_mono = self.proc.get_monotonic_wav(wav=wav_prc, f0=f0, sp=sp, ap=ap)
             spmel, phase = self.proc.get_spmel(wav_prc)

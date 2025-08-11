@@ -11,21 +11,71 @@ import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
 from ..util import compute, config, logger
+from ..util.file import exists, path
 
 
 class Dataset[T](torch.utils.data.Dataset[T]):
-    def __init__(self, *args, **kwargs) -> None:
+    dataset: list[T]
+    length: int = 0
+    small_size: int = 100
+    small_cache_file: str
+    large_cache_file: str
+    cache_file: str
+    testonly: bool
+
+    def __init__(
+        self,
+        testing: bool,
+        *args,
+        rawdata: list[T] | None = None,
+        filenames: list[str] | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(*args, **kwargs)
+        if (rawdata is None) == (filenames is None):
+            raise ValueError(
+                "Datasets must be initialised with either filenames or rawdata"
+            )
+        self.testonly = testing
+        self.name = self.__class__.__name__
+        self.small_cache_file = path(config.paths.features, self.name + "-small-pkl")
+        self.large_cache_file = path(config.paths.features, self.name + "-large-pkl")
+        self.cache_file = (
+            self.small_cache_file if self.testonly else self.large_cache_file
+        )
+        if rawdata is not None:
+            logger.debug(f"{self.name} creating from raw list")
+            self.dataset = rawdata
+            logger.debug(f"{self.name} created from raw list")
+        elif exists(self.cache_file):
+            logger.debug(f"{self.name} Loading")
+            self.dataset = torch.load(self.cache_file)
+            logger.debug(f"{self.name} Loaded")
+        else:
+            assert filenames is not None
+            logger.info(f"Generating {self.name} Dataset")
+            if len(filenames) == 0:
+                raise Exception(f"ERROR: No files in {self.name} Dataset")
+            full_dataset = [
+                self.generate_item(fname)
+                for fname in logger.progress_bar(filenames, unit="loaded")
+            ]
+            self.dataset = [item for item in full_dataset if item is not None]
+            logger.info(f"Saving {self.name} Dataset")
+            torch.save(self.dataset, self.large_cache_file)
+            logger.info(f"Saving Small {self.name} Dataset")
+            torch.save(self.dataset[0 : self.small_size - 1], self.small_cache_file)
+        self.length = len(self.dataset)
 
     def __getitem__(self, index) -> T:
-        raise NotImplementedError(
-            self.__class__.__name__
-            + "does not define function: __getitem__(self, index) -> T"
-        )
+        return self.dataset[index]
 
     def __len__(self) -> int:
+        return self.length
+
+    def generate_item(self, fname: str) -> T | None:
         raise NotImplementedError(
-            self.__class__.__name__ + "does not define function: __len__(self) -> int"
+            self.name + "does not define function: generate_item(self, fname: str) -> T"
         )
 
 
@@ -81,9 +131,15 @@ def split_loaders[T](
         generator=gen,
     )
     logger.debug(f"Splitting training data for {dset.__class__.__name__}")
-    train_data = dset_t([dset.dump(i) for i in train.indices])
+    train_data = dset_t(
+        testing=dset.testonly,
+        rawdata=[dset[i] for i in train.indices],
+    )
     logger.debug(f"Splitting testing data for {dset.__class__.__name__}")
-    test_data = dset_t([dset.dump(i) for i in test.indices])
+    test_data = dset_t(
+        testing=dset.testonly,
+        rawdata=[dset[i] for i in test.indices],
+    )
     logger.debug(f"Creating Samplers for {dset.__class__.__name__}")
     train_sampler = RandomSampler(
         data_source=train_data,

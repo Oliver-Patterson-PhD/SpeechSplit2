@@ -274,6 +274,16 @@ class Logger(metaclass=Singleton):
             }",
         )
 
+    def trace_nill(self, x: Tensor) -> None:
+        isnill = (x == 0.0).any()
+        self.__log(
+            level=(WARN if isnill else TRACE),
+            caller=self.__get_caller(),
+            message=f"{self.__get_passed_varnames()[0]}: {
+                'Has Zeros' if isnill else 'No Zeros'
+            }",
+        )
+
     def log_if_nan(self, x: Tensor, level: LogStr = ERROR) -> None:
         if self.__is_nan(x):
             self.__log(

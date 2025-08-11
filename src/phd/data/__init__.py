@@ -1,20 +1,20 @@
 __all__ = [
-    "AudioProcs",
     "DType",
     "Dataset",
-    "DatasetParser",
     "MyDataset",
     "Phoneme",
     "SampleInfo",
     "Utterance",
     "get_loader",
     "make_loader",
+    "parser",
     "preprocess_data",
+    "processor",
     "split_loaders",
 ]
 
-from .audio_procs import AudioProcs
-from .dataset import DatasetParser, DType, Phoneme, SampleInfo, Utterance
+from .audio_procs import processor
+from .dataset import DType, Phoneme, SampleInfo, Utterance, parser
 from .loader import MyDataset, get_loader
 from .preprocess import preprocess_data
 from .utils import Dataset, make_loader, split_loaders

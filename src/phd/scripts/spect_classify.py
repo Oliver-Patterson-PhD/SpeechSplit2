@@ -4,21 +4,23 @@ from __future__ import annotations
 from datetime import datetime
 
 import torch
+import torchaudio
 import torchvision
+from matplotlib import colormaps
 from torchvision.transforms import v2
 
-from ..data import (AudioProcs, Dataset, DatasetParser, SampleInfo,
-                    split_loaders)
+from ..data import Dataset, SampleInfo, parser, processor, split_loaders
 from ..util import TensorBoard, compute, config, logger
-from ..util.file import basename, exists, newpath, path, walkfiles
+from ..util.file import basename, newpath, path, walkfiles
 from ..util.tensor import Tensor
 
-parser = DatasetParser()
-processor = AudioProcs()
+TESTING = True
 
-TESTING = False
-
+out_path: str
 tb: TensorBoard
+eps = 1e-10
+minval = eps
+maxval = 1.0 - eps
 
 
 def dys_tensor(dysarthric: bool) -> list[float]:
@@ -37,51 +39,55 @@ def is_dys(dystensor: Tensor) -> Tensor:
     return cln_probs(dystensor) < dys_probs(dystensor)
 
 
-def dys_item(fname: str) -> Tensor:
-    return torch.tensor(dys_tensor(SampleInfo(fname.rpartition("_")[0]).dysarthric))
+class Colourise(torch.nn.Module):
+    cmap = colormaps.get_cmap("jet")
+
+    def forward(self, x: Tensor) -> Tensor:
+        mapped = torch.tensor(self.cmap(x.cpu().numpy()))
+        final = mapped.transpose(-1, -3).transpose(-1, -2)
+        return final.to(x.device)
+
+
+def norm(x: Tensor) -> Tensor:
+    x -= x.min()
+    x /= x.max()
+    return x
 
 
 class SpectDataset(Dataset[tuple[Tensor, Tensor]]):
-    dataset_name = config.options.dataset_name
-    dataset: list[tuple[Tensor, Tensor]]
-    small_cache_file: str = path(config.paths.features, "spects-small.pkl")
-    large_cache_file: str = path(config.paths.features, "spects-large.pkl")
-    small_size: int = 1000
-    cache_file: str
+    makespec = torchaudio.transforms.MelSpectrogram(
+        n_fft=400,
+        n_mels=128,
+        f_min=40,  # Below this there are artefacts in UASpeech
+        normalized=True,
+    )
+    process = v2.Compose([Colourise(), v2.Resize((224, 224))])
 
     def __init__(self, rawdata: list[tuple[Tensor, Tensor]] | None = None) -> None:
-        self.cache_file = self.small_cache_file if TESTING else self.large_cache_file
-        if rawdata is not None:
-            logger.debug("SpectDataset creating from raw list")
-            self.dataset = rawdata
-            logger.debug("SpectDataset created from raw list")
-        elif exists(self.cache_file):
-            logger.debug("SpectDataset Loading")
-            self.dataset = torch.load(self.cache_file)
-            logger.debug("SpectDataset Loaded")
-        else:
-            logger.info("Generating Spectrogram Dataset")
-            filenames = walkfiles(config.paths.spmels, fullpaths=True)
-            if len(filenames) == 0:
-                raise Exception("ERROR: No Spectrogram files in dataset")
-            self.dataset = [
-                (dys_item(file), torch.load(file))
-                for file in logger.progress_bar(filenames, unit="loaded")
-            ]
-            logger.info("Saving Spectrogram Dataset")
-            torch.save(self.dataset, self.large_cache_file)
-            logger.info("Saving Small Spectrogram Dataset")
-            torch.save(self.dataset[0 : self.small_size - 1], self.small_cache_file)
-        self.length = len(self.dataset)
+        super().__init__(
+            testing=TESTING,
+            filenames=(
+                walkfiles(config.paths.raw_wavs, fullpaths=False)
+                if rawdata is None
+                else None
+            ),
+            rawdata=rawdata,
+        )
 
-    def __getitem__(self, index: int) -> tuple[Tensor, Tensor]:
-        return self.dataset[index]
-
-    def __len__(self) -> int:
-        return self.length
-
-    def dump(self, index: int) -> tuple[Tensor, Tensor]:
-        return self.__getitem__(index)
+    def generate_item(self, fname: str) -> tuple[Tensor, Tensor] | None:
+        a, b, c, wav = processor.full_load_parts(
+            path(
+                config.paths.raw_wavs,
+                parser.get_spkdir(parser.speaker(fname)),
+                basename(fname) + ".wav",
+            )
+        )
+        if processor.full_load_check(a, b, c, wav) is not None:
+            return None
+        return (
+            torch.tensor(dys_tensor(SampleInfo(fname).dysarthric)),
+            self.process(norm(self.makespec(norm(wav)).mT.clamp(min=minval).log10())),
+        )
 
 
 class SpectClassifier(torchvision.models.AlexNet):
@@ -93,11 +99,6 @@ class SpectClassifier(torchvision.models.AlexNet):
         state.popitem("classifier.6.bias")
         self.load_state_dict(state, strict=False)
         self.classifier[-1].zero_grad()
-        self.features.train(False)
-        self.avgpool.train(False)
-
-    def train(self, mode: bool = True) -> None:
-        self.classifier.train(mode)
 
 
 @torch.no_grad()
@@ -136,8 +137,13 @@ def evaluate(
 
 
 def spect_classify() -> None:
-    global tb
+    import inspect
+
+    global tb, out_path
     tb = TensorBoard()
+    experiment_path = newpath(config.paths.artefacts, inspect.stack()[0][3])
+    out_path = newpath(experiment_path, str(parser.dataset_type()))
+
     logger.set_file()
     log_div = 100
 
@@ -160,8 +166,6 @@ def spect_classify() -> None:
     ]
     start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
-    experiment_path = newpath(config.paths.artefacts, basename(__name__))
-    out_path = newpath(experiment_path, str(parser.dataset_type()))
     model.train()
     for epoch in range(100):
         running_loss = 0.0
