@@ -18,8 +18,6 @@ class Dataset[T](torch.utils.data.Dataset[T]):
     dataset: list[T]
     length: int = 0
     small_size: int = 100
-    small_cache_file: str
-    large_cache_file: str
     cache_file: str
     testonly: bool
 
@@ -38,34 +36,46 @@ class Dataset[T](torch.utils.data.Dataset[T]):
             )
         self.testonly = testing
         self.name = self.__class__.__name__
-        self.small_cache_file = path(config.paths.features, self.name + "-small-pkl")
-        self.large_cache_file = path(config.paths.features, self.name + "-large-pkl")
-        self.cache_file = (
-            self.small_cache_file if self.testonly else self.large_cache_file
+        self.cache_file = path(
+            config.paths.features,
+            self.name + ("-small.pt" if self.testonly else "-large.pt"),
         )
+        tmpname = f"{self.name} {'small' if self.testonly else 'large'} Dataset"
         if rawdata is not None:
-            logger.debug(f"{self.name} creating from raw list")
+            logger.debug(f"Creating from raw {tmpname}")
             self.dataset = rawdata
-            logger.debug(f"{self.name} created from raw list")
+            logger.debug(f"Created from raw {tmpname}")
         elif exists(self.cache_file):
-            logger.debug(f"{self.name} Loading")
+            logger.debug(f"Loading cached {tmpname}")
             self.dataset = torch.load(self.cache_file)
-            logger.debug(f"{self.name} Loaded")
+            logger.debug(f"Loaded cached {tmpname}")
         else:
             assert filenames is not None
-            logger.info(f"Generating {self.name} Dataset")
+            logger.info(f"Generating {tmpname}")
             if len(filenames) == 0:
-                raise Exception(f"ERROR: No files in {self.name} Dataset")
-            full_dataset = [
-                self.generate_item(fname)
-                for fname in logger.progress_bar(filenames, unit="loaded")
+                raise Exception(f"ERROR: No files in {tmpname}")
+            self.dataset = [
+                item
+                for item in self.generator_func(
+                    filenames, limit=self.small_size if self.testonly else None
+                )
             ]
-            self.dataset = [item for item in full_dataset if item is not None]
-            logger.info(f"Saving {self.name} Dataset")
-            torch.save(self.dataset, self.large_cache_file)
-            logger.info(f"Saving Small {self.name} Dataset")
-            torch.save(self.dataset[0 : self.small_size - 1], self.small_cache_file)
+            logger.info(f"Saving {tmpname}")
+            torch.save(self.dataset, self.cache_file)
+            logger.info(f"Saved {tmpname}")
         self.length = len(self.dataset)
+        logger.debug(f"{tmpname} is {self.length} items long")
+
+    def generator_func(self, fnames: list[str], limit: int | None):
+        if limit is None:
+            limit = len(fnames)
+        for fname in logger.progress_bar(fnames, unit=" files"):
+            if limit == 0:
+                return
+            item = self.generate_item(fname)
+            if item is not None:
+                limit -= 1
+                yield item
 
     def __getitem__(self, index) -> T:
         return self.dataset[index]

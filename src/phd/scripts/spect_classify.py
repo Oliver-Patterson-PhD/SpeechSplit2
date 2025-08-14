@@ -12,9 +12,9 @@ from torchvision.transforms import v2
 from ..data import Dataset, SampleInfo, parser, processor, split_loaders
 from ..util import TensorBoard, compute, config, logger
 from ..util.file import basename, newpath, path, walkfiles
-from ..util.tensor import Tensor
+from ..util.tensor import Tensor, TensorPair
 
-TESTING = True
+TESTING = False
 
 out_path: str
 tb: TensorBoard
@@ -54,27 +54,41 @@ def norm(x: Tensor) -> Tensor:
     return x
 
 
-class SpectDataset(Dataset[tuple[Tensor, Tensor]]):
+class SpectDataset(Dataset[TensorPair]):
     makespec = torchaudio.transforms.MelSpectrogram(
         n_fft=400,
         n_mels=128,
         f_min=40,  # Below this there are artefacts in UASpeech
         normalized=True,
     )
-    process = v2.Compose([Colourise(), v2.Resize((224, 224))])
+    process = v2.Compose(
+        [
+            Colourise(),
+            v2.ToDtype(torch.float32),
+            v2.Lambda(lambda x: x[:3, ...]),
+        ]
+    )
 
-    def __init__(self, rawdata: list[tuple[Tensor, Tensor]] | None = None) -> None:
-        super().__init__(
-            testing=TESTING,
-            filenames=(
-                walkfiles(config.paths.raw_wavs, fullpaths=False)
-                if rawdata is None
-                else None
-            ),
-            rawdata=rawdata,
+    def __init__(
+        self, testing: bool = TESTING, rawdata: list[TensorPair] | None = None
+    ) -> None:
+        filenames = (
+            walkfiles(config.paths.raw_wavs, fullpaths=False)
+            if rawdata is None
+            else None
         )
+        super().__init__(testing=testing, filenames=filenames, rawdata=rawdata)
+        if rawdata is None:
+            dyslist = [(meta, item) for meta, item in self.dataset if is_dys(meta)]
+            clnlist = [(meta, item) for meta, item in self.dataset if not is_dys(meta)]
+            logger.debug(f"Dysarthric Samples: {len(dyslist)}")
+            logger.debug(f"Clean      Samples: {len(clnlist)}")
+            minsamples = min(len(dyslist), len(clnlist))
+            self.dataset = dyslist[:minsamples] + clnlist[:minsamples]
+            self.length = len(self.dataset)
+            logger.debug(f"Total      Samples: {len(self.dataset)}")
 
-    def generate_item(self, fname: str) -> tuple[Tensor, Tensor] | None:
+    def generate_item(self, fname: str) -> TensorPair | None:
         a, b, c, wav = processor.full_load_parts(
             path(
                 config.paths.raw_wavs,
@@ -84,10 +98,16 @@ class SpectDataset(Dataset[tuple[Tensor, Tensor]]):
         )
         if processor.full_load_check(a, b, c, wav) is not None:
             return None
-        return (
-            torch.tensor(dys_tensor(SampleInfo(fname).dysarthric)),
-            self.process(norm(self.makespec(norm(wav)).mT.clamp(min=minval).log10())),
+        info = torch.tensor(dys_tensor(SampleInfo(fname).dysarthric))
+        colourised = self.process(
+            norm(self.makespec(norm(wav)).clamp(min=minval).log10())
         )
+        processed = (
+            v2.functional.pad(colourised, (0, 0, 128 - colourised.size(-1), 0))
+            if colourised.size(-1) > 128
+            else v2.functional.crop(colourised, 0, 0, 128, 128)
+        )
+        return (info, processed.mT)
 
 
 class SpectClassifier(torchvision.models.AlexNet):
@@ -102,17 +122,11 @@ class SpectClassifier(torchvision.models.AlexNet):
 
 
 @torch.no_grad()
-def evaluate(
-    model: SpectClassifier,
-    testdata: list[tuple[Tensor, Tensor]],
-    step: int,
-) -> None:
+def evaluate(model: SpectClassifier, testdata: list[TensorPair], step: int) -> None:
     model.eval()
     logger.info(f"Evaluating step: {step}")
 
-    predictions = torch.stack(
-        [model(data.unsqueeze(0)) for _, data in testdata]
-    ).squeeze(-2)
+    predictions = torch.stack([model(data) for _, data in testdata]).squeeze(-2)
     labels = torch.stack([val for val, _ in testdata])
     tb.add_pr_curve("pr_curve", labels, predictions, step)
 
@@ -140,7 +154,6 @@ def spect_classify() -> None:
     import inspect
 
     global tb, out_path
-    tb = TensorBoard()
     experiment_path = newpath(config.paths.artefacts, inspect.stack()[0][3])
     out_path = newpath(experiment_path, str(parser.dataset_type()))
 
@@ -158,21 +171,21 @@ def spect_classify() -> None:
     loss_fn = torch.nn.CrossEntropyLoss()
 
     spect_train, spect_test = split_loaders(SpectDataset(), parallel=False)
-    spect_process = v2.Compose([v2.Resize((224, 224)), v2.RGB()]).to(compute.device())
     testdata = [
-        (dyst, spect_process(spec.unsqueeze(0).to(compute.device())))
+        (dyst, spec.unsqueeze(0).to(compute.device()))
         for dysts, specs in spect_test
         for dyst, spec in zip(dysts, specs)
     ]
+
     start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    tb = TensorBoard()
 
     model.train()
-    for epoch in range(100):
+    for epoch in range(10000):
         running_loss = 0.0
         for i, (truths, raw_specs) in enumerate(spect_train):
             truths = truths.to(compute.device())
-            raw_specs = raw_specs.to(compute.device())
-            specs = spect_process(raw_specs.unsqueeze(1))
+            specs = raw_specs.to(compute.device())
             step = (epoch * (len(spect_train))) + i
             out_data = model(specs)
             loss = loss_fn(out_data, truths)
@@ -183,8 +196,9 @@ def spect_classify() -> None:
                 ave_loss = running_loss / log_div
                 logger.info(f"[{step:8d}: {epoch:3d}, {i:7d}] loss: {ave_loss}")
                 running_loss = 0.0
-        evaluate(model, testdata, step)
-        torch.save(
-            (model, optim),
-            path(out_path, f"SpectClassifier-{start_time}-{epoch}.pt"),
-        )
+        if epoch % 10 == 0:
+            evaluate(model, testdata, step)
+            torch.save(
+                (model, optim),
+                path(out_path, f"SpectClassifier-{start_time}-{epoch}.pt"),
+            )
