@@ -121,7 +121,6 @@ class SpectClassifier(torchvision.models.AlexNet):
         self.classifier[-1].zero_grad()
 
 
-@torch.no_grad()
 def evaluate(model: SpectClassifier, testdata: list[TensorPair], step: int) -> None:
     model.eval()
     logger.info(f"Evaluating step: {step}")
@@ -190,6 +189,7 @@ def spect_classify() -> None:
             out_data = model(specs)
             loss = loss_fn(out_data, truths)
             loss.backward()
+            optim.step()
             running_loss += loss.item()
             tb.add_scalar(name="loss", item=loss.item(), step=step)
             if i % log_div == 0 and i != 0:

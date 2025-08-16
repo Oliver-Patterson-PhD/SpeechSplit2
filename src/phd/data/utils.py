@@ -7,6 +7,8 @@ __all__ = [
     "Dataset",
 ]
 
+from typing import Generator
+
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
@@ -66,16 +68,15 @@ class Dataset[T](torch.utils.data.Dataset[T]):
         self.length = len(self.dataset)
         logger.debug(f"{tmpname} is {self.length} items long")
 
-    def generator_func(self, fnames: list[str], limit: int | None):
-        if limit is None:
-            limit = len(fnames)
+    def generator_func(self, fnames: list[str], limit: int | None) -> Generator[T]:
         for fname in logger.progress_bar(fnames, unit=" files"):
-            if limit == 0:
-                return
             item = self.generate_item(fname)
-            if item is not None:
-                limit -= 1
-                yield item
+            if limit is not None:
+                if limit == 0:
+                    return
+                if item is not None:
+                    limit -= 1
+            yield item
 
     def __getitem__(self, index) -> T:
         return self.dataset[index]

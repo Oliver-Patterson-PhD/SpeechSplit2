@@ -3,19 +3,19 @@ from __future__ import annotations
 
 import inspect
 from datetime import datetime
+from typing import Generator
 
 import torch
 
 from ..data import Dataset, SampleInfo, parser, split_loaders
 from ..util import TensorBoard, compute, config, logger
 from ..util.arff import ArffRowType, loadarff
-from ..util.file import basename, exists, newpath, path, walkfiles
-from ..util.tensor import Tensor
+from ..util.file import basename, newpath, path, walkfiles
+from ..util.tensor import Tensor, TensorPair
 
 TESTING = False
 log_div = 1000
 
-LLD_Data = tuple[str, Tensor]
 tb: TensorBoard
 
 in_path = config.paths.raw_wavs
@@ -56,9 +56,9 @@ def is_dys(dystensor: Tensor) -> Tensor:
 N_LLDS = 26
 
 
-def row_to_data(row: ArffRowType) -> LLD_Data:
+def row_to_data(row: ArffRowType) -> TensorPair:
     return (
-        ret_attr(row, "name", str),
+        torch.tensor(dys_tensor(SampleInfo(ret_attr(row, "name", str)).dysarthric)),
         torch.tensor(
             [
                 ret_attr(row, "frameTime", float),
@@ -92,53 +92,47 @@ def row_to_data(row: ArffRowType) -> LLD_Data:
     )
 
 
-class LLDDataset(Dataset[LLD_Data]):
-    dataset: list[LLD_Data]
-    small_cache_file: str = path(smile_path, "LLDDataset-small.pt")
-    large_cache_file: str = path(smile_path, "LLDDataset.pt")
-    cache_file: str
-    small_size: int = 1000
+class LLDDataset(Dataset[TensorPair]):
+    def __init__(
+        self, testing: bool = TESTING, rawdata: list[TensorPair] | None = None
+    ) -> None:
+        filenames = (
+            walkfiles(path(smile_path, "custom-arff"), fullpaths=True)
+            if rawdata is None
+            else None
+        )
+        super().__init__(testing=testing, filenames=filenames, rawdata=rawdata)
+        if rawdata is None:
+            # dyslist = [(meta, item) for meta, item in self.dataset if is_dys(meta)]
+            # clnlist = [(meta, item) for meta, item in self.dataset if not is_dys(meta)]
+            # logger.debug(f"Dysarthric Samples: {len(dyslist)}")
+            # logger.debug(f"Clean      Samples: {len(clnlist)}")
+            # minsamples = min(len(dyslist), len(clnlist))
+            # self.dataset = dyslist[:minsamples] + clnlist[:minsamples]
+            # self.length = len(self.dataset)
+            logger.debug(f"Total      Samples: {len(self.dataset)}")
 
-    def __init__(self, rawdata: list[LLD_Data] | None = None) -> None:
-        self.cache_file = self.small_cache_file if TESTING else self.large_cache_file
-        if rawdata is not None:
-            logger.debug("LLDDataset creating from raw list")
-            self.dataset = rawdata
-            logger.debug("LLDDataset created from raw list")
-        elif exists(self.cache_file):
-            logger.debug("LLDDataset Loading")
-            self.dataset = torch.load(self.cache_file)
-            logger.debug("LLDDataset Loaded")
-        else:
-            logger.debug("LLDDataset Generating")
-            arff_path = path(smile_path, "custom-arff")
-            arff_files = walkfiles(arff_path, fullpaths=True)
-            arff_data = [
-                loadarff(file) for file in logger.progress_bar(arff_files, unit="files")
-            ]
-            arff_flat = [item for row in arff_data if row is not None for item in row]
-            self.dataset = [
-                row_to_data(row)
-                for row in logger.progress_bar(arff_flat, unit="results")
-            ]
-            logger.debug("LLDDataset Saving")
-            torch.save(self.dataset, self.large_cache_file)
-            torch.save(self.dataset[0 : self.small_size - 1], self.small_cache_file)
-            if self.cache_file == self.small_cache_file:
-                self.dataset = self.dataset[0 : self.small_size - 1]
-            logger.debug("LLDDataset Saved")
-        self.length = len(self.dataset)
-        if self.length == 0:
-            raise Exception("ERROR: No LLD files in dataset")
-
-    def dump(self, index: int) -> LLD_Data:
+    def __getitem__(self, index: int) -> TensorPair:
         return self.dataset[index]
 
-    def __len__(self) -> int:
-        return self.length
+    def generator_func(
+        self, fnames: list[str], limit: int | None
+    ) -> Generator[TensorPair]:
+        for fname in logger.progress_bar(fnames, unit=" files"):
+            for item in self.generate_items(fname):
+                if limit is not None:
+                    if limit == 0:
+                        return
+                    if item is not None:
+                        limit -= 1
+                yield item
 
-    def __getitem__(self, index: int) -> LLD_Data:
-        return self.dump(index)
+    def generate_items(self, fname: str) -> Generator[TensorPair]:
+        data = loadarff(fname)
+        if data is None:
+            return
+        for item in data:
+            yield row_to_data(item)
 
 
 class LLDClassifier(torch.nn.Module):
@@ -172,17 +166,12 @@ class LLDClassifier(torch.nn.Module):
         )
 
 
-def arff_results(names: list[str]) -> Tensor:
-    return torch.tensor([dys_tensor(SampleInfo(name).dysarthric) for name in names])
-
-
-@torch.no_grad()
-def lld_evaluate(model: LLDClassifier, valitems: list[LLD_Data], step: int) -> None:
+def evaluate(model: LLDClassifier, valitems: list[TensorPair], step: int) -> None:
     model.eval()
     logger.info(f"Evaluating step: {step}")
 
     predictions = torch.stack([model(items) for _, items in valitems])
-    label_bools = torch.tensor([parser.dysarthric(spk) for spk, _ in valitems])
+    label_bools = torch.tensor([is_dys(spk) for spk, _ in valitems])
     labels = torch.tensor([dys_tensor(val) for val in label_bools])
     tb.add_pr_curve("pr_curve", labels, predictions, step)
 
@@ -220,9 +209,9 @@ def lld_classify() -> None:
     compute.set_default()
 
     logger.info("Building Model")
-    arff_model = LLDClassifier()
-    arff_optim = torch.optim.Adam(arff_model.parameters())
-    arff_loss = torch.nn.BCELoss()
+    model = LLDClassifier()
+    optim = torch.optim.Adam(model.parameters())
+    loss_fn = torch.nn.BCELoss()
     arff_train, arff_test = split_loaders(LLDDataset(), parallel=False)
 
     logger.info("Calculating data distribution")
@@ -235,27 +224,27 @@ def lld_classify() -> None:
     start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
     logger.info("Starting Training")
-    arff_model.train()
+    model.train()
     for epoch in range(10):
         running_loss = 0.0
         i = 0
-        for names, items in arff_train:
+        for meta, items in arff_train:
             i += 1
             step = (epoch * len(arff_train)) + i
-            out_data = arff_model(items)
-            truth = arff_results(names)
-            loss = arff_loss(out_data, truth)
+            out_data = model(items)
+            loss = loss_fn(out_data, meta)
             loss.backward()
+            optim.step()
             logger.trace_var(loss)
-            arff_optim.step()
+            optim.step()
             running_loss += loss.item()
             tb.add_scalar(name="loss", item=loss.item(), step=step)
             if i % log_div == 0:
                 ave_loss = running_loss / log_div
                 logger.info(f"[{step:8d}: {epoch:3d}, {i:7d}] loss: {ave_loss}")
                 running_loss = 0.0
-        lld_evaluate(arff_model, valitems, step)
+        evaluate(model, valitems, step)
         torch.save(
-            (arff_model, arff_optim),
+            (model, optim),
             path(out_path, f"arff_model{start_time}-{epoch}.pt"),
         )
