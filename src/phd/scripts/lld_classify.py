@@ -58,7 +58,10 @@ N_LLDS = 26
 
 def row_to_data(row: ArffRowType) -> TensorPair:
     return (
-        torch.tensor(dys_tensor(SampleInfo(ret_attr(row, "name", str)).dysarthric)),
+        torch.tensor(
+            dys_tensor(SampleInfo(ret_attr(row, "name", str)).dysarthric),
+            device=compute.device(),
+        ),
         torch.tensor(
             [
                 ret_attr(row, "frameTime", float),
@@ -87,7 +90,8 @@ def row_to_data(row: ArffRowType) -> TensorPair:
                 ret_attr(row, "F3frequency_sma3nz", float),
                 ret_attr(row, "F3bandwidth_sma3nz", float),
                 ret_attr(row, "F3amplitudeLogRelF0_sma3nz", float),
-            ]
+            ],
+            device=compute.device(),
         ),
     )
 
@@ -205,7 +209,7 @@ def lld_classify() -> None:
     out_path = newpath(experiment_dir, str(parser.dataset_type()))
     torch.multiprocessing.set_sharing_strategy("file_system")
     torch.multiprocessing.set_start_method("forkserver", force=True)
-    compute.set_gpu()
+    compute.set_cpu()
     compute.set_default()
 
     logger.info("Building Model")
@@ -223,6 +227,8 @@ def lld_classify() -> None:
     valitems = [(n, i) for nn, ii in arff_test for n, i in zip(nn, ii)]
     start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
+    compute.set_gpu()
+    compute.set_default()
     logger.info("Starting Training")
     model.train()
     for epoch in range(10):
