@@ -379,12 +379,14 @@ def spect_classify() -> None:
         for i, (truths, raw_specs) in enumerate(spect_train):
             truths = truths.to(compute.device())
             specs = raw_specs.to(compute.device())
-            step = (epoch * (len(spect_train))) + i
             out_data = model(specs)
             loss = loss_fn(out_data, truths)
+            optim.zero_grad()
             loss.backward()
             optim.step()
+
             running_loss += loss.item()
+            step = (epoch * (len(spect_train))) + i
             tb.add_scalar(name="loss", item=loss.item(), step=step)
             if i % log_div == 0 and i != 0:
                 ave_loss = running_loss / log_div
