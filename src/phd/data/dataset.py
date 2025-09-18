@@ -9,11 +9,17 @@ __all__ = [
 from enum import Enum, auto
 
 from ..util import config
-from ..util.file import (basename, dirname, freadline, freadlist, myglob, path,
-                         strip_ext)
-from .dataset_detail import (smolspeech_speakers, smolvctk_speakers,
-                             timit_speakers, timit_spk_path, uaspeech_speakers,
-                             uaspeech_uttrs, vctk_sex, vctk_speakers)
+from ..util.file import basename, dirname, freadline, freadlist, myglob, path, strip_ext
+from .dataset_detail import (
+    smolspeech_speakers,
+    smolvctk_speakers,
+    timit_speakers,
+    timit_spk_path,
+    uaspeech_speakers,
+    uaspeech_uttrs,
+    vctk_sex,
+    vctk_speakers,
+)
 
 
 class Phoneme:
@@ -282,6 +288,14 @@ class DatasetParser:
                 return text.partition(" ")[-1].partition(" ")[-1].strip()
             case _:
                 raise ValueError
+
+    def fullwav(self, fpath: str) -> str:
+        spk = self.speaker(fpath)
+        uttr = self.utterance(fpath)
+        if self.is_uaspeech():
+            _, _, _, mic = basename(fpath).split("_")
+            return self.get_wavfile(spk, uttr).replace("M2.wav", f"{mic}.wav")
+        return self.get_wavfile(spk, uttr)
 
     def get_wavfile(self, spk: str, uttr: str) -> str:
         match self.dataset_type():

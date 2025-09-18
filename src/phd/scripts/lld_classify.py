@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Generator
 
 import torch
+from torchvision.transforms import v2
 
 from ..data import Dataset, SampleInfo, parser, split_loaders
 from ..util import TensorBoard, compute, config, logger
@@ -209,14 +210,21 @@ def lld_classify() -> None:
     out_path = newpath(experiment_dir, str(parser.dataset_type()))
     torch.multiprocessing.set_sharing_strategy("file_system")
     torch.multiprocessing.set_start_method("forkserver", force=True)
-    compute.set_cpu()
+    compute.set_gpu()
     compute.set_default()
 
     logger.info("Building Model")
     model = LLDClassifier()
     optim = torch.optim.Adam(model.parameters())
     loss_fn = torch.nn.BCELoss()
-    arff_train, arff_test = split_loaders(LLDDataset(), parallel=False)
+    arff_fulldata = LLDDataset()
+    logger.info("Augmenting dysarthric speech")
+    augment = v2.RandomSolarize(threshold=0.1, p=1.0)
+    arff_fulldata.dataset = [
+        (meta, augment(item)) if is_dys(meta) else (meta, item)
+        for meta, item in arff_fulldata.dataset
+    ]
+    arff_train, arff_test = split_loaders(arff_fulldata, parallel=False)
 
     logger.info("Calculating data distribution")
     dys_rate = [parser.dysarthric(spk) for spks, _ in arff_train for spk in spks]
@@ -227,8 +235,6 @@ def lld_classify() -> None:
     valitems = [(n, i) for nn, ii in arff_test for n, i in zip(nn, ii)]
     start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
-    compute.set_gpu()
-    compute.set_default()
     logger.info("Starting Training")
     model.train()
     for epoch in range(10):

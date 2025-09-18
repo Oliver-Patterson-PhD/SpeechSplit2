@@ -253,7 +253,7 @@ class Logger(metaclass=Singleton):
         self.__log(
             level=self.__get_level(level),
             caller=self.__get_caller(),
-            message=f"{self.__get_passed_varnames()[0]}: ({var.shape})",
+            message=f"{self.__get_passed_varnames()[0]}: {var.dtype}({tuple(var.shape)})",
         )
 
     def check_inline(self, var: Tensor, level: LogStr = TRACE) -> Tensor:

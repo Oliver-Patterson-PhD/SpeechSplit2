@@ -11,7 +11,7 @@ from pysptk.sptk import rapt
 from torch.types import Number
 
 from ..util import compute, config
-from ..util.tensor import Tensor, TensorQuad, TensorTriple
+from ..util.tensor import Tensor, TensorQuad, TensorTriple, pad_to
 from .dataset import parser
 
 
@@ -47,13 +47,6 @@ class AudioProcs:
         self.__max_len_pad = config.audio.max_len_pad
         self.__vad_transform = torchaudio.transforms.Vad(sample_rate=self.__sample_rate)
         self.__noisereducer = TorchGate(sr=self.__sample_rate, nonstationary=True)
-        self.__stft = torchaudio.transforms.Spectrogram(
-            n_fft=self.__n_fft,
-            win_length=self.__n_fft,
-            hop_length=self.__hop_length,
-            window_fn=torch.hann_window,
-            power=1,
-        )
         self.__mel_map = mel_to_hz(
             torch.linspace(
                 hz_to_mel(self.__freq_min),
@@ -376,15 +369,23 @@ class AudioProcs:
                 return "Clean"
         return None
 
+    def crop_ool(self, aud: Tensor) -> Tensor:
+        raw = self.norm_audio(aud)
+        _, _, nopop = processor.kill_pop(audio=raw) if parser.is_uaspeech() else raw
+        clean = processor.run_clean(audio=nopop, keep=True)
+        rawpad, cleanpad = pad_to(raw.squeeze(), clean.squeeze())
+        outaud = rawpad[cleanpad != 0.0]
+        return outaud
+
     def full_load_parts(self, fullname: str, keep: bool = False) -> TensorQuad:
         raw = self.norm_audio(self.getraw(full_fname=fullname))
         nonoise = self.noisereduce(raw)
-        nopop = self.kill_pop(audio=nonoise) if parser.is_uaspeech() else nonoise
+        _, _, nopop = self.kill_pop(audio=nonoise) if parser.is_uaspeech() else nonoise
         clean = self.run_clean(audio=nopop, keep=keep)
         return raw, nonoise, nopop, clean
 
     def getraw(self, full_fname: str) -> Tensor:
-        inaud, sr = torchaudio.load(full_fname, channels_first=True)
+        inaud, sr = torchaudio.load(full_fname, channels_first=True, normalize=True)
         assert sr == self.__sample_rate
         return inaud
 
@@ -464,7 +465,7 @@ class AudioProcs:
         ).squeeze()
         return energy
 
-    def kill_pop(self, audio: Tensor) -> Tensor:
+    def kill_pop_idxs(self, audio: Tensor) -> tuple[int, int]:
         energy = self.short_time_energy(audio)
         split_beg: int = energy.size(dim=-1) // 4
         split_end: int = 3 * (energy.size(dim=-1) // 4)
@@ -473,10 +474,14 @@ class AudioProcs:
             energy[split_end : energy.size(dim=-1) - 1].min(dim=-1).indices + split_end
         )
         scale = audio.size(dim=-1) / energy.size(dim=-1)
+        return int(begidx * scale), int(endidx * scale)
+
+    def kill_pop(self, audio: Tensor) -> tuple[int, int, Tensor]:
+        begidx, endidx = self.kill_pop_idxs(audio)
         cropped = audio.clone().squeeze(0)
-        cropped[0 : int(begidx * scale)] = 0.0
-        cropped[int(endidx * scale) : audio.size(dim=-1)] = 0.0
-        return cropped.unsqueeze(0)
+        cropped[0:begidx] = 0.0
+        cropped[endidx : audio.size(dim=-1)] = 0.0
+        return begidx, endidx, cropped.unsqueeze(0)
 
     def norm_audio(self, x: Tensor) -> Tensor:
         return x / x.abs().max()
