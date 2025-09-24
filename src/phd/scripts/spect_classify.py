@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import random
 from datetime import datetime
+from matplotlib import pyplot as plt
+from sklearn.metrics import confusion_matrix
 
 import torch
 import torchaudio
@@ -276,20 +278,22 @@ class SpectClassifier(torchvision.models.AlexNet):
 def evaluate(model: SpectClassifier, testdata: list[TensorPair], step: int) -> None:
     model.eval()
     logger.info(f"Evaluating step: {step}")
-
     predictions = torch.stack(
         [model(data) for _, data in testdata],
-    ).squeeze(-2)
+    )
     labels = torch.stack([val for val, _ in testdata])
     tb.add_pr_curve("pr_curve", labels, predictions, step)
-
     logger.debug("Calculating hit-rate")
+    testvals = torch.tensor([val for val, _ in testdata])
+    logger.trace_var(testvals)
+    logger.trace_var(predictions)
     label_bools = torch.tensor([is_dys(val) for val, _ in testdata])
     preds_bools = torch.tensor([is_dys(val) for val in predictions])
+    logger.trace_var(label_bools)
+    logger.trace_var(preds_bools)
     good_vals = preds_bools == label_bools
     good_ave = (good_vals.sum() / good_vals.size(dim=-1)).item()
     tb.add_scalar("eval_rate", good_ave, step)
-
     logger.trace("")
     logger.trace(f"Correct prediction rate: {good_ave}")
     logger.trace(f"Dysarthric mean actual vals: {dys_probs(labels).mean()}")
@@ -297,9 +301,83 @@ def evaluate(model: SpectClassifier, testdata: list[TensorPair], step: int) -> N
     logger.trace(f"Clean mean actual vals: {cln_probs(labels).mean()}")
     logger.trace(f"Clean mean predictions: {cln_probs(predictions).mean()}")
     logger.trace("")
-
     tb.flush()
     model.train()
+    return
+
+
+def eval_only() -> None:
+    dataset = SpectDataset()
+    dataset.preprocess()
+    dataset.load()
+    model = SpectClassifier().to(compute.device())
+    model_name = "SpectClassifier-2025-09-21-15-38-16"
+    checkpoint, optim_state = torch.load(
+        f"artefacts/spect_classify_runs/{model_name}/{model_name}-200.pt",
+        weights_only=False,
+    )
+    model.load_state_dict(checkpoint.state_dict())
+    model.eval()
+    sampler = SequentialSampler(data_source=dataset)
+    loader: DataLoader[TensorPair] = DataLoader(
+        dataset=dataset,
+        batch_size=config.dataloader.batch_size,
+        sampler=sampler,
+        num_workers=0,
+        prefetch_factor=None,
+        drop_last=False,
+        pin_memory=False,
+        worker_init_fn=None,
+    )
+
+    true_pos = 0
+    true_neg = 0
+    false_pos = 0
+    false_neg = 0
+    preds: list[bool] = []
+    trues: list[bool] = []
+    for i, (truths, specs) in enumerate(logger.progress_bar(loader)):
+        truths = truths.to(compute.device())
+        specs = specs.to(compute.device())
+        out_data = model(specs)
+        all_preds = is_dys(out_data)
+        all_truths = is_dys(truths)
+        for truth, pred in zip(all_truths, all_preds):
+            preds.append(pred.item())
+            trues.append(truth.item())
+            if pred and truth:
+                true_pos += 1
+            if pred and (not truth):
+                false_pos += 1
+            if (not pred) and (not truth):
+                true_neg += 1
+            if (not pred) and truth:
+                false_neg += 1
+    logger.trace_var(true_pos, "DEBUG")
+    logger.trace_var(true_neg, "DEBUG")
+    logger.trace_var(false_pos, "DEBUG")
+    logger.trace_var(false_neg, "DEBUG")
+    len_trues = true_pos + false_neg
+    len_false = true_neg + false_pos
+    logger.debug(f"True  pos rate: {100*(true_pos/len_trues)}%")
+    logger.debug(f"False neg rate: {100*(false_neg/len_trues)}%")
+    logger.debug(f"True  neg rate: {100*(true_neg/len_false)}%")
+    logger.debug(f"False pos rate: {100*(false_pos/len_false)}%")
+    conf_matrix = confusion_matrix(y_true=trues, y_pred=preds)
+    fig, ax = plt.subplots(figsize=(7.5, 7.5))
+    ax.matshow(conf_matrix, alpha=0.3)
+    for i in range(conf_matrix.shape[0]):
+        for j in range(conf_matrix.shape[1]):
+            ax.text(
+                x=j, y=i, s=conf_matrix[i, j], va="center", ha="center", size="xx-large"
+            )
+    plt.xlabel("Predictions", fontsize=18)
+    plt.ylabel("Actuals", fontsize=18)
+    plt.title("Confusion Matrix", fontsize=18)
+    plt.savefig(path(out_path, f"model-evaluation-{model_name}.pdf"))
+    logger.debug(f"Correct   rate: {100*((true_neg+true_pos)/len(dataset))}%")
+    logger.debug(f"Incorrect rate: {100*((false_neg+false_pos)/len(dataset))}%")
+    exit(1)
     return
 
 
@@ -309,23 +387,20 @@ def spect_classify() -> None:
     global tb, out_path
     experiment_path = newpath(config.paths.artefacts, inspect.stack()[0][3])
     out_path = newpath(experiment_path, str(parser.dataset_type()))
-
     logger.set_file()
-    log_div = 100
-
+    log_div = 1000
     torch.multiprocessing.set_sharing_strategy("file_system")
     torch.multiprocessing.set_start_method("spawn", force=True)
     compute.set_gpu()
     compute.set_default()
+    eval_only()
     dataset = SpectDataset()
     dataset.preprocess()
     dataset.load()
-
     model = SpectClassifier()
     logger.trace_var(model)
     optim = torch.optim.Adam(model.parameters())
-    loss_fn = torch.nn.CrossEntropyLoss()
-
+    loss_fn = torch.nn.MSELoss()
     n_test: int = dataset.length // 10
     list_test: list[TensorPair] = []
     for i in range(n_test // 2):
@@ -365,14 +440,11 @@ def spect_classify() -> None:
         for dysts, specs in spect_test
         for dyst, spec in zip(dysts, specs)
     ]
-
     logger.debug(f"Test data length: {len(testdata)}")
     logger.debug(f"Train Sampler length: {len(train_sampler)}")
     logger.debug(f"Train Dataset length: {len(dset_train)}")
-
     start_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     tb = TensorBoard()
-
     model.train()
     for epoch in range(10000):
         running_loss = 0.0
@@ -384,7 +456,6 @@ def spect_classify() -> None:
             optim.zero_grad()
             loss.backward()
             optim.step()
-
             running_loss += loss.item()
             step = (epoch * (len(spect_train))) + i
             tb.add_scalar(name="loss", item=loss.item(), step=step)

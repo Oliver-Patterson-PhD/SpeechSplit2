@@ -20,6 +20,7 @@ dependencies = [
     "pyworld",
     "requests",
     "safetensors",
+    "scikit-learn>=1.7.0",
     "scipy",
     "setuptools-rust",
     "speech-intelligibility-index",
